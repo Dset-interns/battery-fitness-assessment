@@ -20,9 +20,16 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
-        // Submission §2.2 — the About screen must show these
-        buildConfigField("String", "BUILD_DATE", "\"${System.currentTimeMillis()}\"")
-        buildConfigField("String", "TEAM_NAME", "\"TeamName\"")
+        // Submission §2.2 — the About screen must show version, build date and
+        // team name. The APK *filename* must also carry team + version; that is
+        // done at packaging time (see BUILD.md) rather than by fighting AGP 9's
+        // variant-output API:
+        //   DSeTConsultancy_BatteryFitness_v0.1.0.apk
+        buildConfigField(
+            "String", "BUILD_DATE",
+            "\"${java.time.LocalDate.now()}\"",
+        )
+        buildConfigField("String", "TEAM_NAME", "\"DSeT Consultancy\"")
     }
 
     buildTypes {
