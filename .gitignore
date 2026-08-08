@@ -14,6 +14,9 @@
 *.png
 !docs/**/*.png
 !docs/**/*.jpg
+# App resources are source, not athlete media
+!app/**/src/main/res/**/*.png
+!app/**/src/main/res/**/*.webp
 lab/clips/
 lab/out/
 **/footage/

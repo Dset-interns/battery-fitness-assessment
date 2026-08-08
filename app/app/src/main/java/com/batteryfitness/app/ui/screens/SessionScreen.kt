@@ -122,7 +122,14 @@ fun SessionScreen(
                             RowCard(
                                 title = "${test.number}. ${test.label()}",
                                 subtitle = buildString {
-                                    append(if (test.measurement == Measurement.AI) "AI measured" else "Manual entry")
+                                    append(
+                                        when (test.measurement) {
+                                            Measurement.AI -> "AI measured"
+                                            Measurement.AI_PLANNED -> "Manual — AI planned"
+                                            Measurement.OCR_ASSIST -> "Manual + OCR assist"
+                                            Measurement.MANUAL -> "Manual entry"
+                                        }
+                                    )
                                     append(" · ")
                                     append(if (test.isPhoto) "photo" else "${test.minDurationSec}–${test.maxDurationSec}s")
                                 },

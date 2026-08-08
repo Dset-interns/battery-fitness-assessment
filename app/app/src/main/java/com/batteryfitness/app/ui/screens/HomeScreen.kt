@@ -1,5 +1,6 @@
 package com.batteryfitness.app.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,13 +29,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.batteryfitness.app.BuildConfig
+import com.batteryfitness.app.R
 import com.batteryfitness.app.domain.BatteryTest
 import com.batteryfitness.app.domain.Measurement
 import com.batteryfitness.app.ui.AppLanguage
@@ -68,33 +72,22 @@ fun HomeScreen(
             // official emblem in the header would read as a government-issued
             // app. Swap in the real asset once one is supplied and its use is
             // permitted.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                ) {
-                    Text(
-                        "DSeT",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text(
-                        "DSeT Consultancy",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        "Built for the National Hackathon · NeGD · MeitY · MYAS",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    )
-                }
+            Column {
+                // The mark already carries the "DSeT CONSULTING" wordmark, so no
+                // duplicate text line beside it.
+                Image(
+                    painter = painterResource(R.drawable.dset_logo),
+                    contentDescription = "DSeT Consulting",
+                    modifier = Modifier
+                        .height(62.dp)
+                        .clip(RoundedCornerShape(6.dp)),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Built for the National Hackathon · NeGD · MeitY · MYAS",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
             }
 
             // ---- Hero -------------------------------------------------
