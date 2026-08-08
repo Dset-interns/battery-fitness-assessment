@@ -1,3 +1,7 @@
+// Imported explicitly: inside a Gradle Kotlin DSL script `java` resolves to the
+// JavaPluginExtension, which shadows the java.* package.
+import java.time.LocalDate
+
 plugins {
     // AGP 9 provides Kotlin support itself; applying kotlin.android here is an
     // error, not a redundancy.
@@ -25,10 +29,7 @@ android {
         // done at packaging time (see BUILD.md) rather than by fighting AGP 9's
         // variant-output API:
         //   DSeTConsultancy_BatteryFitness_v0.1.0.apk
-        buildConfigField(
-            "String", "BUILD_DATE",
-            "\"${java.time.LocalDate.now()}\"",
-        )
+        buildConfigField("String", "BUILD_DATE", "\"${LocalDate.now()}\"")
         buildConfigField("String", "TEAM_NAME", "\"DSeT Consultancy\"")
     }
 
@@ -57,6 +58,13 @@ android {
     }
 }
 
+// Export the Room schema as JSON. Submission §4.2.1 requires the database
+// schema as a deliverable, and this generates it from the source of truth
+// rather than from a hand-drawn diagram that drifts.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.06.01"))
 
@@ -80,4 +88,6 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.ui:ui-tooling-preview")
+
+    testImplementation("junit:junit:4.13.2")
 }
