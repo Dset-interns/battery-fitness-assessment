@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Battery Fitness</string>
+    <string name="test_height">Height</string>
+    <string name="test_weight">Weight</string>
+    <string name="test_sit_and_reach">Flexibility (Sit &amp; Reach)</string>
+    <string name="test_vertical_jump">Standing Vertical Jump</string>
+    <string name="test_broad_jump">Standing Broad Jump</string>
+    <string name="test_medicine_ball_throw">Medicine Ball Throw</string>
+    <string name="test_sprint_30m">30m Sprint</string>
+    <string name="test_shuttle_run">4×10m Shuttle Run</string>
+    <string name="test_sit_ups">Sit-Ups</string>
+    <string name="test_endurance_run">Endurance Run</string>
+    <string name="confidence_green">High confidence</string>
+    <string name="confidence_amber">Reduced confidence</string>
+    <string name="confidence_red">Not measurable</string>
+</resources>

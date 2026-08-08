@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">बैटरी फ़िटनेस</string>
+    <string name="test_height">ऊँचाई</string>
+    <string name="test_weight">वज़न</string>
+    <string name="test_sit_and_reach">लचीलापन (बैठकर आगे झुकना)</string>
+    <string name="test_vertical_jump">खड़े होकर ऊर्ध्वाधर छलाँग</string>
+    <string name="test_broad_jump">खड़े होकर लंबी छलाँग</string>
+    <string name="test_medicine_ball_throw">मेडिसिन बॉल थ्रो</string>
+    <string name="test_sprint_30m">30 मीटर दौड़</string>
+    <string name="test_shuttle_run">4×10 मीटर शटल दौड़</string>
+    <string name="test_sit_ups">सिट-अप्स</string>
+    <string name="test_endurance_run">सहनशक्ति दौड़</string>
+    <string name="confidence_green">उच्च विश्वसनीयता</string>
+    <string name="confidence_amber">कम विश्वसनीयता</string>
+    <string name="confidence_red">मापन संभव नहीं</string>
+</resources>
