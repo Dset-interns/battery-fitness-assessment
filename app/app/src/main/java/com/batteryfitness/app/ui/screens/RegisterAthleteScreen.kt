@@ -2,6 +2,8 @@ package com.batteryfitness.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,7 +43,7 @@ import com.batteryfitness.app.ui.AppViewModel
  * Registration deliberately works with no network: a coach in a village must be
  * able to register athletes and run the whole battery offline (§6.1).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun RegisterAthleteScreen(
     vm: AppViewModel,
@@ -91,7 +93,7 @@ fun RegisterAthleteScreen(
 
             Text("Gender", style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Gender.entries.forEach { g ->
                     FilterChip(
                         selected = gender == g,
@@ -103,7 +105,10 @@ fun RegisterAthleteScreen(
 
             Text("Identity", style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // FlowRow, not Row: four options do not fit one line on a 1080px
+            // screen, and a fixed Row pushed "None" off-screen where it could
+            // not be selected at all.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 IdType.entries.forEach { t ->
                     FilterChip(
                         selected = idType == t,

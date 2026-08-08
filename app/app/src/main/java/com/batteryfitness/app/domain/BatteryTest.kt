@@ -33,25 +33,47 @@ enum class BatteryTest(
     HEIGHT(
         1, "height", 10, 30, 2 * MB, 15 * MB, 1, "cm", Measurement.AI,
     ),
+    // Seven-segment OCR of the scale display. This is the ONE test where
+    // legitimate training data can be created: synthetic seven-segment digits
+    // rendered across fonts, glare, angles and blur, generated on our own
+    // hardware and fully disclosable under §7.2. Every other data gap in this
+    // battery is real; this one is not. OCR pre-fills an always-editable field
+    // — §5.2 asks for "correct entry with OCR assist", not a locked read.
     WEIGHT(
-        2, "weight", 0, 0, 100 * KB, 1 * MB, 1, "kg", Measurement.MANUAL,
+        2, "weight", 0, 0, 100 * KB, 1 * MB, 1, "kg", Measurement.AI,
         isPhoto = true,
     ),
+    // Shares the calibration module with HEIGHT. Needs Hand Landmarker on a
+    // hand crop: MediaPipe Pose has no fingertip landmark, and measuring to the
+    // wrist plus a guess is not a measurement.
     SIT_AND_REACH(
-        3, "sit_and_reach", 10, 30, 2 * MB, 15 * MB, 3, "cm", Measurement.MANUAL,
+        3, "sit_and_reach", 10, 30, 2 * MB, 15 * MB, 3, "cm", Measurement.AI,
     ),
     VERTICAL_JUMP(
         4, "vertical_jump", 15, 30, 3 * MB, 15 * MB, 3, "cm", Measurement.AI,
     ),
+    // Stretch: needs GROUND-plane homography, which is harder than the vertical
+    // jump's wall because the ground is foreshortened along the jump axis, so a
+    // single px/cm ratio fails. Also needs ~4 m of clear space plus tape, so it
+    // is not demonstrable in a room.
     BROAD_JUMP(
         5, "broad_jump", 15, 30, 3 * MB, 15 * MB, 3, "cm", Measurement.MANUAL,
     ),
     MEDICINE_BALL_THROW(
         6, "medicine_ball_throw", 15, 30, 3 * MB, 15 * MB, 2, "cm", Measurement.MANUAL,
     ),
+    // Stretch, and cheaper than its "High" rating suggests: the ±1 s tolerance
+    // is enormous next to video line-crossing, which resolves to tens of ms.
+    // Blocked only by space — framing all 30 m perpendicular needs ~23 m of
+    // lateral clearance, so the viable rig is a finish-line camera with the
+    // start taken from the starter's command in the audio track.
     SPRINT_30M(
         7, "sprint_30m", 10, 45, 2 * MB, 25 * MB, 2, "s", Measurement.MANUAL,
     ),
+    // Stretch. Turn detection is a velocity sign change and the ±5 s tolerance
+    // is vast, so TIMING is easy. Touch verification at the turn line is the
+    // hard part — §3 states it is "hard to verify from video" — so it should be
+    // flagged amber rather than silently accepted.
     SHUTTLE_RUN(
         8, "shuttle_run", 15, 60, 3 * MB, 30 * MB, 2, "s", Measurement.MANUAL,
     ),

@@ -5,14 +5,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -22,12 +22,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.batteryfitness.app.BuildConfig
 import com.batteryfitness.app.domain.BatteryTest
+import com.batteryfitness.app.domain.Measurement
+import com.batteryfitness.app.ui.screens.HomeScreen
 import com.batteryfitness.app.ui.screens.RegisterAthleteScreen
 import com.batteryfitness.app.ui.screens.SessionScreen
 import com.batteryfitness.app.ui.screens.SessionSetupScreen
 import com.batteryfitness.app.ui.screens.label
+import com.batteryfitness.app.ui.theme.AppBackground
 
 private object Route {
     const val HOME = "home"
@@ -64,11 +66,7 @@ fun BatteryFitnessApp() {
         composable(Route.SETUP) {
             SessionSetupScreen(
                 vm = vm,
-                onStarted = { id ->
-                    nav.navigate(Route.session(id)) {
-                        popUpTo(Route.HOME)
-                    }
-                },
+                onStarted = { id -> nav.navigate(Route.session(id)) { popUpTo(Route.HOME) } },
                 onRegisterAthlete = { nav.navigate(Route.REGISTER) },
                 onBack = { nav.popBackStack() },
             )
@@ -79,7 +77,7 @@ fun BatteryFitnessApp() {
             arguments = listOf(navArgument("id") { type = NavType.LongType }),
         ) { entry ->
             val id = entry.arguments?.getLong("id") ?: 0L
-            androidx.compose.runtime.LaunchedEffect(id) { vm.loadSession(id) }
+            LaunchedEffect(id) { vm.loadSession(id) }
             SessionScreen(
                 vm = vm,
                 onOpenCell = { athleteId, test ->
@@ -96,60 +94,11 @@ fun BatteryFitnessApp() {
                 navArgument("testKey") { type = NavType.StringType },
             ),
         ) { entry ->
-            val athleteId = entry.arguments?.getLong("athleteId") ?: 0L
-            val test = BatteryTest.fromKey(entry.arguments?.getString("testKey").orEmpty())
             TestCellPlaceholder(
-                athleteId = athleteId,
-                test = test,
+                athleteId = entry.arguments?.getLong("athleteId") ?: 0L,
+                test = BatteryTest.fromKey(entry.arguments?.getString("testKey").orEmpty()),
                 onBack = { nav.popBackStack() },
             )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun HomeScreen(onStartSession: () -> Unit, onRegister: () -> Unit) {
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Battery Fitness Assessment") }) },
-    ) { inner ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Text(
-                "10-test SAI battery, measured on this device.",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                "Works with no internet connection. Video and AI analysis never " +
-                    "leave the phone.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.outline,
-            )
-
-            Button(onClick = onStartSession, modifier = Modifier.fillMaxWidth()) {
-                Text("Start assessment session")
-            }
-            Button(onClick = onRegister, modifier = Modifier.fillMaxWidth()) {
-                Text("Register an athlete")
-            }
-
-            // Submission §2.2 requires version, build date and team name to be
-            // visible in the app.
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp)) {
-                    Text("About", style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold)
-                    Text("Team: ${BuildConfig.TEAM_NAME}",
-                        style = MaterialTheme.typography.bodySmall)
-                    Text("Version: ${BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.bodySmall)
-                    Text("Build date: ${BuildConfig.BUILD_DATE}",
-                        style = MaterialTheme.typography.bodySmall)
-                }
-            }
         }
     }
 }
@@ -158,44 +107,82 @@ private fun HomeScreen(onStartSession: () -> Unit, onRegister: () -> Unit) {
  * Placeholder for the per-test capture and measurement screen.
  *
  * Phase 3 replaces this with protocol guidance, the capture-guidance wizard,
- * CameraX recording with the §6.3.1 duration gate, and the measurement result
- * with its confidence band.
+ * CameraX recording enforcing the §6.3.1 duration gate, and the measurement
+ * result with its confidence band.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TestCellPlaceholder(
     athleteId: Long,
     test: BatteryTest?,
     onBack: () -> Unit,
 ) {
-    Scaffold(
-        topBar = { TopAppBar(title = { Text(test?.label() ?: "Test") }) },
-    ) { inner ->
+    AppBackground {
         Column(
-            modifier = Modifier.fillMaxSize().padding(inner).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+                .padding(top = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Athlete #$athleteId", style = MaterialTheme.typography.titleMedium)
+            Text(
+                test?.let { "${it.number}. ${it.label()}" } ?: "Test",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                "Athlete #$athleteId",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            )
+
             test?.let {
-                Text(
-                    "Attempts: ${it.attempts} · Unit: ${it.unit}\n" +
-                        if (it.isPhoto) "Capture: single photo"
-                        else "Capture: ${it.minDurationSec}–${it.maxDurationSec}s video",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    if (it.measurement.name == "AI") "Measured by on-device AI"
-                    else "Manual entry with protocol guidance",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                Card(
+                    Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    ),
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Spec("Attempts", "${it.attempts}")
+                        Spec("Unit", it.unit)
+                        Spec(
+                            "Capture",
+                            if (it.isPhoto) "single photo"
+                            else "${it.minDurationSec}–${it.maxDurationSec}s video",
+                        )
+                        Spec(
+                            "Measurement",
+                            if (it.measurement == Measurement.AI) "on-device AI"
+                            else "manual entry with protocol guidance",
+                        )
+                    }
+                }
             }
+
             Text(
                 "Capture pipeline lands in the next build.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
             )
-            Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
+
+            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                Text("Back")
+            }
         }
+    }
+}
+
+@Composable
+private fun Spec(label: String, value: String) {
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium)
     }
 }

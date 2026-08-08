@@ -205,6 +205,3 @@ private fun RowCard(
     }
 }
 
-/** Human-readable test name. Localised strings replace this in Phase 5. */
-fun BatteryTest.label(): String = key.split('_')
-    .joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
