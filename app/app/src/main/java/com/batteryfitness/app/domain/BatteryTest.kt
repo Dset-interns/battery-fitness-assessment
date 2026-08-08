@@ -59,14 +59,14 @@ enum class BatteryTest(
     HEIGHT(
         1, "height", 10, 30, 2 * MB, 15 * MB, 1, "cm", Measurement.AI,
     ),
-    // Seven-segment OCR of the scale display. This is the ONE test where
-    // legitimate training data can be created: synthetic seven-segment digits
-    // rendered across fonts, glare, angles and blur, generated on our own
-    // hardware and fully disclosable under §7.2. Every other data gap in this
-    // battery is real; this one is not. OCR pre-fills an always-editable field
-    // — §5.2 asks for "correct entry with OCR assist", not a locked read.
+    // Manual entry. The SCALE measures the weight; a camera can at best read
+    // the digits off its display, which is transcription rather than
+    // measurement. §2's target is "correct entry with OCR assist" — not a
+    // tolerance — and §5.2 makes manual entry the baseline with OCR optional.
+    // OCR of the display remains a possible convenience later; it would not
+    // make this an AI-measured test.
     WEIGHT(
-        2, "weight", 0, 0, 100 * KB, 1 * MB, 1, "kg", Measurement.OCR_ASSIST,
+        2, "weight", 0, 0, 100 * KB, 1 * MB, 1, "kg", Measurement.MANUAL,
         isPhoto = true,
     ),
     // Shares the calibration module with HEIGHT. Needs Hand Landmarker on a
@@ -106,8 +106,14 @@ enum class BatteryTest(
     SIT_UPS(
         9, "sit_ups", 30, 60, 5 * MB, 30 * MB, 1, "reps", Measurement.AI,
     ),
+    // Manual. The ALGORITHM is easy — lap crossings at the start/finish line
+    // are the same detection as the sprint, against a ±10 s tolerance. What
+    // defeats it is the CAPTURE: 6-12 minutes of video per heat, a 400 m track
+    // so that start and finish coincide, and identity attribution for every
+    // crossing of every athlete. Operationally impractical here, so the
+    // assessor times it and enters the result.
     ENDURANCE_RUN(
-        10, "endurance_run", 120, 900, 20 * MB, 200 * MB, 1, "s", Measurement.AI_PLANNED,
+        10, "endurance_run", 120, 900, 20 * MB, 200 * MB, 1, "s", Measurement.MANUAL,
     );
 
     /**
