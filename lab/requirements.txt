@@ -1,0 +1,4 @@
+# Algorithm lab — pinned to what was verified working on macOS 14 arm64 / Python 3.10.13
+mediapipe==1.0.0
+opencv-python==5.0.0.93
+numpy==2.2.6

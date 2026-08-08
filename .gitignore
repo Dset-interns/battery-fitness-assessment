@@ -1,0 +1,51 @@
+# ============================================================
+# CONSTRAINT C1 (Concept Note §7.1) — DATA PROTECTION
+# No athlete video may reach any commercial cloud service.
+# Committing footage to a remote git host WOULD violate this
+# and causes disqualification. These rules are not optional.
+# ============================================================
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.m4v
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+!docs/**/*.jpg
+lab/clips/
+lab/out/
+**/footage/
+**/athlete_data/
+
+# Consent forms contain personal data until anonymised
+compliance/consent_raw/
+
+# --- Python ---
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- Android / Gradle ---
+*.iml
+.gradle/
+local.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+
+# --- Models (large; fetched by script per Submission §3.4) ---
+models/*.task
+models/*.tflite
+
+# --- IDE / OS ---
+.idea/
+.DS_Store
+*.log
