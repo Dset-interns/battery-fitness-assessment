@@ -52,3 +52,7 @@ models/*.tflite
 .idea/
 .DS_Store
 *.log
+
+# Internal notes — never commit (public repo)
+HANDOFF.md
+*.local.md
