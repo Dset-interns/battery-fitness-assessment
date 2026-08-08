@@ -62,6 +62,41 @@ fun HomeScreen(
                 .padding(top = 40.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
+            // ---- Brand header -----------------------------------------
+            // DSeT's own mark. The programme is credited as TEXT rather than
+            // with SAI's emblem: this is a competing team's prototype, and an
+            // official emblem in the header would read as a government-issued
+            // app. Swap in the real asset once one is supplied and its use is
+            // permitted.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Text(
+                        "DSeT",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        "DSeT Consultancy",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "Built for the National Hackathon · NeGD · MeitY · MYAS",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    )
+                }
+            }
+
             // ---- Hero -------------------------------------------------
             Text(
                 "Battery Fitness",

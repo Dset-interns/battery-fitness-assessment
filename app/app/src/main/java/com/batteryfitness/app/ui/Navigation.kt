@@ -24,6 +24,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.batteryfitness.app.domain.BatteryTest
 import com.batteryfitness.app.domain.Measurement
+import com.batteryfitness.app.ui.screens.CaptureScreen
 import com.batteryfitness.app.ui.screens.HomeScreen
 import com.batteryfitness.app.ui.screens.RegisterAthleteScreen
 import com.batteryfitness.app.ui.screens.SessionScreen
@@ -37,8 +38,11 @@ private object Route {
     const val SETUP = "setup"
     const val SESSION = "session/{id}"
     const val CELL = "cell/{athleteId}/{testKey}"
+    const val CAPTURE = "capture/{athleteId}/{testKey}/{sessionId}"
     fun session(id: Long) = "session/$id"
     fun cell(athleteId: Long, testKey: String) = "cell/$athleteId/$testKey"
+    fun capture(athleteId: Long, testKey: String, sessionId: Long) =
+        "capture/$athleteId/$testKey/$sessionId"
 }
 
 @Composable
@@ -89,15 +93,39 @@ fun BatteryFitnessApp(languages: LanguageController) {
         }
 
         composable(
+            Route.CAPTURE,
+            arguments = listOf(
+                navArgument("athleteId") { type = NavType.LongType },
+                navArgument("testKey") { type = NavType.StringType },
+                navArgument("sessionId") { type = NavType.LongType },
+            ),
+        ) { entry ->
+            val test = BatteryTest.fromKey(entry.arguments?.getString("testKey").orEmpty())
+            if (test == null) { nav.popBackStack() } else {
+                CaptureScreen(
+                    test = test,
+                    athleteId = entry.arguments?.getLong("athleteId") ?: 0L,
+                    sessionId = entry.arguments?.getLong("sessionId") ?: 0L,
+                    onCaptured = { _, _ -> nav.popBackStack() },
+                    onBack = { nav.popBackStack() },
+                )
+            }
+        }
+
+        composable(
             Route.CELL,
             arguments = listOf(
                 navArgument("athleteId") { type = NavType.LongType },
                 navArgument("testKey") { type = NavType.StringType },
             ),
         ) { entry ->
+            val aId = entry.arguments?.getLong("athleteId") ?: 0L
+            val t = BatteryTest.fromKey(entry.arguments?.getString("testKey").orEmpty())
+            val sId = vm.session.value.sessionId
             TestCellPlaceholder(
-                athleteId = entry.arguments?.getLong("athleteId") ?: 0L,
-                test = BatteryTest.fromKey(entry.arguments?.getString("testKey").orEmpty()),
+                athleteId = aId,
+                test = t,
+                onRecord = { t?.let { nav.navigate(Route.capture(aId, it.key, sId)) } },
                 onBack = { nav.popBackStack() },
             )
         }
@@ -115,6 +143,7 @@ fun BatteryFitnessApp(languages: LanguageController) {
 private fun TestCellPlaceholder(
     athleteId: Long,
     test: BatteryTest?,
+    onRecord: () -> Unit,
     onBack: () -> Unit,
 ) {
     AppBackground {
@@ -158,11 +187,11 @@ private fun TestCellPlaceholder(
                 }
             }
 
-            Text(
-                "Capture pipeline lands in the next build.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-            )
+            androidx.compose.material3.Button(
+                onClick = onRecord,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+            ) { Text("Record attempt") }
 
             OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
                 Text("Back")

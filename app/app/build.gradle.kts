@@ -82,10 +82,20 @@ dependencies {
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
 
+    // Camera. CameraX is AndroidX, not Play Services — see the C8 note below.
+    implementation("androidx.camera:camera-core:1.6.1")
+    implementation("androidx.camera:camera-camera2:1.6.1")
+    implementation("androidx.camera:camera-lifecycle:1.6.1")
+    implementation("androidx.camera:camera-video:1.6.1")
+    implementation("androidx.camera:camera-view:1.6.1")
+
     // NOTE (constraint C8, Submission §2.1): the APK must not require Google
     // Play Services. No Firebase, no unbundled ML Kit, no ARCore, no Play
     // Integrity. MediaPipe tasks-vision is a self-contained AAR and is added
     // in Phase 4.
+    //
+    // This also rules out FusedLocationProviderClient for the §6.3 GPS tag —
+    // it ships in Play Services. We use the platform LocationManager instead.
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.ui:ui-tooling-preview")
