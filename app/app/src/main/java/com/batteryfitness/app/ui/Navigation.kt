@@ -42,7 +42,7 @@ private object Route {
 }
 
 @Composable
-fun BatteryFitnessApp() {
+fun BatteryFitnessApp(languages: LanguageController) {
     val nav = rememberNavController()
     val vm: AppViewModel = viewModel()
 
@@ -50,6 +50,7 @@ fun BatteryFitnessApp() {
 
         composable(Route.HOME) {
             HomeScreen(
+                languages = languages,
                 onStartSession = { nav.navigate(Route.SETUP) },
                 onRegister = { nav.navigate(Route.REGISTER) },
             )
@@ -152,11 +153,7 @@ private fun TestCellPlaceholder(
                             if (it.isPhoto) "single photo"
                             else "${it.minDurationSec}–${it.maxDurationSec}s video",
                         )
-                        Spec(
-                            "Measurement",
-                            if (it.measurement == Measurement.AI) "on-device AI"
-                            else "manual entry with protocol guidance",
-                        )
+                        Spec("Measurement", it.measurement.describe())
                     }
                 }
             }
@@ -172,6 +169,14 @@ private fun TestCellPlaceholder(
             }
         }
     }
+}
+
+/** Plain-language description of how a result is produced. */
+private fun Measurement.describe(): String = when (this) {
+    Measurement.AI -> "on-device AI"
+    Measurement.AI_PLANNED -> "manual for now — AI method designed, not yet built"
+    Measurement.OCR_ASSIST -> "manual entry, OCR reads the scale display"
+    Measurement.MANUAL -> "manual entry with protocol guidance"
 }
 
 @Composable

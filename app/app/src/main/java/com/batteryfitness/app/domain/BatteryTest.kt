@@ -1,6 +1,35 @@
 package com.batteryfitness.app.domain
 
 /**
+ * How a test's result is produced.
+ *
+ * Four states rather than two, because one label was previously doing two jobs
+ * — what we have BUILT and what we PLAN. Conflating them overstates coverage,
+ * and Round 2 evaluation would expose it. Concept Note §8.5 rewards being
+ * explicit about what does not exist yet.
+ */
+enum class Measurement {
+    /** Built, working, verified on device. */
+    AI,
+
+    /** Method designed and documented; not implemented in this build. */
+    AI_PLANNED,
+
+    /**
+     * Reads a device display rather than measuring the quantity.
+     *
+     * Weight sits here, not under AI: the scale measures the weight, OCR only
+     * transcribes the digits. §2's target is "correct entry with OCR assist" —
+     * not a tolerance — and §5.2 asks for manual entry as the baseline with
+     * OCR optional. Counting it as an AI-measured test would inflate coverage.
+     */
+    OCR_ASSIST,
+
+    /** Assessor enters the value, with protocol guidance on screen. */
+    MANUAL,
+}
+
+/**
  * The 10 Battery Fitness Assessment Tests.
  *
  * Every field here is taken directly from a source document — the per-test
@@ -9,12 +38,9 @@ package com.batteryfitness.app.domain
  * than scattering them through UI code means the capture gate, the report card
  * and the validation harness all enforce one definition.
  *
- * `measurement` records whether this build measures the test with on-device AI
- * or falls back to manual entry. Concept Note §9.1.1 explicitly sanctions
- * manual entry for the remainder, and §9.1.3 sets the floor at 3-4 AI tests.
+ * §9.1.1 explicitly sanctions manual entry for the tests not measured by AI,
+ * and §9.1.3 sets the floor at 3-4 AI-measured tests.
  */
-enum class Measurement { AI, MANUAL }
-
 enum class BatteryTest(
     val number: Int,
     val key: String,
@@ -40,7 +66,7 @@ enum class BatteryTest(
     // battery is real; this one is not. OCR pre-fills an always-editable field
     // — §5.2 asks for "correct entry with OCR assist", not a locked read.
     WEIGHT(
-        2, "weight", 0, 0, 100 * KB, 1 * MB, 1, "kg", Measurement.AI,
+        2, "weight", 0, 0, 100 * KB, 1 * MB, 1, "kg", Measurement.OCR_ASSIST,
         isPhoto = true,
     ),
     // Shares the calibration module with HEIGHT. Needs Hand Landmarker on a
@@ -57,7 +83,7 @@ enum class BatteryTest(
     // single px/cm ratio fails. Also needs ~4 m of clear space plus tape, so it
     // is not demonstrable in a room.
     BROAD_JUMP(
-        5, "broad_jump", 15, 30, 3 * MB, 15 * MB, 3, "cm", Measurement.MANUAL,
+        5, "broad_jump", 15, 30, 3 * MB, 15 * MB, 3, "cm", Measurement.AI_PLANNED,
     ),
     MEDICINE_BALL_THROW(
         6, "medicine_ball_throw", 15, 30, 3 * MB, 15 * MB, 2, "cm", Measurement.MANUAL,
@@ -68,20 +94,20 @@ enum class BatteryTest(
     // lateral clearance, so the viable rig is a finish-line camera with the
     // start taken from the starter's command in the audio track.
     SPRINT_30M(
-        7, "sprint_30m", 10, 45, 2 * MB, 25 * MB, 2, "s", Measurement.MANUAL,
+        7, "sprint_30m", 10, 45, 2 * MB, 25 * MB, 2, "s", Measurement.AI_PLANNED,
     ),
     // Stretch. Turn detection is a velocity sign change and the ±5 s tolerance
     // is vast, so TIMING is easy. Touch verification at the turn line is the
     // hard part — §3 states it is "hard to verify from video" — so it should be
     // flagged amber rather than silently accepted.
     SHUTTLE_RUN(
-        8, "shuttle_run", 15, 60, 3 * MB, 30 * MB, 2, "s", Measurement.MANUAL,
+        8, "shuttle_run", 15, 60, 3 * MB, 30 * MB, 2, "s", Measurement.AI_PLANNED,
     ),
     SIT_UPS(
         9, "sit_ups", 30, 60, 5 * MB, 30 * MB, 1, "reps", Measurement.AI,
     ),
     ENDURANCE_RUN(
-        10, "endurance_run", 120, 900, 20 * MB, 200 * MB, 1, "s", Measurement.MANUAL,
+        10, "endurance_run", 120, 900, 20 * MB, 200 * MB, 1, "s", Measurement.AI_PLANNED,
     );
 
     /**
@@ -105,8 +131,13 @@ enum class BatteryTest(
     companion object {
         fun fromKey(key: String): BatteryTest? = entries.firstOrNull { it.key == key }
 
-        /** Tests this build measures with on-device AI. */
-        val aiMeasured: List<BatteryTest> get() = entries.filter { it.measurement == Measurement.AI }
+        /** Tests this build actually measures with on-device AI. */
+        val aiMeasured: List<BatteryTest>
+            get() = entries.filter { it.measurement == Measurement.AI }
+
+        /** Tests whose AI method is designed but not yet implemented. */
+        val aiPlanned: List<BatteryTest>
+            get() = entries.filter { it.measurement == Measurement.AI_PLANNED }
     }
 }
 
