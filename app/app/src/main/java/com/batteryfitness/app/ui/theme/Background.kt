@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -82,20 +81,6 @@ fun AppBackground(
                     style = Stroke(width = size.width * 0.010f),
                 )
             }
-
-            // Tricolour accent along the top edge — a thin national cue that
-            // stays out of the content area.
-            val barH = size.height * 0.0045f
-            val third = size.width / 3f
-            drawRect(Saffron.copy(alpha = 0.85f), Offset.Zero, Size(third, barH))
-            drawRect(
-                (if (dark) Color.White else Color(0xFFDDE3EC)).copy(alpha = 0.85f),
-                Offset(third, 0f), Size(third, barH),
-            )
-            drawRect(
-                IndiaGreen.copy(alpha = 0.85f),
-                Offset(third * 2, 0f), Size(third, barH),
-            )
         }
         content()
     }

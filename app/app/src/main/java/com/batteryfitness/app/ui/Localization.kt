@@ -1,7 +1,9 @@
 package com.batteryfitness.app.ui
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.res.Configuration
+import android.content.res.Resources
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
@@ -75,12 +77,32 @@ class LanguageController(initial: AppLanguage) {
 @Composable
 fun WithAppLanguage(language: AppLanguage, content: @Composable () -> Unit) {
     val base = LocalContext.current
+
     val localized = remember(language, base) {
         val config = Configuration(base.resources.configuration).apply {
             setLocale(Locale.forLanguageTag(language.tag))
         }
-        base.createConfigurationContext(config)
+        val localizedResources = base.createConfigurationContext(config).resources
+
+        // A ContextWrapper AROUND the original context, not a replacement for it.
+        //
+        // This matters more than it looks. `createConfigurationContext()` returns
+        // a bare context with no link back to the Activity, and several Compose
+        // APIs — rememberLauncherForActivityResult being the one that bit us —
+        // resolve their owner by walking `ContextWrapper.baseContext` upward
+        // looking for the Activity. Providing that bare context as LocalContext
+        // breaks the chain, and the failure is invisible until you open a screen
+        // that requests a permission, which then dies with:
+        //
+        //   IllegalStateException: No ActivityResultRegistryOwner was provided
+        //
+        // Wrapping keeps the Activity reachable while still serving localised
+        // resources, so every owner lookup below this point continues to work.
+        object : ContextWrapper(base) {
+            override fun getResources(): Resources = localizedResources
+        }
     }
+
     CompositionLocalProvider(
         LocalContext provides localized,
         LocalConfiguration provides localized.resources.configuration,

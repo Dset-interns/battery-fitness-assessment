@@ -4,12 +4,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,7 +30,12 @@ import com.batteryfitness.app.ui.screens.RegisterAthleteScreen
 import com.batteryfitness.app.ui.screens.SessionScreen
 import com.batteryfitness.app.ui.screens.SessionSetupScreen
 import com.batteryfitness.app.ui.screens.label
-import com.batteryfitness.app.ui.theme.AppBackground
+import com.batteryfitness.app.ui.components.AppCard
+import com.batteryfitness.app.ui.components.AppScaffold
+import com.batteryfitness.app.ui.components.BottomActionBar
+import com.batteryfitness.app.ui.components.Gutter
+import com.batteryfitness.app.ui.components.KeyValueRow
+import com.batteryfitness.app.ui.components.SectionLabel
 
 private object Route {
     const val HOME = "home"
@@ -133,11 +138,10 @@ fun BatteryFitnessApp(languages: LanguageController) {
 }
 
 /**
- * Placeholder for the per-test capture and measurement screen.
+ * Per-test detail: protocol facts, then the capture action.
  *
- * Phase 3 replaces this with protocol guidance, the capture-guidance wizard,
- * CameraX recording enforcing the §6.3.1 duration gate, and the measurement
- * result with its confidence band.
+ * Phase 4 adds the capture-guidance wizard and the measurement result with its
+ * confidence band above the action bar.
  */
 @Composable
 private fun TestCellPlaceholder(
@@ -146,55 +150,72 @@ private fun TestCellPlaceholder(
     onRecord: () -> Unit,
     onBack: () -> Unit,
 ) {
-    AppBackground {
+    AppScaffold(
+        title = test?.let { "${it.number}. ${it.label()}" } ?: "Test",
+        subtitle = "Athlete #$athleteId",
+        onBack = onBack,
+        bottomBar = {
+            BottomActionBar {
+                Button(
+                    onClick = onRecord,
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                ) { Text("Record attempt", fontWeight = FontWeight.SemiBold) }
+            }
+        },
+    ) { inner ->
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
-                .padding(20.dp)
-                .padding(top = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(inner)
+                .padding(horizontal = Gutter)
+                .padding(top = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Text(
-                test?.let { "${it.number}. ${it.label()}" } ?: "Test",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                "Athlete #$athleteId",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            )
-
-            test?.let {
-                Card(
-                    Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                    ),
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Spec("Attempts", "${it.attempts}")
-                        Spec("Unit", it.unit)
-                        Spec(
-                            "Capture",
-                            if (it.isPhoto) "single photo"
-                            else "${it.minDurationSec}–${it.maxDurationSec}s video",
-                        )
-                        Spec("Measurement", it.measurement.describe())
+            test?.let { t ->
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionLabel("Protocol")
+                    AppCard {
+                        Column(Modifier.padding(16.dp)) {
+                            KeyValueRow("Attempts permitted", "${t.attempts}")
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            KeyValueRow("Recorded in", t.unit)
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            KeyValueRow(
+                                "Capture",
+                                if (t.isPhoto) "Single photo"
+                                else "${t.minDurationSec}–${t.maxDurationSec} s video",
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            KeyValueRow(
+                                "Measurement",
+                                t.measurement.describe(),
+                                emphasis = t.measurement == Measurement.AI,
+                            )
+                        }
                     }
                 }
-            }
 
-            androidx.compose.material3.Button(
-                onClick = onRecord,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            ) { Text("Record attempt") }
-
-            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text("Back")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionLabel("Capture requirements")
+                    AppCard {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "Recording shorter than ${t.minDurationSec} s is rejected at " +
+                                    "the point of capture, and recording stops automatically " +
+                                    "at ${t.maxDurationSec} s.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                "Minimum 720p at 30 fps. Every capture is tagged with the test, " +
+                                    "athlete, timestamp and location.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -202,21 +223,8 @@ private fun TestCellPlaceholder(
 
 /** Plain-language description of how a result is produced. */
 private fun Measurement.describe(): String = when (this) {
-    Measurement.AI -> "on-device AI"
-    Measurement.AI_PLANNED -> "manual for now — AI method designed, not yet built"
-    Measurement.OCR_ASSIST -> "manual entry, OCR reads the scale display"
-    Measurement.MANUAL -> "manual entry with protocol guidance"
-}
-
-@Composable
-private fun Spec(label: String, value: String) {
-    androidx.compose.foundation.layout.Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(label, style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium)
-    }
+    Measurement.AI -> "On-device AI"
+    Measurement.AI_PLANNED -> "Manual entry — AI method designed"
+    Measurement.OCR_ASSIST -> "Manual entry, OCR assist"
+    Measurement.MANUAL -> "Manual entry"
 }

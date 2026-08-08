@@ -75,6 +75,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
+    // Icons only (not the ~30 MB "extended" set) — back arrows and
+    // status glyphs, nothing more.
+    implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.navigation:navigation-compose:2.9.8")
 
     // Local storage. SQLCipher is added in Phase 3 alongside encrypted capture.
