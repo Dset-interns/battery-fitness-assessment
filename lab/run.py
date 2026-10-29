@@ -24,7 +24,7 @@ import argparse
 import os
 import sys
 
-from analyzers import height_scale, jump_flight, situp_counter
+from analyzers import height_scale, jump_flight, sit_and_reach, situp_counter
 from analyzers.pose import probe
 
 
@@ -49,6 +49,13 @@ def main() -> int:
 
     p = sub.add_parser("jump", help="Test 4 — vertical jump via flight time")
     p.add_argument("clip")
+
+    p = sub.add_parser("reach", help="Test 3 — sit and reach")
+    p.add_argument("clip")
+    p.add_argument("--ref-px", type=float,
+                   help="pixel length of a known span visible in frame")
+    p.add_argument("--ref-cm", type=float,
+                   help="real-world length of that span, in cm")
 
     p = sub.add_parser("height", help="Test 1 — standing height")
     p.add_argument("clip")
@@ -77,6 +84,8 @@ def main() -> int:
         print(situp_counter.analyze(clip, age=a.age).report())
     elif a.cmd == "jump":
         print(jump_flight.analyze(clip).report())
+    elif a.cmd == "reach":
+        print(sit_and_reach.analyze(clip, ref_px=a.ref_px, ref_cm=a.ref_cm).report())
     elif a.cmd == "height":
         print(height_scale.analyze(clip, ref_px=a.ref_px, ref_cm=a.ref_cm).report())
     return 0

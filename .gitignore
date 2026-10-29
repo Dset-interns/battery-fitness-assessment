@@ -56,3 +56,10 @@ models/*.tflite
 # Internal notes — never commit (public repo)
 HANDOFF.md
 *.local.md
+
+# --- iOS / SwiftPM / Local Dev Certs ---
+.build/
+.swiftpm/
+ios/iphone-pwa/.certs/
+*.crt
+*.key

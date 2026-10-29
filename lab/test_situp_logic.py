@@ -159,6 +159,30 @@ def test_insufficient_data_is_red_not_zero():
     assert r.confidence_reasons
 
 
+def test_sit_and_reach_clean_hold_and_knee_foul():
+    from analyzers.sit_and_reach import measure_from_signals
+    sig = []
+    t = 0.0
+    # Attempt 1: clean straight-knee hold at +14.4 cm
+    for _ in range(15):
+        sig.append({"t": t, "reach_cm": -4.0, "knee_angle": 175.0})
+        t += 1.0 / FPS
+    for _ in range(30):  # 1.0s hold > 0.8s requirement
+        sig.append({"t": t, "reach_cm": 14.4, "knee_angle": 174.0})
+        t += 1.0 / FPS
+    for _ in range(15):
+        sig.append({"t": t, "reach_cm": -4.0, "knee_angle": 175.0})
+        t += 1.0 / FPS
+    # Attempt 2: bent knees (155 deg < 168 deg) at +20.0 cm -> must be fouled
+    for _ in range(30):
+        sig.append({"t": t, "reach_cm": 20.0, "knee_angle": 155.0})
+        t += 1.0 / FPS
+    res = measure_from_signals(sig, cm_per_px=0.20, rung=2, fps=FPS, detection_rate=1.0)
+    assert res.confidence == "GREEN", f"expected GREEN, got {res.confidence}: {res.confidence_reasons}"
+    assert abs(res.best_reach_cm - 14.4) < 0.5, f"got {res.best_reach_cm}"
+    assert any(not a.valid and "knee bent" in a.foul_reason for a in res.attempts)
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

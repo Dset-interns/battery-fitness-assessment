@@ -21,10 +21,16 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
-import cv2
-import mediapipe as mp
-from mediapipe.tasks import python as mp_python
-from mediapipe.tasks.python import vision as mp_vision
+try:
+    import cv2
+    import mediapipe as mp
+    from mediapipe.tasks import python as mp_python
+    from mediapipe.tasks.python import vision as mp_vision
+except ImportError:  # pragma: no cover — allows pure-signal tests without cv2
+    cv2 = None  # type: ignore[assignment]
+    mp = None  # type: ignore[assignment]
+    mp_python = None  # type: ignore[assignment]
+    mp_vision = None  # type: ignore[assignment]
 
 # ----------------------------------------------------------------------------
 # MediaPipe Pose landmark indices (33-point BlazePose topology).

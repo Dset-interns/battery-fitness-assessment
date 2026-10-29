@@ -46,11 +46,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-import cv2
-import mediapipe as mp
-import numpy as np
-from mediapipe.tasks import python as mp_python
-from mediapipe.tasks.python import vision as mp_vision
+try:
+    import cv2
+    import mediapipe as mp
+    import numpy as np
+    from mediapipe.tasks import python as mp_python
+    from mediapipe.tasks.python import vision as mp_vision
+except ImportError:  # pragma: no cover — allows pure-signal tests without cv2
+    cv2 = None  # type: ignore[assignment]
+    mp = None  # type: ignore[assignment]
+    np = None  # type: ignore[assignment]
+    mp_python = None  # type: ignore[assignment]
+    mp_vision = None  # type: ignore[assignment]
 
 from .pose import (
     AMBER, GREEN, LEFT_ANKLE, LEFT_EAR, LEFT_HEEL, LEFT_SHOULDER, RED,
