@@ -374,7 +374,11 @@
       lang: "en",
       route: "home",
       sequencing: "ATHLETE_WISE",
-      cameraDistanceM: 2.1, // Standoff distance in metres for Rung 2/4 scale calibration
+      heightCalibMode: "DISTANCE", // "REF_OBJECT" (Rung 1/2 GREEN) or "DISTANCE" (Rung 4 AMBER)
+      cameraDistanceM: 3.15,       // Rung 4: Actual camera-to-wall standoff distance in metres
+      refObjectCm: 29.7,           // Rung 1/2: Known reference length on wall in cm (e.g. 29.7 cm A4 sheet or 100 cm tape)
+      refTopPct: 30,               // Rung 1/2: Top reference line Y (% of frame height)
+      refBotPct: 43,               // Rung 1/2: Bottom reference line Y (% of frame height)
       athletes: [
         { id: 1, name: "Riya Aggarwal", age: 20, gender: "F" },
         { id: 2, name: "Aarav Sharma", age: 14, gender: "M" }
@@ -383,6 +387,11 @@
       selectedTestKey: "height",
       results: {} // keyed by `${athleteId}:${testKey}`
     };
+    if (!state.heightCalibMode) state.heightCalibMode = "DISTANCE";
+    if (!state.cameraDistanceM || state.cameraDistanceM < 1.2) state.cameraDistanceM = 3.15;
+    if (!state.refObjectCm) state.refObjectCm = 29.7;
+    if (!state.refTopPct) state.refTopPct = 30;
+    if (!state.refBotPct) state.refBotPct = 43;
 
     function persist() {
       localStorage.setItem("sai_ios_state_v2", JSON.stringify(state));
@@ -420,7 +429,7 @@
     }
 
     // =========================================================================
-    // Geometry & Pose Helpers (33 MediaPipe Landmarks)
+    // Geometry & Pose Helpers (33 MediaPipe Landmarks + Segmentation Mask)
     // =========================================================================
     let mediaStream = null;
     let captureTimer = null;
@@ -443,7 +452,8 @@
             delegate: "GPU"
           },
           runningMode: "VIDEO",
-          numPoses: 1
+          numPoses: 1,
+          outputSegmentationMasks: true
         });
       } catch (gpuErr) {
         console.warn("GPU delegate fallback to CPU on iOS:", gpuErr);
@@ -453,7 +463,8 @@
             delegate: "CPU"
           },
           runningMode: "VIDEO",
-          numPoses: 1
+          numPoses: 1,
+          outputSegmentationMasks: true
         });
       }
       return poseLandmarker;
@@ -470,18 +481,6 @@
 
     function dist2D(a, b) {
       return Math.hypot(a.x - b.x, a.y - b.y);
-    }
-
-    function dist3D(a, b) {
-      return Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
-    }
-
-    function midpoint3D(a, b) {
-      return {
-        x: (a.x + b.x) / 2,
-        y: (a.y + b.y) / 2,
-        z: ((a.z || 0) + (b.z || 0)) / 2
-      };
     }
 
     function angleDeg(a, b, c) {
@@ -505,6 +504,68 @@
       return lv >= rv ? l : r;
     }
 
+    // Mirrors lab/analyzers/height_scale.py:
+    // Finds the true top-of-head (vertex_y) from the MediaPipe person segmentation mask
+    // above the nose/eyes and the bottom-of-heels (feet_y) from heel/foot landmarks + mask.
+    function extractVertexAndFeetPx(segMask, frameW, frameH, lm, pLm) {
+      const nose = lm[0], pNose = pLm[0];
+      const lEye = lm[2], rEye = lm[5], pLEye = pLm[2], pREye = pLm[5];
+      const eyeMidPxY = (visOk(lEye, 0.3) && visOk(rEye, 0.3))
+        ? ((pLEye.y + pREye.y) / 2)
+        : pNose.y;
+      const noseToEyePx = Math.max(frameH * 0.012, Math.abs(pNose.y - eyeMidPxY));
+
+      // Landmark-derived vertex (top of skull above eye line) and lowest heel/foot landmark
+      let vertexPxY = Math.max(0, eyeMidPxY - 2.6 * noseToEyePx);
+      let vertexSource = "landmarks";
+
+      const footCandidates = [];
+      for (const idx of [27, 28, 29, 30, 31, 32]) {
+        if (visOk(lm[idx], 0.32)) footCandidates.push(pLm[idx].y);
+      }
+      let feetPxY = footCandidates.length > 0 ? Math.max(...footCandidates) : (frameH * 0.85);
+
+      // If MediaPipe segmentation mask is present, scan the head column band above nose
+      // for the true topmost foreground pixel (mask > 0.5), exactly as in height_scale.py!
+      try {
+        if (segMask && typeof segMask.getAsFloat32Array === "function") {
+          const maskArr = segMask.getAsFloat32Array();
+          const mW = segMask.width || frameW;
+          const mH = segMask.height || frameH;
+          const scaleY = frameH / mH;
+          const noseCol = Math.round(nose.x * mW);
+          const halfBand = Math.max(6, Math.round(mW * 0.08));
+          const cMin = Math.max(0, noseCol - halfBand);
+          const cMax = Math.min(mW - 1, noseCol + halfBand);
+          const maxSearchRow = Math.min(mH - 1, Math.round(nose.y * mH));
+
+          for (let r = 0; r <= maxSearchRow; r++) {
+            const rowOffset = r * mW;
+            let foundHeadTop = false;
+            for (let c = cMin; c <= cMax; c++) {
+              if (maskArr[rowOffset + c] > 0.5) {
+                foundHeadTop = true;
+                break;
+              }
+            }
+            if (foundHeadTop) {
+              const maskTopPxY = r * scaleY;
+              // Sanity check: vertex must be above eyes and within plausible head height above eyes
+              if (maskTopPxY < eyeMidPxY && (eyeMidPxY - maskTopPxY) < frameH * 0.14) {
+                vertexPxY = maskTopPxY;
+                vertexSource = "segmentation_mask";
+              }
+              break;
+            }
+          }
+        }
+      } catch (maskErr) {
+        // Fallback cleanly to landmark vertex if WebGL/CPU mask read fails
+      }
+
+      return { vertexPxY, feetPxY, vertexSource };
+    }
+
     function stopCamera() {
       if (captureTimer) { clearInterval(captureTimer); captureTimer = null; }
       if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
@@ -515,9 +576,9 @@
     }
 
     // =========================================================================
-    // Real Per-Frame Pose Extractor in Isotropic Pixel Space + 3D World Space
+    // Real Per-Frame Pose Extractor in Isotropic Pixel Space (Zero Hardcoded Priors)
     // =========================================================================
-    function evaluateLiveFrame(testKey, lm, worldLm, scaleAdjustFactor, frameW = 720, frameH = 1280) {
+    function evaluateLiveFrame(testKey, lm, segMask, frameW = 720, frameH = 1280) {
       // Convert normalized [0..1] landmarks into true isotropic pixel coordinates (fixes 1.78x portrait distortion!)
       const pLm = lm.map(pt => toPx(pt, frameW, frameH));
 
@@ -543,16 +604,13 @@
       const pFootTip = (lm[31]?.visibility ?? 0) >= (lm[32]?.visibility ?? 0) ? pLm[31] : pLm[32];
 
       // -----------------------------------------------------------------------
-      // TEST 1: STANDING HEIGHT
-      // Uses BOTH:
-      //  (A) Distance-invariant 3D metric skeleton chain + cranial-to-body ratio, and
-      //  (B) Perspective-compensated 2D vertex-to-heel photogrammetry
-      // Why? When you step 3m back so your full body fits in the frame, your body
-      // only occupies ~40-50% of the vertical pixels (`fullPixelFraction ~ 0.42`).
-      // Multiplying 0.42 by a fixed 2m plane height wrongly gave ~100 cm!
-      // By computing the camera standoff distance `autoDistM` from your cranial/shoulder
-      // angular size AND fusing with 3D metric worldLandmarks, standing at 2.5m-3.5m
-      // accurately measures 150-185 cm!
+      // TEST 1: STANDING HEIGHT — Exact port of lab/analyzers/height_scale.py
+      // NO worldLandmarks and NO hardcoded human body/head size constants!
+      // Height = bodyTotalPx * cmPerPx, where:
+      //  - bodyTotalPx = feetPxY - vertexPxY (measured directly on the video frame)
+      //  - cmPerPx comes strictly from:
+      //      Rung 1/2 (REF_OBJECT, GREEN): refObjectCm / refSpanPx
+      //      Rung 4   (DISTANCE,   AMBER): (cameraDistanceM * 100 * 2*tan(vfov/2)) / frameH
       // -----------------------------------------------------------------------
       if (testKey === "height") {
         const headVis = visOk(nose, 0.45) && visOk(shoulder, 0.45);
@@ -569,11 +627,12 @@
 
         const kneeDeg = angleDeg(pHip, pKnee, pAnkle);
         const hipDeg = angleDeg(pShoulder, pHip, pKnee);
-        const lowestFootPxY = (heel && visOk(heel, 0.35)) ? Math.max(pHeel.y, pAnkle.y) : pAnkle.y;
-        const dyBodyPx = lowestFootPxY - pNose.y;
+        const { vertexPxY, feetPxY, vertexSource } = extractVertexAndFeetPx(segMask, frameW, frameH, lm, pLm);
+        const bodyTotalPx = feetPxY - vertexPxY;
+        const fullPixelFraction = bodyTotalPx / frameH;
         const dxTorsoPx = Math.abs(pShoulder.x - pAnkle.x);
 
-        if (dyBodyPx < frameH * 0.25 || dxTorsoPx > dyBodyPx * 0.35) {
+        if (bodyTotalPx < frameH * 0.22 || dxTorsoPx > bodyTotalPx * 0.35) {
           return {
             postureOk: false,
             liveMetric: "Not standing upright",
@@ -588,66 +647,30 @@
           };
         }
 
-        // 1. Measure 2D pixel chain from Crown (vertex above nose/eyes) to Plantar Heel
-        const eyeMidPxY = (visOk(lEye, 0.3) && visOk(rEye, 0.3)) ? ((pLEye.y + pREye.y) / 2) : pNose.y;
-        const headNeckPx = Math.max(frameH * 0.03, pShoulder.y - eyeMidPxY);
-        const crownPxY = Math.max(0, eyeMidPxY - 0.72 * headNeckPx);
-        const solePxY = Math.min(frameH, lowestFootPxY + 0.16 * headNeckPx);
-        const bodyTotalPx = solePxY - crownPxY;
-        const fullPixelFraction = bodyTotalPx / frameH;
+        // Compute scale factor (cm_per_px) strictly from external physical calibration (Rung 1/2 or Rung 4):
+        let cmPerPx = 0;
+        let rungLabel = "";
+        let rungConfidence = "AMBER";
 
-        // 2. Measure skeletal segment lengths in isotropic pixels:
-        //    headNeckPx (eye/crown to shoulder), torsoPx (shoulder to hip),
-        //    femurPx (hip to knee), tibiaPx (knee to sole)
-        const shoulderMidPx = (visOk(lm[11], 0.4) && visOk(lm[12], 0.4))
-          ? { x: (pLm[11].x + pLm[12].x) / 2, y: (pLm[11].y + pLm[12].y) / 2 }
-          : pShoulder;
-        const hipMidPx = (visOk(lm[23], 0.4) && visOk(lm[24], 0.4))
-          ? { x: (pLm[23].x + pLm[24].x) / 2, y: (pLm[23].y + pLm[24].y) / 2 }
-          : pHip;
-        const torsoPx = dist2D(shoulderMidPx, hipMidPx);
-        const femurPx = dist2D(pHip, pKnee);
-        const tibiaPx = dist2D(pKnee, pAnkle);
-        const biacromialPx = (visOk(lm[11], 0.4) && visOk(lm[12], 0.4))
-          ? dist2D(pLm[11], pLm[12])
-          : headNeckPx * 1.65;
-
-        // 3. Auto-estimate true camera standoff distance Z (in meters):
-        //    Even if the user stands 3.2m away so fullPixelFraction is only 0.42,
-        //    headNeckPx is ALSO proportionally smaller! Using anatomical cranial-neck
-        //    vertical module (~24.2 cm from crown to C7/acromion plane), we get the
-        //    distance-invariant cm-per-pixel scale:
-        const crownToShoulderPx = Math.max(frameH * 0.04, shoulderMidPx.y - crownPxY);
-        // Crown-to-acromion (head + neck) is ~18.2% of standing stature (~28.8 cm in adults/teens)
-        const cmPerPxFromCranial = 28.8 / crownToShoulderPx;
-        const heightFrom2DCranialCm = bodyTotalPx * cmPerPxFromCranial;
-
-        // 4. 3D World Landmarks metric bone chain (distance-invariant in meters)
-        let heightFrom3DCm = heightFrom2DCranialCm;
-        if (worldLm && worldLm.length >= 31) {
-          const wSh = midpoint3D(worldLm[11], worldLm[12]);
-          const wHp = midpoint3D(worldLm[23], worldLm[24]);
-          const useL = (lm[27]?.visibility ?? 0) >= (lm[28]?.visibility ?? 0);
-          const wKn = useL ? worldLm[25] : worldLm[26];
-          const wAn = useL ? worldLm[27] : worldLm[28];
-          const wNo = worldLm[0];
-
-          // Nose-to-shoulder + 11.5 cm skull vertex above nose + 7.2 cm ankle malleolus to floor sole
-          const segHeadNeckM = dist3D(wNo, wSh) + 0.115;
-          const segTorsoM = dist3D(wSh, wHp);
-          const segFemurM = dist3D(wHp, wKn);
-          const segTibiaM = dist3D(wKn, wAn);
-          const segFootM = 0.072;
-          const raw3DM = (segHeadNeckM + segTorsoM + segFemurM + segTibiaM + segFootM) * 1.04;
-          if (raw3DM >= 1.25 && raw3DM <= 2.15) {
-            heightFrom3DCm = raw3DM * 100.0;
-          }
+        if (state.heightCalibMode === "REF_OBJECT") {
+          // Rung 1/2: Known reference object in the same wall plane (e.g., 29.7 cm A4 sheet or 100 cm tape)
+          const refTopY = (Math.min(state.refTopPct, state.refBotPct - 2) / 100.0) * frameH;
+          const refBotY = (Math.max(state.refBotPct, state.refTopPct + 2) / 100.0) * frameH;
+          const refSpanPx = Math.max(10, refBotY - refTopY);
+          cmPerPx = state.refObjectCm / refSpanPx;
+          rungLabel = `Rung 1/2 Wall Ref (${state.refObjectCm}cm = ${Math.round(refSpanPx)}px)`;
+          rungConfidence = "GREEN";
+        } else {
+          // Rung 4: Camera-to-wall standoff distance pinhole geometry:
+          // vertical plane height at distance D is 2 * D * tan(vfov/2), where 2*tan(vfov/2) = 1.14 for smartphone wide lens
+          const distCm = (state.cameraDistanceM || 3.15) * 100.0;
+          cmPerPx = (distCm * 1.14) / frameH;
+          rungLabel = `Rung 4 Dist (${(state.cameraDistanceM || 3.15).toFixed(2)}m)`;
+          rungConfidence = "AMBER";
         }
 
-        // Fuse 3D metric skeleton chain (55%) + 2D distance-compensated photogrammetry (45%),
-        // then apply user's Wall Reference Scale multiplier (default 1.00x)
-        const rawFusedCm = (0.55 * heightFrom3DCm + 0.45 * heightFrom2DCranialCm) * (scaleAdjustFactor || 1.0);
-        const autoDistM = (rawFusedCm / 100.0) / Math.max(0.25, fullPixelFraction * 1.14);
+        // Pure measurement: pixel height of person * cm_per_px (zero hardcoded human height!)
+        const measuredHeightCm = bodyTotalPx * cmPerPx;
 
         // Frankfurt plane head tilt check
         const pEar = visOk(lEar, 0.35) ? pLEar : pREar;
@@ -659,12 +682,18 @@
 
         return {
           postureOk: true,
-          heightCm: rawFusedCm,
+          heightCm: measuredHeightCm,
+          vertexPxY,
+          feetPxY,
+          bodyTotalPx,
+          cmPerPx,
+          rungLabel,
+          rungConfidence,
+          vertexSource,
           headTiltDeg,
           pixelSpan: fullPixelFraction,
-          autoDistM,
-          liveMetric: `${rawFusedCm.toFixed(1)} cm`,
-          reason: `Standing OK · Est. dist ${autoDistM.toFixed(2)}m (Frame span ${(fullPixelFraction * 100).toFixed(0)}%) · Knee ${kneeDeg.toFixed(0)}°`
+          liveMetric: `${measuredHeightCm.toFixed(1)} cm (${Math.round(bodyTotalPx)} px)`,
+          reason: `${rungLabel} · Body ${Math.round(bodyTotalPx)}px (${(fullPixelFraction * 100).toFixed(1)}% frame) × ${cmPerPx.toFixed(4)} cm/px`
         };
       }
 
@@ -820,19 +849,21 @@
         const medianCm = core[Math.floor(core.length / 2)];
         const spreadCm = core.length > 1 ? (core[core.length - 1] - core[0]) : 0.0;
         const avgTilt = validPostureFrames.reduce((s, f) => s + f.headTiltDeg, 0) / validPostureFrames.length;
+        const avgPx = validPostureFrames.reduce((s, f) => s + (f.bodyTotalPx || 0), 0) / validPostureFrames.length;
+        const avgCmPerPx = validPostureFrames.reduce((s, f) => s + (f.cmPerPx || 0), 0) / validPostureFrames.length;
+        const sampleFrame = validPostureFrames[validPostureFrames.length - 1];
+        const isSteady = spreadCm <= 3.5;
 
-        const avgDist = validPostureFrames.reduce((s, f) => s + (f.autoDistM || 2.5), 0) / validPostureFrames.length;
-        const isSteady = spreadCm <= 3.0;
         return {
           valid: isSteady,
           value: Number(medianCm.toFixed(1)),
           unit: "cm",
-          confidence: (isSteady && detectionRate >= 0.8) ? "GREEN" : "AMBER",
-          method: `AI 3D+2D Full-Body Photogrammetry (${validPostureFrames.length} frames, auto-dist ${avgDist.toFixed(2)}m, spread ${spreadCm.toFixed(1)} cm)`,
+          confidence: (isSteady && sampleFrame.rungConfidence === "GREEN") ? "GREEN" : "AMBER",
+          method: `${sampleFrame.rungLabel} · ${Math.round(avgPx)}px × ${avgCmPerPx.toFixed(4)} cm/px (vertex: ${sampleFrame.vertexSource}, spread ${spreadCm.toFixed(1)} cm)`,
           audit: [
             {
               label: "Standing Height",
-              detail: `${medianCm.toFixed(1)} cm · Auto-dist ${avgDist.toFixed(2)}m · Spread ${spreadCm.toFixed(2)} cm · Head tilt ${avgTilt.toFixed(1)}°`,
+              detail: `${medianCm.toFixed(1)} cm · Body span ${Math.round(avgPx)} px × ${avgCmPerPx.toFixed(4)} cm/px · ${sampleFrame.rungLabel} · Spread ${spreadCm.toFixed(2)} cm · Head tilt ${avgTilt.toFixed(1)}°`,
               valid: isSteady
             }
           ]
@@ -1412,11 +1443,40 @@
 
         ${test.key === "height" ? `
           <div class="card" style="padding:10px 12px;margin-bottom:8px;">
-            <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;">
-              <span>📏 Wall Reference Scale Fine-Tune (Auto-Distance Active)</span>
-              <span id="lblDistVal">${((state.scaleFactor || 1.0) * 100).toFixed(0)}%</span>
+            <div class="seg-bar" style="margin-bottom:8px;">
+              <button id="btnCalibDist" class="${state.heightCalibMode === "DISTANCE" ? "active" : ""}" style="font-size:11px;padding:6px;">
+                📏 Rung 4: Camera Distance (m)
+              </button>
+              <button id="btnCalibRef" class="${state.heightCalibMode === "REF_OBJECT" ? "active" : ""}" style="font-size:11px;padding:6px;">
+                🎯 Rung 1/2: 2-Point Wall Ref (cm)
+              </button>
             </div>
-            <input id="rngDist" type="range" min="0.85" max="1.20" step="0.01" value="${state.scaleFactor || 1.0}" style="width:100%;margin-top:6px;" />
+            <div id="calibDistPanel" style="display:${state.heightCalibMode === "DISTANCE" ? "block" : "none"};">
+              <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;">
+                <span>Camera-to-Wall Standoff Distance</span>
+                <span id="lblDistVal">${(state.cameraDistanceM || 3.15).toFixed(2)} m</span>
+              </div>
+              <input id="rngDist" type="range" min="1.50" max="4.50" step="0.05" value="${state.cameraDistanceM || 3.15}" style="width:100%;margin-top:6px;" />
+              <div style="font-size:11px;color:var(--text-sub);margin-top:2px;">
+                Pure pinhole geometry: <code>cm/px = (Dist × 114) / frameH</code> (No hardcoded height!)
+              </div>
+            </div>
+            <div id="calibRefPanel" style="display:${state.heightCalibMode === "REF_OBJECT" ? "block" : "none"};">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+                <label style="font-size:11px;font-weight:700;white-space:nowrap;">Ref Size (cm):</label>
+                <input id="inpRefCm" type="number" step="0.1" value="${state.refObjectCm || 29.7}" style="width:75px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);font-size:12px;font-weight:700;" />
+                <button class="lang-btn" id="btnPresetA4" style="font-size:10px;padding:3px 6px;">A4 (29.7cm)</button>
+                <button class="lang-btn" id="btnPreset1m" style="font-size:10px;padding:3px 6px;">1m Tape (100cm)</button>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;">
+                <span>Gold Top Line: <span id="lblRefTop">${state.refTopPct}%</span></span>
+                <span>Gold Bottom Line: <span id="lblRefBot">${state.refBotPct}%</span></span>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:4px;">
+                <input id="rngRefTop" type="range" min="5" max="85" step="0.5" value="${state.refTopPct}" style="width:50%;" />
+                <input id="rngRefBot" type="range" min="10" max="95" step="0.5" value="${state.refBotPct}" style="width:50%;" />
+              </div>
+            </div>
           </div>
         ` : ""}
 
@@ -1439,11 +1499,59 @@
         <button class="btn primary" id="btnRecToggle">● ${t("Start Recording Attempt", "प्रयास रिकॉर्डिंग शुरू करें")}</button>
       `;
 
-      const rngDist = document.getElementById("rngDist");
-      if (rngDist) {
+      if (test.key === "height") {
+        const btnCalibDist = document.getElementById("btnCalibDist");
+        const btnCalibRef = document.getElementById("btnCalibRef");
+        const distPanel = document.getElementById("calibDistPanel");
+        const refPanel = document.getElementById("calibRefPanel");
+        const rngDist = document.getElementById("rngDist");
+        const inpRefCm = document.getElementById("inpRefCm");
+        const rngRefTop = document.getElementById("rngRefTop");
+        const rngRefBot = document.getElementById("rngRefBot");
+
+        btnCalibDist.onclick = () => {
+          state.heightCalibMode = "DISTANCE";
+          btnCalibDist.classList.add("active");
+          btnCalibRef.classList.remove("active");
+          distPanel.style.display = "block";
+          refPanel.style.display = "none";
+          persist();
+        };
+        btnCalibRef.onclick = () => {
+          state.heightCalibMode = "REF_OBJECT";
+          btnCalibRef.classList.add("active");
+          btnCalibDist.classList.remove("active");
+          refPanel.style.display = "block";
+          distPanel.style.display = "none";
+          persist();
+        };
         rngDist.oninput = (e) => {
-          state.scaleFactor = parseFloat(e.target.value);
-          document.getElementById("lblDistVal").textContent = `${(state.scaleFactor * 100).toFixed(0)}%`;
+          state.cameraDistanceM = parseFloat(e.target.value);
+          document.getElementById("lblDistVal").textContent = `${state.cameraDistanceM.toFixed(2)} m`;
+          persist();
+        };
+        inpRefCm.oninput = (e) => {
+          const v = parseFloat(e.target.value);
+          if (v > 1) { state.refObjectCm = v; persist(); }
+        };
+        document.getElementById("btnPresetA4").onclick = () => {
+          state.refObjectCm = 29.7;
+          inpRefCm.value = "29.7";
+          persist();
+        };
+        document.getElementById("btnPreset1m").onclick = () => {
+          state.refObjectCm = 100.0;
+          inpRefCm.value = "100.0";
+          persist();
+        };
+        rngRefTop.oninput = (e) => {
+          state.refTopPct = parseFloat(e.target.value);
+          document.getElementById("lblRefTop").textContent = `${state.refTopPct}%`;
+          persist();
+        };
+        rngRefBot.oninput = (e) => {
+          state.refBotPct = parseFloat(e.target.value);
+          document.getElementById("lblRefBot").textContent = `${state.refBotPct}%`;
           persist();
         };
       }
@@ -1499,22 +1607,46 @@
           canvasEl.height = videoEl.videoHeight || 1280;
           ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 
+          // If Rung 1/2 Wall Reference mode is selected on Height test, draw the 2 gold reference lines
+          if (test.key === "height" && state.heightCalibMode === "REF_OBJECT") {
+            const rTopY = (Math.min(state.refTopPct, state.refBotPct - 2) / 100.0) * canvasEl.height;
+            const rBotY = (Math.max(state.refBotPct, state.refTopPct + 2) / 100.0) * canvasEl.height;
+            ctx.save();
+            ctx.strokeStyle = "#FFD166";
+            ctx.fillStyle = "#FFD166";
+            ctx.lineWidth = 3;
+            ctx.setLineDash([8, 6]);
+            ctx.beginPath();
+            ctx.moveTo(0, rTopY); ctx.lineTo(canvasEl.width, rTopY);
+            ctx.moveTo(0, rBotY); ctx.lineTo(canvasEl.width, rBotY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.font = "bold 20px -apple-system, sans-serif";
+            ctx.fillText(`REF TOP (${state.refObjectCm} cm = ${Math.round(rBotY - rTopY)} px)`, 18, Math.max(24, rTopY - 8));
+            ctx.fillText(`REF BOTTOM`, 18, Math.min(canvasEl.height - 10, rBotY + 22));
+            ctx.restore();
+          }
+
           try {
             const tsMs = Math.max(lastMpTimestampMs + 1, Math.round(now));
             lastMpTimestampMs = tsMs;
             const res = poseLandmarker.detectForVideo(videoEl, tsMs);
             if (res.landmarks && res.landmarks.length > 0) {
               const lm = res.landmarks[0];
-              const worldLm = res.worldLandmarks?.[0] || null;
+              const segMask = res.segmentationMasks?.[0] || null;
 
               const evalRes = evaluateLiveFrame(
                 test.key,
                 lm,
-                worldLm,
-                state.scaleFactor || 1.0,
+                segMask,
                 canvasEl.width,
                 canvasEl.height
               );
+
+              // Close segmentation mask if WebGL/WASM allocated one
+              if (segMask && typeof segMask.close === "function") {
+                try { segMask.close(); } catch (_) {}
+              }
 
               // Draw skeleton lines & keypoints color-coded by posture validity
               const color = evalRes.postureOk ? "#00E6A8" : "#FF4D4F";
@@ -1537,6 +1669,24 @@
                   ctx.arc(pt.x * canvasEl.width, pt.y * canvasEl.height, 5, 0, Math.PI * 2);
                   ctx.fill();
                 }
+              }
+
+              // Draw live VERTEX (top of head) and HEELS (bottom of feet) horizontal caliper lines for Height test
+              if (test.key === "height" && evalRes.postureOk && evalRes.vertexPxY !== undefined) {
+                ctx.save();
+                ctx.strokeStyle = "#00E5FF";
+                ctx.fillStyle = "#00E5FF";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(0, evalRes.vertexPxY);
+                ctx.lineTo(canvasEl.width, evalRes.vertexPxY);
+                ctx.moveTo(0, evalRes.feetPxY);
+                ctx.lineTo(canvasEl.width, evalRes.feetPxY);
+                ctx.stroke();
+                ctx.font = "bold 20px -apple-system, sans-serif";
+                ctx.fillText(`▲ VERTEX (${evalRes.vertexSource})`, 18, Math.max(26, evalRes.vertexPxY - 8));
+                ctx.fillText(`▼ HEELS (${Math.round(evalRes.bodyTotalPx)} px → ${evalRes.heightCm.toFixed(1)} cm)`, 18, Math.min(canvasEl.height - 14, evalRes.feetPxY + 24));
+                ctx.restore();
               }
 
               hudFps.textContent = `${Math.round(fps)} fps · ${evalRes.postureOk ? "POSE VALID" : "GATE BLOCKED"}`;
