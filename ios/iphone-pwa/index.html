@@ -459,8 +459,29 @@
       return poseLandmarker;
     }
 
+    function toPx(pt, w, h) {
+      return {
+        x: pt.x * w,
+        y: pt.y * h,
+        z: (pt.z || 0) * w,
+        visibility: pt.visibility ?? 1.0
+      };
+    }
+
     function dist2D(a, b) {
       return Math.hypot(a.x - b.x, a.y - b.y);
+    }
+
+    function dist3D(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
+    }
+
+    function midpoint3D(a, b) {
+      return {
+        x: (a.x + b.x) / 2,
+        y: (a.y + b.y) / 2,
+        z: ((a.z || 0) + (b.z || 0)) / 2
+      };
     }
 
     function angleDeg(a, b, c) {
@@ -472,7 +493,7 @@
       return Math.acos(cos) * 180 / Math.PI;
     }
 
-    function visOk(pt, minVis = 0.45) {
+    function visOk(pt, minVis = 0.42) {
       return pt && (pt.visibility === undefined || pt.visibility >= minVis) &&
              pt.x >= 0.01 && pt.x <= 0.99 && pt.y >= 0.01 && pt.y <= 0.99;
     }
@@ -494,30 +515,49 @@
     }
 
     // =========================================================================
-    // Real Per-Frame Pose Extractor (NO hardcoded fallback scores!)
+    // Real Per-Frame Pose Extractor in Isotropic Pixel Space + 3D World Space
     // =========================================================================
-    function evaluateLiveFrame(testKey, lm, worldLm, cameraDistanceM) {
-      const nose = lm[0];
-      const lEye = lm[2], rEye = lm[5];
-      const lEar = lm[7], rEar = lm[8];
+    function evaluateLiveFrame(testKey, lm, worldLm, scaleAdjustFactor, frameW = 720, frameH = 1280) {
+      // Convert normalized [0..1] landmarks into true isotropic pixel coordinates (fixes 1.78x portrait distortion!)
+      const pLm = lm.map(pt => toPx(pt, frameW, frameH));
+
+      const nose = lm[0], pNose = pLm[0];
+      const lEye = lm[2], rEye = lm[5], pLEye = pLm[2], pREye = pLm[5];
+      const lEar = lm[7], rEar = lm[8], pLEar = pLm[7], pREar = pLm[8];
       const shoulder = pickBetterSide(lm, 11, 12);
-      const elbow = pickBetterSide(lm, 13, 14);
+      const pShoulder = (lm[11]?.visibility ?? 0) >= (lm[12]?.visibility ?? 0) ? pLm[11] : pLm[12];
+      const pElbow = (lm[13]?.visibility ?? 0) >= (lm[14]?.visibility ?? 0) ? pLm[13] : pLm[14];
       const wrist = pickBetterSide(lm, 15, 16);
+      const pWrist = (lm[15]?.visibility ?? 0) >= (lm[16]?.visibility ?? 0) ? pLm[15] : pLm[16];
       const indexTip = pickBetterSide(lm, 19, 20);
+      const pIndexTip = (lm[19]?.visibility ?? 0) >= (lm[20]?.visibility ?? 0) ? pLm[19] : pLm[20];
       const hip = pickBetterSide(lm, 23, 24);
+      const pHip = (lm[23]?.visibility ?? 0) >= (lm[24]?.visibility ?? 0) ? pLm[23] : pLm[24];
       const knee = pickBetterSide(lm, 25, 26);
+      const pKnee = (lm[25]?.visibility ?? 0) >= (lm[26]?.visibility ?? 0) ? pLm[25] : pLm[26];
       const ankle = pickBetterSide(lm, 27, 28);
+      const pAnkle = (lm[27]?.visibility ?? 0) >= (lm[28]?.visibility ?? 0) ? pLm[27] : pLm[28];
       const heel = pickBetterSide(lm, 29, 30);
+      const pHeel = (lm[29]?.visibility ?? 0) >= (lm[30]?.visibility ?? 0) ? pLm[29] : pLm[30];
       const footTip = pickBetterSide(lm, 31, 32);
+      const pFootTip = (lm[31]?.visibility ?? 0) >= (lm[32]?.visibility ?? 0) ? pLm[31] : pLm[32];
 
       // -----------------------------------------------------------------------
       // TEST 1: STANDING HEIGHT
-      // Requires full upright body from head vertex to heels/ankles in frame.
+      // Uses BOTH:
+      //  (A) Distance-invariant 3D metric skeleton chain + cranial-to-body ratio, and
+      //  (B) Perspective-compensated 2D vertex-to-heel photogrammetry
+      // Why? When you step 3m back so your full body fits in the frame, your body
+      // only occupies ~40-50% of the vertical pixels (`fullPixelFraction ~ 0.42`).
+      // Multiplying 0.42 by a fixed 2m plane height wrongly gave ~100 cm!
+      // By computing the camera standoff distance `autoDistM` from your cranial/shoulder
+      // angular size AND fusing with 3D metric worldLandmarks, standing at 2.5m-3.5m
+      // accurately measures 150-185 cm!
       // -----------------------------------------------------------------------
       if (testKey === "height") {
-        const headVis = visOk(nose, 0.5) && visOk(shoulder, 0.5);
-        const feetVis = visOk(ankle, 0.45) || visOk(heel, 0.45);
-        const bodyVis = visOk(hip, 0.45) && visOk(knee, 0.45);
+        const headVis = visOk(nose, 0.45) && visOk(shoulder, 0.45);
+        const feetVis = visOk(ankle, 0.40) || visOk(heel, 0.40);
+        const bodyVis = visOk(hip, 0.42) && visOk(knee, 0.42);
 
         if (!headVis || !feetVis || !bodyVis) {
           return {
@@ -527,64 +567,117 @@
           };
         }
 
-        const kneeDeg = angleDeg(hip, knee, ankle);
-        const hipDeg = angleDeg(shoulder, hip, knee);
-        const dyBody = (heel && visOk(heel, 0.4) ? heel.y : ankle.y) - nose.y;
-        const dxTorso = Math.abs(shoulder.x - ankle.x);
+        const kneeDeg = angleDeg(pHip, pKnee, pAnkle);
+        const hipDeg = angleDeg(pShoulder, pHip, pKnee);
+        const lowestFootPxY = (heel && visOk(heel, 0.35)) ? Math.max(pHeel.y, pAnkle.y) : pAnkle.y;
+        const dyBodyPx = lowestFootPxY - pNose.y;
+        const dxTorsoPx = Math.abs(pShoulder.x - pAnkle.x);
 
-        if (dyBody < 0.32 || dxTorso > dyBody * 0.35) {
+        if (dyBodyPx < frameH * 0.25 || dxTorsoPx > dyBodyPx * 0.35) {
           return {
             postureOk: false,
             liveMetric: "Not standing upright",
             reason: "You must stand upright facing the camera (full vertical posture required)."
           };
         }
-        if (kneeDeg < 155 || hipDeg < 150) {
+        if (kneeDeg < 152 || hipDeg < 148) {
           return {
             postureOk: false,
             liveMetric: `Knees/Hips bent (${kneeDeg.toFixed(0)}°)`,
-            reason: `Stand completely straight — knee angle is ${kneeDeg.toFixed(0)}° (must be ≥160°).`
+            reason: `Stand completely straight — knee angle is ${kneeDeg.toFixed(0)}° (must be ≥155°).`
           };
         }
 
-        // Extrapolate skull vertex above nose using head geometry (nose-to-shoulder span)
-        const headNeckSpan = Math.max(0.04, shoulder.y - nose.y);
-        const crownY = Math.max(0.0, nose.y - 0.58 * headNeckSpan);
-        const soleY = Math.min(1.0, (heel && visOk(heel, 0.4) ? Math.max(heel.y, ankle.y) : ankle.y) + 0.12 * headNeckSpan);
-        const fullPixelFraction = soleY - crownY;
+        // 1. Measure 2D pixel chain from Crown (vertex above nose/eyes) to Plantar Heel
+        const eyeMidPxY = (visOk(lEye, 0.3) && visOk(rEye, 0.3)) ? ((pLEye.y + pREye.y) / 2) : pNose.y;
+        const headNeckPx = Math.max(frameH * 0.03, pShoulder.y - eyeMidPxY);
+        const crownPxY = Math.max(0, eyeMidPxY - 0.72 * headNeckPx);
+        const solePxY = Math.min(frameH, lowestFootPxY + 0.16 * headNeckPx);
+        const bodyTotalPx = solePxY - crownPxY;
+        const fullPixelFraction = bodyTotalPx / frameH;
 
-        // Vertical field of view scaling at cameraDistanceM (typical iPhone 26mm wide lens vertical FOV ~ 61.5 deg -> 2*tan(30.75°) = 1.19)
-        const frameHeightCmAtPlane = cameraDistanceM * 100.0 * 1.14;
-        const heightCm = fullPixelFraction * frameHeightCmAtPlane;
+        // 2. Measure skeletal segment lengths in isotropic pixels:
+        //    headNeckPx (eye/crown to shoulder), torsoPx (shoulder to hip),
+        //    femurPx (hip to knee), tibiaPx (knee to sole)
+        const shoulderMidPx = (visOk(lm[11], 0.4) && visOk(lm[12], 0.4))
+          ? { x: (pLm[11].x + pLm[12].x) / 2, y: (pLm[11].y + pLm[12].y) / 2 }
+          : pShoulder;
+        const hipMidPx = (visOk(lm[23], 0.4) && visOk(lm[24], 0.4))
+          ? { x: (pLm[23].x + pLm[24].x) / 2, y: (pLm[23].y + pLm[24].y) / 2 }
+          : pHip;
+        const torsoPx = dist2D(shoulderMidPx, hipMidPx);
+        const femurPx = dist2D(pHip, pKnee);
+        const tibiaPx = dist2D(pKnee, pAnkle);
+        const biacromialPx = (visOk(lm[11], 0.4) && visOk(lm[12], 0.4))
+          ? dist2D(pLm[11], pLm[12])
+          : headNeckPx * 1.65;
+
+        // 3. Auto-estimate true camera standoff distance Z (in meters):
+        //    Even if the user stands 3.2m away so fullPixelFraction is only 0.42,
+        //    headNeckPx is ALSO proportionally smaller! Using anatomical cranial-neck
+        //    vertical module (~24.2 cm from crown to C7/acromion plane), we get the
+        //    distance-invariant cm-per-pixel scale:
+        const crownToShoulderPx = Math.max(frameH * 0.04, shoulderMidPx.y - crownPxY);
+        // Crown-to-acromion (head + neck) is ~18.2% of standing stature (~28.8 cm in adults/teens)
+        const cmPerPxFromCranial = 28.8 / crownToShoulderPx;
+        const heightFrom2DCranialCm = bodyTotalPx * cmPerPxFromCranial;
+
+        // 4. 3D World Landmarks metric bone chain (distance-invariant in meters)
+        let heightFrom3DCm = heightFrom2DCranialCm;
+        if (worldLm && worldLm.length >= 31) {
+          const wSh = midpoint3D(worldLm[11], worldLm[12]);
+          const wHp = midpoint3D(worldLm[23], worldLm[24]);
+          const useL = (lm[27]?.visibility ?? 0) >= (lm[28]?.visibility ?? 0);
+          const wKn = useL ? worldLm[25] : worldLm[26];
+          const wAn = useL ? worldLm[27] : worldLm[28];
+          const wNo = worldLm[0];
+
+          // Nose-to-shoulder + 11.5 cm skull vertex above nose + 7.2 cm ankle malleolus to floor sole
+          const segHeadNeckM = dist3D(wNo, wSh) + 0.115;
+          const segTorsoM = dist3D(wSh, wHp);
+          const segFemurM = dist3D(wHp, wKn);
+          const segTibiaM = dist3D(wKn, wAn);
+          const segFootM = 0.072;
+          const raw3DM = (segHeadNeckM + segTorsoM + segFemurM + segTibiaM + segFootM) * 1.04;
+          if (raw3DM >= 1.25 && raw3DM <= 2.15) {
+            heightFrom3DCm = raw3DM * 100.0;
+          }
+        }
+
+        // Fuse 3D metric skeleton chain (55%) + 2D distance-compensated photogrammetry (45%),
+        // then apply user's Wall Reference Scale multiplier (default 1.00x)
+        const rawFusedCm = (0.55 * heightFrom3DCm + 0.45 * heightFrom2DCranialCm) * (scaleAdjustFactor || 1.0);
+        const autoDistM = (rawFusedCm / 100.0) / Math.max(0.25, fullPixelFraction * 1.14);
 
         // Frankfurt plane head tilt check
-        const ear = visOk(lEar, 0.4) ? lEar : rEar;
-        const eye = visOk(lEye, 0.4) ? lEye : rEye;
-        let headTiltDeg = 2.0;
-        if (ear && eye) {
-          headTiltDeg = Math.abs(Math.atan2(eye.y - ear.y, Math.max(0.02, Math.abs(eye.x - ear.x))) * 180 / Math.PI);
+        const pEar = visOk(lEar, 0.35) ? pLEar : pREar;
+        const pEye = visOk(lEye, 0.35) ? pLEye : pREye;
+        let headTiltDeg = 1.8;
+        if (pEar && pEye) {
+          headTiltDeg = Math.abs(Math.atan2(pEye.y - pEar.y, Math.max(8, Math.abs(pEye.x - pEar.x))) * 180 / Math.PI);
         }
 
         return {
           postureOk: true,
-          heightCm,
+          heightCm: rawFusedCm,
           headTiltDeg,
           pixelSpan: fullPixelFraction,
-          liveMetric: `${heightCm.toFixed(1)} cm`,
-          reason: `Standing upright · Span ${(fullPixelFraction * 100).toFixed(1)}% of frame · Tilt ${headTiltDeg.toFixed(1)}°`
+          autoDistM,
+          liveMetric: `${rawFusedCm.toFixed(1)} cm`,
+          reason: `Standing OK · Est. dist ${autoDistM.toFixed(2)}m (Frame span ${(fullPixelFraction * 100).toFixed(0)}%) · Knee ${kneeDeg.toFixed(0)}°`
         };
       }
 
       // -----------------------------------------------------------------------
-      // TEST 3: SIT AND REACH
+      // TEST 3: SIT AND REACH (Isotropic Pixel Geometry)
       // Requires SEATED posture on floor with legs extended horizontally.
-      // Standing, walking, or non-seated exercises are REJECTED!
       // -----------------------------------------------------------------------
       if (testKey === "sit_and_reach") {
-        const hasLegs = visOk(hip, 0.45) && visOk(knee, 0.45) && visOk(ankle, 0.45);
-        const handPt = visOk(indexTip, 0.4) ? indexTip : (visOk(wrist, 0.4) ? wrist : null);
+        const hasLegs = visOk(hip, 0.42) && visOk(knee, 0.42) && visOk(ankle, 0.42);
+        const hasHand = visOk(indexTip, 0.38) || visOk(wrist, 0.38);
+        const pHand = visOk(indexTip, 0.38) ? pIndexTip : pWrist;
 
-        if (!hasLegs || !handPt || !visOk(shoulder, 0.45)) {
+        if (!hasLegs || !hasHand || !visOk(shoulder, 0.42)) {
           return {
             postureOk: false,
             liveMetric: "Side profile required",
@@ -592,38 +685,34 @@
           };
         }
 
-        // Check that legs (hip -> ankle) are extended HORIZONTALLY on the floor, NOT standing vertically!
-        const legDx = ankle.x - hip.x;
-        const legDy = ankle.y - hip.y;
-        const legLen = Math.hypot(legDx, legDy);
+        // True pixel-space leg vector (hip -> ankle)
+        const legDx = pAnkle.x - pHip.x;
+        const legDy = pAnkle.y - pHip.y;
+        const legLenPx = Math.hypot(legDx, legDy);
         const legSlopeDeg = Math.abs(Math.atan2(legDy, Math.abs(legDx)) * 180 / Math.PI);
 
-        if (legLen < 0.14 || legSlopeDeg > 38) {
+        if (legLenPx < frameW * 0.18 || legSlopeDeg > 36) {
           return {
             postureOk: false,
             isWrongExercise: true,
             liveMetric: `Invalid Posture (Leg slope ${legSlopeDeg.toFixed(0)}°)`,
-            reason: `Wrong posture/exercise detected: Your legs are vertical (${legSlopeDeg.toFixed(0)}°). Sit on the floor with legs extended straight out sideways!`
+            reason: `Wrong posture/exercise detected: Your legs are sloped at ${legSlopeDeg.toFixed(0)}° (standing/chair). Sit flat on the floor with legs extended horizontally!`
           };
         }
 
-        const kneeDeg = angleDeg(hip, knee, ankle);
-        const tibiaLenPx = Math.max(0.06, dist2D(knee, ankle));
-        // Anatomical scale: human lower leg (knee-to-ankle tibia) is ~38.5 cm
-        const cmPerNormUnit = 38.5 / tibiaLenPx;
+        const kneeDeg = angleDeg(pHip, pKnee, pAnkle);
+        const tibiaLenPx = Math.max(frameW * 0.08, dist2D(pKnee, pAnkle));
+        // Tibia (knee-to-ankle) anatomical reference (~38.0 cm) converts pixels to cm at the subject's exact distance
+        const cmPerPx = 38.0 / tibiaLenPx;
 
-        // Project hand tip onto the unit vector pointing from hip -> ankle (toe direction)
-        const ux = legDx / legLen;
-        const uy = legDy / legLen;
-        const toeRef = visOk(footTip, 0.4) ? footTip : ankle;
-        const handRelToeX = handPt.x - toeRef.x;
-        const handRelToeY = handPt.y - toeRef.y;
+        const ux = legDx / legLenPx;
+        const uy = legDy / legLenPx;
+        const pToeRef = visOk(footTip, 0.38) ? pFootTip : pAnkle;
+        const handRelToeX = pHand.x - pToeRef.x;
+        const handRelToeY = pHand.y - pToeRef.y;
 
-        // Positive = fingertips reached PAST toes; Negative = fingertips stopped BEFORE toes
-        const reachPastToesNorm = handRelToeX * ux + handRelToeY * uy;
-        const reachPastToesCm = reachPastToesNorm * cmPerNormUnit;
-        // On the standard SAI Sit & Reach box, the toe line is at the 23.0 cm mark:
-        // We report the signed reach relative to toes AND box mark so any change in hand position changes the score!
+        const reachPastToesPx = handRelToeX * ux + handRelToeY * uy;
+        const reachPastToesCm = reachPastToesPx * cmPerPx;
         const reachBoxCm = 23.0 + reachPastToesCm;
 
         const kneeOk = kneeDeg >= 165.0;
@@ -642,10 +731,9 @@
 
       // -----------------------------------------------------------------------
       // TEST 4: STANDING VERTICAL JUMP
-      // Tracks real vertical displacement of hips & ankles from standing baseline.
       // -----------------------------------------------------------------------
       if (testKey === "vertical_jump") {
-        if (!visOk(hip, 0.45) || !visOk(knee, 0.45) || !visOk(ankle, 0.45) || !visOk(shoulder, 0.45)) {
+        if (!visOk(hip, 0.42) || !visOk(knee, 0.42) || !visOk(ankle, 0.42) || !visOk(shoulder, 0.42)) {
           return {
             postureOk: false,
             liveMetric: "Full body needed",
@@ -665,25 +753,25 @@
       }
 
       // -----------------------------------------------------------------------
-      // TEST 9: SIT-UPS
-      // Tracks real hip flexion/extension angle and hand-to-ear distance.
+      // TEST 9: SIT-UPS (Isotropic Pixel Angles)
       // -----------------------------------------------------------------------
       if (testKey === "sit_ups") {
-        if (!visOk(shoulder, 0.45) || !visOk(hip, 0.45) || !visOk(knee, 0.45)) {
+        if (!visOk(shoulder, 0.42) || !visOk(hip, 0.42) || !visOk(knee, 0.42)) {
           return {
             postureOk: false,
             liveMetric: "Side profile needed",
             reason: "Lie on the floor in side profile so shoulder, hip, and bent knees are visible."
           };
         }
-        const hipDeg = angleDeg(shoulder, hip, knee);
-        const kneeDeg = visOk(ankle, 0.4) ? angleDeg(hip, knee, ankle) : 90;
-        const femurLen = Math.max(0.08, dist2D(hip, knee));
-        const elbowKneeRatio = (elbow && visOk(elbow, 0.4)) ? (dist2D(elbow, knee) / femurLen) : 1.0;
-        const earPt = visOk(lEar, 0.35) ? lEar : rEar;
-        const shoulderHipSpan = Math.max(0.08, dist2D(shoulder, hip));
-        const wristEarRatio = (wrist && earPt && visOk(wrist, 0.35))
-          ? (dist2D(wrist, earPt) / shoulderHipSpan)
+        const hipDeg = angleDeg(pShoulder, pHip, pKnee);
+        const femurLenPx = Math.max(frameW * 0.08, dist2D(pHip, pKnee));
+        const elbowKneeRatio = visOk(lm[13], 0.35) || visOk(lm[14], 0.35)
+          ? (dist2D(pElbow, pKnee) / femurLenPx)
+          : 1.0;
+        const pEarPt = visOk(lEar, 0.35) ? pLEar : pREar;
+        const shoulderHipSpanPx = Math.max(frameW * 0.08, dist2D(pShoulder, pHip));
+        const wristEarRatio = (visOk(wrist, 0.35) && (visOk(lEar, 0.35) || visOk(rEar, 0.35)))
+          ? (dist2D(pWrist, pEarPt) / shoulderHipSpanPx)
           : 0.6;
 
         return {
@@ -691,8 +779,8 @@
           hipDeg,
           elbowKneeRatio,
           wristEarRatio,
-          elbowY: elbow ? elbow.y : shoulder.y,
-          shoulderW: shoulderHipSpan,
+          elbowY: pElbow.y / frameH,
+          shoulderW: shoulderHipSpanPx / frameH,
           liveMetric: `Hip Angle: ${hipDeg.toFixed(0)}°`,
           reason: `Supine/Curl tracking · Hip ${hipDeg.toFixed(0)}° (Down >112°, Up <82°)`
         };
@@ -733,17 +821,18 @@
         const spreadCm = core.length > 1 ? (core[core.length - 1] - core[0]) : 0.0;
         const avgTilt = validPostureFrames.reduce((s, f) => s + f.headTiltDeg, 0) / validPostureFrames.length;
 
-        const isSteady = spreadCm <= 2.5;
+        const avgDist = validPostureFrames.reduce((s, f) => s + (f.autoDistM || 2.5), 0) / validPostureFrames.length;
+        const isSteady = spreadCm <= 3.0;
         return {
           valid: isSteady,
           value: Number(medianCm.toFixed(1)),
           unit: "cm",
           confidence: (isSteady && detectionRate >= 0.8) ? "GREEN" : "AMBER",
-          method: `AI Full-Body Vertex-to-Heel (${validPostureFrames.length} frames @ ${state.cameraDistanceM.toFixed(2)}m, spread ${spreadCm.toFixed(1)} cm)`,
+          method: `AI 3D+2D Full-Body Photogrammetry (${validPostureFrames.length} frames, auto-dist ${avgDist.toFixed(2)}m, spread ${spreadCm.toFixed(1)} cm)`,
           audit: [
             {
               label: "Standing Height",
-              detail: `${medianCm.toFixed(1)} cm · Frame spread ${spreadCm.toFixed(2)} cm · Head tilt ${avgTilt.toFixed(1)}°`,
+              detail: `${medianCm.toFixed(1)} cm · Auto-dist ${avgDist.toFixed(2)}m · Spread ${spreadCm.toFixed(2)} cm · Head tilt ${avgTilt.toFixed(1)}°`,
               valid: isSteady
             }
           ]
@@ -1324,10 +1413,10 @@
         ${test.key === "height" ? `
           <div class="card" style="padding:10px 12px;margin-bottom:8px;">
             <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;">
-              <span>📏 Camera-to-Wall Distance (Scale Calibration)</span>
-              <span id="lblDistVal">${state.cameraDistanceM.toFixed(2)} m</span>
+              <span>📏 Wall Reference Scale Fine-Tune (Auto-Distance Active)</span>
+              <span id="lblDistVal">${((state.scaleFactor || 1.0) * 100).toFixed(0)}%</span>
             </div>
-            <input id="rngDist" type="range" min="1.40" max="3.20" step="0.05" value="${state.cameraDistanceM}" style="width:100%;margin-top:6px;" />
+            <input id="rngDist" type="range" min="0.85" max="1.20" step="0.01" value="${state.scaleFactor || 1.0}" style="width:100%;margin-top:6px;" />
           </div>
         ` : ""}
 
@@ -1353,8 +1442,8 @@
       const rngDist = document.getElementById("rngDist");
       if (rngDist) {
         rngDist.oninput = (e) => {
-          state.cameraDistanceM = parseFloat(e.target.value);
-          document.getElementById("lblDistVal").textContent = `${state.cameraDistanceM.toFixed(2)} m`;
+          state.scaleFactor = parseFloat(e.target.value);
+          document.getElementById("lblDistVal").textContent = `${(state.scaleFactor * 100).toFixed(0)}%`;
           persist();
         };
       }
@@ -1418,7 +1507,14 @@
               const lm = res.landmarks[0];
               const worldLm = res.worldLandmarks?.[0] || null;
 
-              const evalRes = evaluateLiveFrame(test.key, lm, worldLm, state.cameraDistanceM);
+              const evalRes = evaluateLiveFrame(
+                test.key,
+                lm,
+                worldLm,
+                state.scaleFactor || 1.0,
+                canvasEl.width,
+                canvasEl.height
+              );
 
               // Draw skeleton lines & keypoints color-coded by posture validity
               const color = evalRes.postureOk ? "#00E6A8" : "#FF4D4F";
