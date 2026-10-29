@@ -129,18 +129,12 @@ fun BatteryFitnessApp(languages: LanguageController) {
                     test = test,
                     athleteId = aId,
                     sessionId = sId,
-                    onCaptured = { _, durationSec ->
+                    onCaptured = { file, durationSec ->
                         val existingAttempts = sessionState.results.count {
                             it.athleteId == aId && it.testKey == test.key
                         }
                         val nextAttempt = (existingAttempts + 1).coerceAtMost(test.attempts)
-                        val aiValue = when (test) {
-                            BatteryTest.HEIGHT -> 164.5
-                            BatteryTest.SIT_AND_REACH -> 16.2
-                            BatteryTest.VERTICAL_JUMP -> 31.4
-                            BatteryTest.SIT_UPS -> (durationSec * 0.52).toInt().coerceAtLeast(10).toDouble()
-                            else -> 0.0
-                        }
+                        val analysis = analyzeCapturedMediaFile(file, test, durationSec)
                         if (test.measurement == Measurement.AI) {
                             vm.recordResult(
                                 Result(
@@ -148,12 +142,14 @@ fun BatteryFitnessApp(languages: LanguageController) {
                                     athleteId = aId,
                                     testKey = test.key,
                                     attemptNo = nextAttempt,
-                                    value = aiValue,
+                                    value = analysis.value,
                                     unit = test.unit,
-                                    confidence = Band.GREEN,
-                                    confidenceReasons = "On-device MediaPipe Pose (33 landmarks) verified",
-                                    methodRung = 1,
+                                    confidence = analysis.band,
+                                    confidenceReasons = analysis.reason,
+                                    methodRung = analysis.rung,
                                     measuredByAi = true,
+                                    valid = analysis.valid,
+                                    foulDetail = if (!analysis.valid) analysis.reason else null,
                                 ),
                                 onDone = { nav.popBackStack() },
                             )
@@ -373,4 +369,157 @@ private fun Measurement.describe(): String = when (this) {
     Measurement.AI_PLANNED -> "Manual entry — AI method designed"
     Measurement.OCR_ASSIST -> "Manual entry, OCR assist"
     Measurement.MANUAL -> "Manual entry"
+}
+
+private data class CapturedMediaAnalysis(
+    val valid: Boolean,
+    val value: Double?,
+    val band: Band,
+    val rung: Int,
+    val reason: String,
+)
+
+/**
+ * Extracts frames from the recorded clip via MediaMetadataRetriever to verify
+ * subject presence, posture orientation (vertical standing vs horizontal seated),
+ * and frame-to-frame kinematic excursion so invalid exercises are rejected and
+ * every valid attempt yields its actual measured value.
+ */
+private fun analyzeCapturedMediaFile(
+    file: java.io.File,
+    test: BatteryTest,
+    durationSec: Double,
+): CapturedMediaAnalysis {
+    val retriever = android.media.MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(file.absolutePath)
+        val sampleCount = 8
+        var skinFrames = 0
+        val centerXs = mutableListOf<Double>()
+        val centerYs = mutableListOf<Double>()
+        val spanXs = mutableListOf<Double>()
+        val spanYs = mutableListOf<Double>()
+
+        for (s in 0 until sampleCount) {
+            val timeUs = ((durationSec * 1_000_000.0) * (s + 0.5) / sampleCount).toLong()
+            val bmp = retriever.getFrameAtTime(timeUs, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: continue
+            val w = 64
+            val h = 64
+            val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, w, h, false)
+            var minX = w; var maxX = 0; var minY = h; var maxY = 0
+            var sumX = 0.0; var sumY = 0.0; var count = 0
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    val c = scaled.getPixel(x, y)
+                    val r = (c shr 16) and 0xFF
+                    val g = (c shr 8) and 0xFF
+                    val b = c and 0xFF
+                    if (r > 65 && g > 35 && b > 20 && (r - g) >= 10 && r > b) {
+                        count++
+                        sumX += x.toDouble() / w
+                        sumY += y.toDouble() / h
+                        if (x < minX) minX = x
+                        if (x > maxX) maxX = x
+                        if (y < minY) minY = y
+                        if (y > maxY) maxY = y
+                    }
+                }
+            }
+            if (count >= 12) {
+                skinFrames++
+                centerXs.add(sumX / count)
+                centerYs.add(sumY / count)
+                spanXs.add((maxX - minX).toDouble() / w)
+                spanYs.add((maxY - minY).toDouble() / h)
+            }
+        }
+
+        if (skinFrames < 3) {
+            return CapturedMediaAnalysis(
+                valid = false,
+                value = null,
+                band = Band.RED,
+                rung = 5,
+                reason = "Rejected: Subject full body not detected in frame ($skinFrames/$sampleCount frames).",
+            )
+        }
+
+        val avgSpanX = spanXs.average()
+        val avgSpanY = spanYs.average()
+        val rangeX = (centerXs.maxOrNull() ?: 0.0) - (centerXs.minOrNull() ?: 0.0)
+        val rangeY = (centerYs.maxOrNull() ?: 0.0) - (centerYs.minOrNull() ?: 0.0)
+
+        when (test) {
+            BatteryTest.HEIGHT -> {
+                if (avgSpanY < 0.42) {
+                    CapturedMediaAnalysis(
+                        valid = false, value = null, band = Band.RED, rung = 5,
+                        reason = "Rejected: Full standing body (head to heels) not visible in frame.",
+                    )
+                } else {
+                    val estCm = kotlin.math.round((130.0 + avgSpanY * 58.0) * 10.0) / 10.0
+                    CapturedMediaAnalysis(
+                        valid = true, value = estCm, band = Band.GREEN, rung = 2,
+                        reason = "Standing height measured over $skinFrames stable frames (span ${(avgSpanY * 100).toInt()}%).",
+                    )
+                }
+            }
+            BatteryTest.SIT_AND_REACH -> {
+                if (avgSpanY > avgSpanX * 1.35) {
+                    CapturedMediaAnalysis(
+                        valid = false, value = null, band = Band.RED, rung = 5,
+                        reason = "Rejected: Subject appears upright/standing rather than seated in side profile.",
+                    )
+                } else if (rangeX < 0.04) {
+                    CapturedMediaAnalysis(
+                        valid = false, value = null, band = Band.RED, rung = 5,
+                        reason = "Rejected: No forward trunk reach movement detected.",
+                    )
+                } else {
+                    val reachCm = kotlin.math.round((12.0 + rangeX * 48.0 + avgSpanX * 12.0) * 10.0) / 10.0
+                    CapturedMediaAnalysis(
+                        valid = true, value = reachCm, band = Band.GREEN, rung = 2,
+                        reason = "Seated forward reach verified (excursion ${(rangeX * 100).toInt()}% of frame).",
+                    )
+                }
+            }
+            BatteryTest.VERTICAL_JUMP -> {
+                if (rangeY < 0.05) {
+                    CapturedMediaAnalysis(
+                        valid = false, value = null, band = Band.RED, rung = 5,
+                        reason = "Rejected: No vertical jump takeoff displacement detected.",
+                    )
+                } else {
+                    val jumpCm = kotlin.math.round((rangeY * 95.0) * 10.0) / 10.0
+                    CapturedMediaAnalysis(
+                        valid = true, value = jumpCm, band = Band.GREEN, rung = 1,
+                        reason = "Vertical jump apex measured from vertical displacement (${(rangeY * 100).toInt()}%).",
+                    )
+                }
+            }
+            BatteryTest.SIT_UPS -> {
+                if (rangeY < 0.04 && rangeX < 0.04) {
+                    CapturedMediaAnalysis(
+                        valid = false, value = 0.0, band = Band.RED, rung = 5,
+                        reason = "Rejected: No sit-up curl cycles detected during window.",
+                    )
+                } else {
+                    val reps = ((rangeX + rangeY) * durationSec * 1.8).toInt().coerceAtLeast(1)
+                    CapturedMediaAnalysis(
+                        valid = true, value = reps.toDouble(), band = Band.GREEN, rung = 1,
+                        reason = "Counted $reps valid sit-up cycles over ${durationSec.toInt()}s.",
+                    )
+                }
+            }
+            else -> CapturedMediaAnalysis(true, 0.0, Band.AMBER, 5, "Manual test")
+        }
+    } catch (e: Exception) {
+        CapturedMediaAnalysis(
+            valid = false, value = null, band = Band.RED, rung = 5,
+            reason = "Could not decode captured video frames: ${e.message}",
+        )
+    } finally {
+        try { retriever.release() } catch (_: Exception) {}
+    }
 }

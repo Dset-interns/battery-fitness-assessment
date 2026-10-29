@@ -61,13 +61,21 @@ def ensure_cert(lan_ip: str) -> bool:
     return res.returncode == 0
 
 
+class NoCacheRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self) -> None:
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
+
 def main() -> int:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8443
     os.chdir(HERE)
     lan_ip = get_lan_ip()
     has_tls = ensure_cert(lan_ip)
 
-    handler = http.server.SimpleHTTPRequestHandler
+    handler = NoCacheRequestHandler
     httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
 
     scheme = "http"

@@ -46,15 +46,16 @@
       align-items: center;
       justify-content: space-between;
       margin-bottom: 14px;
+      gap: 8px;
     }
     .topbar h1 {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 700;
       margin: 0;
       letter-spacing: -0.3px;
     }
     .topbar .sub {
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text-sub);
       margin-top: 2px;
     }
@@ -194,16 +195,16 @@
     }
     .btn.primary { background: var(--primary); color: #fff; }
     .btn.secondary { background: var(--card-muted); color: var(--text); border: 1px solid var(--border); }
+    .btn.danger { background: var(--red-bg); color: var(--red-fg); border: 1px solid #f5c2c7; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    /* Camera View */
     .cam-wrap {
       position: relative;
       width: 100%;
-      aspect-ratio: 9 / 14;
+      aspect-ratio: 9 / 13;
       background: #111;
       border-radius: 16px;
       overflow: hidden;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .cam-wrap video {
       width: 100%;
@@ -228,7 +229,7 @@
       gap: 6px;
     }
     .hud-pill {
-      background: rgba(0, 0, 0, 0.68);
+      background: rgba(0, 0, 0, 0.72);
       color: #fff;
       padding: 6px 10px;
       border-radius: 999px;
@@ -236,16 +237,36 @@
       font-weight: 600;
       backdrop-filter: blur(6px);
     }
+    .hud-live-metric {
+      position: absolute;
+      top: 46px;
+      left: 10px;
+      right: 10px;
+      background: rgba(15, 110, 86, 0.88);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      backdrop-filter: blur(6px);
+    }
+    .hud-live-metric.bad {
+      background: rgba(180, 35, 24, 0.88);
+    }
     .cam-hud-bottom {
       position: absolute;
-      bottom: 12px;
-      left: 12px;
-      right: 12px;
-      background: rgba(0, 0, 0, 0.72);
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.78);
       color: #fff;
       padding: 10px 12px;
       border-radius: 12px;
       font-size: 12px;
+      line-height: 1.35;
       backdrop-filter: blur(6px);
     }
     .audit-table {
@@ -265,19 +286,14 @@
   <div class="app-shell" id="app"></div>
 
   <script type="module">
-    // =========================================================================
-    // 10 SAI Battery Tests (Concept Note §6.3.1 & SAI Technical Handbook)
-    // Exactly 4 AI tests built (Height, Sit & Reach, Vertical Jump, Sit-Ups),
-    // 3 AI Planned (Broad Jump, 30m Sprint, Shuttle Run), 3 Manual (Weight, Medicine Ball, Endurance)
-    // =========================================================================
     const BATTERY_TESTS = [
       {
         number: 1, key: "height",
         nameEn: "Height", nameHi: "ऊँचाई (Height)",
-        minSec: 10, maxSec: 30, minMB: 2, maxMB: 15,
+        minSec: 5, maxSec: 30, minMB: 2, maxMB: 15,
         attempts: 1, unit: "cm", mode: "AI", isPhoto: false,
-        guideEn: "Stand barefoot against wall with heels, buttocks, shoulders & head touching. Look straight ahead (Frankfurt plane). Place reference scale/marker on wall.",
-        guideHi: "दीवार के सहारे नंगे पैर सीधे खड़े हों (एड़ी, पीठ और सिर दीवार से सटे हों)। सामने देखें।"
+        guideEn: "Stand barefoot against wall. Full body (top of head to heels) MUST be visible in frame. Adjust camera distance slider (or wall reference) for exact scale.",
+        guideHi: "दीवार के सहारे नंगे पैर सीधे खड़े हों। सिर से एड़ी तक पूरा शरीर फ्रेम में दिखना चाहिए।"
       },
       {
         number: 2, key: "weight",
@@ -290,18 +306,18 @@
       {
         number: 3, key: "sit_and_reach",
         nameEn: "Sit and Reach", nameHi: "सिट एंड रीच (Sit & Reach)",
-        minSec: 10, maxSec: 30, minMB: 2, maxMB: 15,
+        minSec: 5, maxSec: 30, minMB: 2, maxMB: 15,
         attempts: 3, unit: "cm", mode: "AI", isPhoto: false,
-        guideEn: "Camera perpendicular (side view). Sit with soles flat against box at 23 cm zero mark. Keep knees straight (≥168°) and hold furthest reach for ≥1s.",
-        guideHi: "कैमरा बगल में रखें। घुटने बिल्कुल सीधे (≥168°) रखते हुए आगे झुकें और 1 सेकंड तक रोकें।"
+        guideEn: "Side profile view. You MUST sit on the floor with legs extended horizontally (standing/other exercises are rejected). Keep knees straight (≥165°) and reach forward toward/past your toes.",
+        guideHi: "बगल से कैमरा रखें। जमीन पर बैठकर पैर सीधे फैलाएं (खड़े होने पर प्रयास अमान्य होगा)। घुटने सीधे (≥165°) रखते हुए पंजों की ओर आगे झुकें।"
       },
       {
         number: 4, key: "vertical_jump",
         nameEn: "Standing Vertical Jump", nameHi: "स्टैंडिंग वर्टिकल जंप",
-        minSec: 15, maxSec: 30, minMB: 3, maxMB: 15,
+        minSec: 5, maxSec: 30, minMB: 3, maxMB: 15,
         attempts: 3, unit: "cm", mode: "AI", isPhoto: false,
-        guideEn: "Full body in frame showing feet on ground. Jump vertically as high as possible and land on same spot (Flight-time physics h = g·t²/8).",
-        guideHi: "पूरा शरीर और पैर फ्रेम में रखें। अधिकतम ऊँचाई तक सीधा कूदें और उसी स्थान पर उतरें।"
+        guideEn: "Full body in frame showing feet on ground. Stand still for 1s, then jump vertically as high as possible and land in frame.",
+        guideHi: "पूरा शरीर और पैर फ्रेम में रखें। 1 सेकंड स्थिर खड़े रहें, फिर अधिकतम ऊँचाई तक सीधा कूदें।"
       },
       {
         number: 5, key: "broad_jump",
@@ -338,10 +354,10 @@
       {
         number: 9, key: "sit_ups",
         nameEn: "Sit-Ups", nameHi: "सिट-अप्स (Sit-Ups)",
-        minSec: 30, maxSec: 60, minMB: 5, maxMB: 30,
+        minSec: 10, maxSec: 60, minMB: 5, maxMB: 30,
         attempts: 1, unit: "reps", mode: "AI", isPhoto: false,
-        guideEn: "Side profile view. Lie on back, knees bent ~90°, fingers clasped behind neck (Rule 3a). Touch elbows to knees without elbow push-off (3b) and return elbows flat (3c).",
-        guideHi: "पीठ के बल लेटें, घुटने 90° मोड़ें, हाथ गर्दन के पीछे रखें (3a)। कोहनी घुटनों से छुएं और वापस जमीन पर लाएं (3c)।"
+        guideEn: "Side profile view. Lie on back, knees bent, hands behind neck (Rule 3a). Curl torso up until elbows touch knees and return flat (Rule 3c).",
+        guideHi: "पीठ के बल लेटें, घुटने मोड़ें, हाथ गर्दन के पीछे रखें (3a)। कोहनी घुटनों से छुएं और वापस जमीन पर लाएं (3c)।"
       },
       {
         number: 10, key: "endurance_run",
@@ -353,26 +369,23 @@
       }
     ];
 
-    // =========================================================================
-    // Persistent App State (Indexed in localStorage for offline resilience)
-    // =========================================================================
-    const saved = JSON.parse(localStorage.getItem("sai_ios_state_v1") || "null");
+    const saved = JSON.parse(localStorage.getItem("sai_ios_state_v2") || "null");
     const state = saved || {
       lang: "en",
-      route: "home", // home | athletes | setup | session | cell | capture | report
-      sequencing: "ATHLETE_WISE", // ATHLETE_WISE | TEST_WISE
+      route: "home",
+      sequencing: "ATHLETE_WISE",
+      cameraDistanceM: 2.1, // Standoff distance in metres for Rung 2/4 scale calibration
       athletes: [
-        { id: 1, name: "Aarav Sharma", age: 14, gender: "M", heightRefCm: 165 },
-        { id: 2, name: "Priya Patel", age: 11, gender: "F", heightRefCm: 146 }
+        { id: 1, name: "Riya Aggarwal", age: 20, gender: "F" },
+        { id: 2, name: "Aarav Sharma", age: 14, gender: "M" }
       ],
       selectedAthleteId: 1,
       selectedTestKey: "height",
-      // results keyed by `${athleteId}:${testKey}`
-      results: {}
+      results: {} // keyed by `${athleteId}:${testKey}`
     };
 
     function persist() {
-      localStorage.setItem("sai_ios_state_v1", JSON.stringify(state));
+      localStorage.setItem("sai_ios_state_v2", JSON.stringify(state));
     }
 
     function t(en, hi) {
@@ -387,15 +400,11 @@
       const cells = [];
       if (state.sequencing === "ATHLETE_WISE") {
         for (const a of state.athletes) {
-          for (const test of BATTERY_TESTS) {
-            cells.push({ athleteId: a.id, testKey: test.key });
-          }
+          for (const test of BATTERY_TESTS) cells.push({ athleteId: a.id, testKey: test.key });
         }
       } else {
         for (const test of BATTERY_TESTS) {
-          for (const a of state.athletes) {
-            cells.push({ athleteId: a.id, testKey: test.key });
-          }
+          for (const a of state.athletes) cells.push({ athleteId: a.id, testKey: test.key });
         }
       }
       return cells;
@@ -403,29 +412,31 @@
 
     function getProgress() {
       const cells = getTraversal();
-      const done = cells.filter(c => !!state.results[cellKey(c.athleteId, c.testKey)]).length;
+      const done = cells.filter(c => {
+        const r = state.results[cellKey(c.athleteId, c.testKey)];
+        return r && r.valid !== false && r.value !== null;
+      }).length;
       return { done, total: cells.length };
     }
 
     // =========================================================================
-    // Live Camera + On-Device Pose Engine (MediaPipe Pose / Geometric Signals)
+    // Geometry & Pose Helpers (33 MediaPipe Landmarks)
     // =========================================================================
     let mediaStream = null;
     let captureTimer = null;
     let captureElapsed = 0;
     let facingMode = "environment";
-    let poseSignals = [];
     let poseLandmarker = null;
     let animFrameId = null;
-    let liveOverlayStats = { fps: 30, detectedFrames: 0, totalFrames: 0, liveReadout: "" };
+    let lastMpTimestampMs = 0;
 
     async function ensureMediaPipeLoaded() {
       if (poseLandmarker) return poseLandmarker;
+      const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
+      const fileset = await vision.FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+      );
       try {
-        const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
-        const fileset = await vision.FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-        );
         poseLandmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
           baseOptions: {
             modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
@@ -434,10 +445,22 @@
           runningMode: "VIDEO",
           numPoses: 1
         });
-      } catch (err) {
-        console.warn("MediaPipe CDN fallback (offline mode active):", err);
+      } catch (gpuErr) {
+        console.warn("GPU delegate fallback to CPU on iOS:", gpuErr);
+        poseLandmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+            delegate: "CPU"
+          },
+          runningMode: "VIDEO",
+          numPoses: 1
+        });
       }
       return poseLandmarker;
+    }
+
+    function dist2D(a, b) {
+      return Math.hypot(a.x - b.x, a.y - b.y);
     }
 
     function angleDeg(a, b, c) {
@@ -447,6 +470,18 @@
       if (n1 < 1e-6 || n2 < 1e-6) return 180;
       const cos = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (n1 * n2)));
       return Math.acos(cos) * 180 / Math.PI;
+    }
+
+    function visOk(pt, minVis = 0.45) {
+      return pt && (pt.visibility === undefined || pt.visibility >= minVis) &&
+             pt.x >= 0.01 && pt.x <= 0.99 && pt.y >= 0.01 && pt.y <= 0.99;
+    }
+
+    function pickBetterSide(lm, leftIdx, rightIdx) {
+      const l = lm[leftIdx], r = lm[rightIdx];
+      const lv = l ? (l.visibility ?? 0) : 0;
+      const rv = r ? (r.visibility ?? 0) : 0;
+      return lv >= rv ? l : r;
     }
 
     function stopCamera() {
@@ -459,61 +494,386 @@
     }
 
     // =========================================================================
-    // Pure Signal Analyzers (Mirroring Python lab/ & Swift BatteryFitnessCore)
+    // Real Per-Frame Pose Extractor (NO hardcoded fallback scores!)
     // =========================================================================
-    function analyzeSignalsForTest(test, athlete, signals, durationSec, fps, detectionRate) {
-      const band = detectionRate >= 0.80 ? "GREEN" : (detectionRate >= 0.50 ? "AMBER" : "RED");
+    function evaluateLiveFrame(testKey, lm, worldLm, cameraDistanceM) {
+      const nose = lm[0];
+      const lEye = lm[2], rEye = lm[5];
+      const lEar = lm[7], rEar = lm[8];
+      const shoulder = pickBetterSide(lm, 11, 12);
+      const elbow = pickBetterSide(lm, 13, 14);
+      const wrist = pickBetterSide(lm, 15, 16);
+      const indexTip = pickBetterSide(lm, 19, 20);
+      const hip = pickBetterSide(lm, 23, 24);
+      const knee = pickBetterSide(lm, 25, 26);
+      const ankle = pickBetterSide(lm, 27, 28);
+      const heel = pickBetterSide(lm, 29, 30);
+      const footTip = pickBetterSide(lm, 31, 32);
+
+      // -----------------------------------------------------------------------
+      // TEST 1: STANDING HEIGHT
+      // Requires full upright body from head vertex to heels/ankles in frame.
+      // -----------------------------------------------------------------------
+      if (testKey === "height") {
+        const headVis = visOk(nose, 0.5) && visOk(shoulder, 0.5);
+        const feetVis = visOk(ankle, 0.45) || visOk(heel, 0.45);
+        const bodyVis = visOk(hip, 0.45) && visOk(knee, 0.45);
+
+        if (!headVis || !feetVis || !bodyVis) {
+          return {
+            postureOk: false,
+            liveMetric: "Full body not visible",
+            reason: "Step back so both your HEAD and FEET/HEELS are clearly inside the camera frame."
+          };
+        }
+
+        const kneeDeg = angleDeg(hip, knee, ankle);
+        const hipDeg = angleDeg(shoulder, hip, knee);
+        const dyBody = (heel && visOk(heel, 0.4) ? heel.y : ankle.y) - nose.y;
+        const dxTorso = Math.abs(shoulder.x - ankle.x);
+
+        if (dyBody < 0.32 || dxTorso > dyBody * 0.35) {
+          return {
+            postureOk: false,
+            liveMetric: "Not standing upright",
+            reason: "You must stand upright facing the camera (full vertical posture required)."
+          };
+        }
+        if (kneeDeg < 155 || hipDeg < 150) {
+          return {
+            postureOk: false,
+            liveMetric: `Knees/Hips bent (${kneeDeg.toFixed(0)}°)`,
+            reason: `Stand completely straight — knee angle is ${kneeDeg.toFixed(0)}° (must be ≥160°).`
+          };
+        }
+
+        // Extrapolate skull vertex above nose using head geometry (nose-to-shoulder span)
+        const headNeckSpan = Math.max(0.04, shoulder.y - nose.y);
+        const crownY = Math.max(0.0, nose.y - 0.58 * headNeckSpan);
+        const soleY = Math.min(1.0, (heel && visOk(heel, 0.4) ? Math.max(heel.y, ankle.y) : ankle.y) + 0.12 * headNeckSpan);
+        const fullPixelFraction = soleY - crownY;
+
+        // Vertical field of view scaling at cameraDistanceM (typical iPhone 26mm wide lens vertical FOV ~ 61.5 deg -> 2*tan(30.75°) = 1.19)
+        const frameHeightCmAtPlane = cameraDistanceM * 100.0 * 1.14;
+        const heightCm = fullPixelFraction * frameHeightCmAtPlane;
+
+        // Frankfurt plane head tilt check
+        const ear = visOk(lEar, 0.4) ? lEar : rEar;
+        const eye = visOk(lEye, 0.4) ? lEye : rEye;
+        let headTiltDeg = 2.0;
+        if (ear && eye) {
+          headTiltDeg = Math.abs(Math.atan2(eye.y - ear.y, Math.max(0.02, Math.abs(eye.x - ear.x))) * 180 / Math.PI);
+        }
+
+        return {
+          postureOk: true,
+          heightCm,
+          headTiltDeg,
+          pixelSpan: fullPixelFraction,
+          liveMetric: `${heightCm.toFixed(1)} cm`,
+          reason: `Standing upright · Span ${(fullPixelFraction * 100).toFixed(1)}% of frame · Tilt ${headTiltDeg.toFixed(1)}°`
+        };
+      }
+
+      // -----------------------------------------------------------------------
+      // TEST 3: SIT AND REACH
+      // Requires SEATED posture on floor with legs extended horizontally.
+      // Standing, walking, or non-seated exercises are REJECTED!
+      // -----------------------------------------------------------------------
+      if (testKey === "sit_and_reach") {
+        const hasLegs = visOk(hip, 0.45) && visOk(knee, 0.45) && visOk(ankle, 0.45);
+        const handPt = visOk(indexTip, 0.4) ? indexTip : (visOk(wrist, 0.4) ? wrist : null);
+
+        if (!hasLegs || !handPt || !visOk(shoulder, 0.45)) {
+          return {
+            postureOk: false,
+            liveMetric: "Side profile required",
+            reason: "Place camera to your SIDE so shoulder, hip, knee, ankle, and hands are all visible."
+          };
+        }
+
+        // Check that legs (hip -> ankle) are extended HORIZONTALLY on the floor, NOT standing vertically!
+        const legDx = ankle.x - hip.x;
+        const legDy = ankle.y - hip.y;
+        const legLen = Math.hypot(legDx, legDy);
+        const legSlopeDeg = Math.abs(Math.atan2(legDy, Math.abs(legDx)) * 180 / Math.PI);
+
+        if (legLen < 0.14 || legSlopeDeg > 38) {
+          return {
+            postureOk: false,
+            isWrongExercise: true,
+            liveMetric: `Invalid Posture (Leg slope ${legSlopeDeg.toFixed(0)}°)`,
+            reason: `Wrong posture/exercise detected: Your legs are vertical (${legSlopeDeg.toFixed(0)}°). Sit on the floor with legs extended straight out sideways!`
+          };
+        }
+
+        const kneeDeg = angleDeg(hip, knee, ankle);
+        const tibiaLenPx = Math.max(0.06, dist2D(knee, ankle));
+        // Anatomical scale: human lower leg (knee-to-ankle tibia) is ~38.5 cm
+        const cmPerNormUnit = 38.5 / tibiaLenPx;
+
+        // Project hand tip onto the unit vector pointing from hip -> ankle (toe direction)
+        const ux = legDx / legLen;
+        const uy = legDy / legLen;
+        const toeRef = visOk(footTip, 0.4) ? footTip : ankle;
+        const handRelToeX = handPt.x - toeRef.x;
+        const handRelToeY = handPt.y - toeRef.y;
+
+        // Positive = fingertips reached PAST toes; Negative = fingertips stopped BEFORE toes
+        const reachPastToesNorm = handRelToeX * ux + handRelToeY * uy;
+        const reachPastToesCm = reachPastToesNorm * cmPerNormUnit;
+        // On the standard SAI Sit & Reach box, the toe line is at the 23.0 cm mark:
+        // We report the signed reach relative to toes AND box mark so any change in hand position changes the score!
+        const reachBoxCm = 23.0 + reachPastToesCm;
+
+        const kneeOk = kneeDeg >= 165.0;
+        return {
+          postureOk: true,
+          kneeOk,
+          kneeDeg,
+          reachCm: reachBoxCm,
+          reachPastToesCm,
+          liveMetric: `${reachBoxCm.toFixed(1)} cm (${reachPastToesCm >= 0 ? "+" : ""}${reachPastToesCm.toFixed(1)} cm vs toes)`,
+          reason: kneeOk
+            ? `Seated Pose OK · Knee ${kneeDeg.toFixed(0)}° (Straight) · Reach ${reachBoxCm.toFixed(1)} cm`
+            : `FOUL WARNING: Knee bent at ${kneeDeg.toFixed(0)}° (Must be ≥165°)`
+        };
+      }
+
+      // -----------------------------------------------------------------------
+      // TEST 4: STANDING VERTICAL JUMP
+      // Tracks real vertical displacement of hips & ankles from standing baseline.
+      // -----------------------------------------------------------------------
+      if (testKey === "vertical_jump") {
+        if (!visOk(hip, 0.45) || !visOk(knee, 0.45) || !visOk(ankle, 0.45) || !visOk(shoulder, 0.45)) {
+          return {
+            postureOk: false,
+            liveMetric: "Full body needed",
+            reason: "Step back so shoulders, hips, knees, and ankles on the floor are visible."
+          };
+        }
+        const torsoLegSpan = Math.max(0.15, ankle.y - shoulder.y);
+        return {
+          postureOk: true,
+          hipY: hip.y,
+          ankleY: ankle.y,
+          shoulderY: shoulder.y,
+          torsoLegSpan,
+          liveMetric: `Ankle Y: ${(ankle.y * 100).toFixed(0)}%`,
+          reason: "Stand still 1s to lock ground baseline, then jump vertically!"
+        };
+      }
+
+      // -----------------------------------------------------------------------
+      // TEST 9: SIT-UPS
+      // Tracks real hip flexion/extension angle and hand-to-ear distance.
+      // -----------------------------------------------------------------------
+      if (testKey === "sit_ups") {
+        if (!visOk(shoulder, 0.45) || !visOk(hip, 0.45) || !visOk(knee, 0.45)) {
+          return {
+            postureOk: false,
+            liveMetric: "Side profile needed",
+            reason: "Lie on the floor in side profile so shoulder, hip, and bent knees are visible."
+          };
+        }
+        const hipDeg = angleDeg(shoulder, hip, knee);
+        const kneeDeg = visOk(ankle, 0.4) ? angleDeg(hip, knee, ankle) : 90;
+        const femurLen = Math.max(0.08, dist2D(hip, knee));
+        const elbowKneeRatio = (elbow && visOk(elbow, 0.4)) ? (dist2D(elbow, knee) / femurLen) : 1.0;
+        const earPt = visOk(lEar, 0.35) ? lEar : rEar;
+        const shoulderHipSpan = Math.max(0.08, dist2D(shoulder, hip));
+        const wristEarRatio = (wrist && earPt && visOk(wrist, 0.35))
+          ? (dist2D(wrist, earPt) / shoulderHipSpan)
+          : 0.6;
+
+        return {
+          postureOk: true,
+          hipDeg,
+          elbowKneeRatio,
+          wristEarRatio,
+          elbowY: elbow ? elbow.y : shoulder.y,
+          shoulderW: shoulderHipSpan,
+          liveMetric: `Hip Angle: ${hipDeg.toFixed(0)}°`,
+          reason: `Supine/Curl tracking · Hip ${hipDeg.toFixed(0)}° (Down >112°, Up <82°)`
+        };
+      }
+
+      return { postureOk: true, liveMetric: "Ready", reason: "" };
+    }
+
+    // =========================================================================
+    // Compute Final Score Strictly from Recorded Signals (Rejects Invalid!)
+    // =========================================================================
+    function computeAttemptResult(test, athlete, recordedFrames, fps) {
+      const totalFrames = recordedFrames.length;
+      const validPostureFrames = recordedFrames.filter(f => f.postureOk);
+      const detectionRate = totalFrames > 0 ? (validPostureFrames.length / totalFrames) : 0;
+
+      // Reject immediately if user did not perform the valid posture / exercise
+      if (validPostureFrames.length < 8) {
+        const wrongEx = recordedFrames.find(f => f.isWrongExercise);
+        const failReason = wrongEx
+          ? wrongEx.reason
+          : (recordedFrames[recordedFrames.length - 1]?.reason || "Required body landmarks and exercise posture were not detected in camera view.");
+        return {
+          valid: false,
+          value: null,
+          unit: test.unit,
+          confidence: "RED",
+          method: "REJECTED — Posture / Landmark Gate Failed",
+          audit: [{ label: "Gate Rejection", detail: failReason, valid: false }]
+        };
+      }
 
       if (test.key === "height") {
-        const heights = signals.map(s => s.heightCm).filter(Boolean).sort((a, b) => a - b);
-        const med = heights.length ? heights[Math.floor(heights.length / 2)] : (athlete.heightRefCm || 164.5);
-        const spread = heights.length > 2 ? (heights[heights.length - 1] - heights[0]) : 0.6;
+        const heights = validPostureFrames.map(f => f.heightCm).sort((a, b) => a - b);
+        const trim = Math.max(1, Math.floor(heights.length * 0.15));
+        const core = heights.slice(trim, heights.length - trim || heights.length);
+        const medianCm = core[Math.floor(core.length / 2)];
+        const spreadCm = core.length > 1 ? (core[core.length - 1] - core[0]) : 0.0;
+        const avgTilt = validPostureFrames.reduce((s, f) => s + f.headTiltDeg, 0) / validPostureFrames.length;
+
+        const isSteady = spreadCm <= 2.5;
         return {
-          value: Number(med.toFixed(1)),
+          valid: isSteady,
+          value: Number(medianCm.toFixed(1)),
           unit: "cm",
-          confidence: spread <= 1.5 ? band : "AMBER",
-          method: `AI Pose + Wall Scale (Rung 1, spread ${spread.toFixed(2)} cm)`,
+          confidence: (isSteady && detectionRate >= 0.8) ? "GREEN" : "AMBER",
+          method: `AI Full-Body Vertex-to-Heel (${validPostureFrames.length} frames @ ${state.cameraDistanceM.toFixed(2)}m, spread ${spreadCm.toFixed(1)} cm)`,
           audit: [
-            { label: "Attempt 1", detail: `${med.toFixed(1)} cm • Head tilt 1.9° (Frankfurt Plane PASS)`, valid: true }
+            {
+              label: "Standing Height",
+              detail: `${medianCm.toFixed(1)} cm · Frame spread ${spreadCm.toFixed(2)} cm · Head tilt ${avgTilt.toFixed(1)}°`,
+              valid: isSteady
+            }
           ]
         };
       }
 
       if (test.key === "sit_and_reach") {
-        // Evaluate held reach and knee straightness >= 168 deg
-        const reaches = signals.map(s => s.reachCm).filter(x => typeof x === "number");
-        const minKnee = signals.reduce((acc, s) => Math.min(acc, s.kneeDeg || 175), 180);
-        const peakReach = reaches.length ? Math.max(...reaches) : 16.4;
-        const kneeOk = minKnee >= 168;
+        // Must have held forward reach with straight knees (>= 165 deg)
+        const straightFrames = validPostureFrames.filter(f => f.kneeOk);
+        const bentFrames = validPostureFrames.filter(f => !f.kneeOk);
+
+        if (straightFrames.length < 5) {
+          const minKnee = Math.min(...validPostureFrames.map(f => f.kneeDeg));
+          return {
+            valid: false,
+            value: null,
+            unit: "cm",
+            confidence: "RED",
+            method: `FOUL — Knees bent (${minKnee.toFixed(0)}° < 165° Handbook rule)`,
+            audit: [
+              {
+                label: "Foul (Knee Flexion)",
+                detail: `Attempt nullified: Knees bent to ${minKnee.toFixed(0)}° during reach (must stay ≥165°).`,
+                valid: false
+              }
+            ]
+          };
+        }
+
+        // Take 85th percentile held reach across straight-knee frames
+        const sortedReaches = straightFrames.map(f => f.reachCm).sort((a, b) => a - b);
+        const heldReachCm = sortedReaches[Math.floor(sortedReaches.length * 0.85)];
+        const minReachCm = sortedReaches[0];
+        const forwardTravelCm = heldReachCm - minReachCm;
+
+        if (forwardTravelCm < 2.0) {
+          return {
+            valid: false,
+            value: null,
+            unit: "cm",
+            confidence: "RED",
+            method: "No forward reach movement detected (< 2.0 cm trunk flexion)",
+            audit: [
+              {
+                label: "No Reach Movement",
+                detail: `Hands moved only ${forwardTravelCm.toFixed(1)} cm forward. Reach forward toward/past your toes and hold.`,
+                valid: false
+              }
+            ]
+          };
+        }
+
+        const pastToes = heldReachCm - 23.0;
+        const minKnee = Math.min(...straightFrames.map(f => f.kneeDeg));
         return {
-          value: Number(peakReach.toFixed(1)),
+          valid: true,
+          value: Number(heldReachCm.toFixed(1)),
           unit: "cm",
-          confidence: kneeOk ? band : "AMBER",
-          method: `AI Pose + Knee Gate (min knee ${minKnee.toFixed(0)}°, hold ≥0.8s)`,
+          confidence: bentFrames.length === 0 ? "GREEN" : "AMBER",
+          method: `AI Side-Profile Reach (${pastToes >= 0 ? "+" : ""}${pastToes.toFixed(1)} cm vs toes on 23cm box, min knee ${minKnee.toFixed(0)}°)`,
           audit: [
             {
-              label: "Attempt",
-              detail: `${peakReach.toFixed(1)} cm • Knee angle ${minKnee.toFixed(0)}° ${kneeOk ? "(≥168° PASS)" : "(<168° Knee Flex Warning)"}`,
-              valid: kneeOk
+              label: "Peak Held Reach",
+              detail: `${heldReachCm.toFixed(1)} cm (${pastToes >= 0 ? "+" : ""}${pastToes.toFixed(1)} cm vs toes) · Forward excursion ${forwardTravelCm.toFixed(1)} cm · Knee ${minKnee.toFixed(0)}° PASS`,
+              valid: true
             }
           ]
         };
       }
 
       if (test.key === "vertical_jump") {
-        // Flight-time physics h = g * t^2 / 8
-        const flights = signals.map(s => s.flightSec).filter(x => x && x >= 0.18 && x <= 0.85);
-        const bestFlight = flights.length ? Math.max(...flights) : 0.49;
-        const heightCm = 0.125 * 9.80665 * bestFlight * bestFlight * 100;
+        // Compute baseline standing ankleY & hipY (bottom 75th percentile, since y grows downward)
+        const ankles = validPostureFrames.map(f => f.ankleY).sort((a, b) => a - b);
+        const hips = validPostureFrames.map(f => f.hipY).sort((a, b) => a - b);
+        const spans = validPostureFrames.map(f => f.torsoLegSpan).sort((a, b) => a - b);
+        const baseAnkleY = ankles[Math.floor(ankles.length * 0.78)];
+        const baseHipY = hips[Math.floor(hips.length * 0.78)];
+        const medSpan = spans[Math.floor(spans.length / 2)] || 0.5;
+
+        // Peak upward displacement (minimum y)
+        const minAnkleY = Math.min(...ankles);
+        const minHipY = Math.min(...hips);
+        const ankleLiftNorm = baseAnkleY - minAnkleY;
+        const hipLiftNorm = baseHipY - minHipY;
+
+        // Require actual jump off ground (ankle & hip both rise significantly)
+        if (ankleLiftNorm < 0.035 || hipLiftNorm < 0.045) {
+          return {
+            valid: false,
+            value: null,
+            unit: "cm",
+            confidence: "RED",
+            method: "No vertical jump takeoff detected",
+            audit: [
+              {
+                label: "No Jump Detected",
+                detail: `Vertical lift was only ${(ankleLiftNorm * 100).toFixed(1)}% of frame. Jump vertically off the ground with both feet.`,
+                valid: false
+              }
+            ]
+          };
+        }
+
+        // Measure airborne time AND direct kinematic displacement scaled by torso-leg span (~130 cm)
+        const liftThresholdY = baseAnkleY - 0.03 * medSpan;
+        let maxAirFrames = 0, curAir = 0;
+        for (const f of validPostureFrames) {
+          if (f.ankleY < liftThresholdY) {
+            curAir++;
+            if (curAir > maxAirFrames) maxAirFrames = curAir;
+          } else {
+            curAir = 0;
+          }
+        }
+        const effFps = Math.max(24, fps);
+        const flightSec = Math.min(0.80, maxAirFrames / effFps);
+        const flightHeightCm = 0.125 * 9.80665 * flightSec * flightSec * 100.0;
+        const dispHeightCm = (hipLiftNorm / medSpan) * 130.0;
+        const jumpCm = flightSec >= 0.20 ? (0.6 * dispHeightCm + 0.4 * flightHeightCm) : dispHeightCm;
+
         return {
-          value: Number(heightCm.toFixed(1)),
+          valid: true,
+          value: Number(jumpCm.toFixed(1)),
           unit: "cm",
-          confidence: fps >= 55 ? band : "AMBER",
-          method: `AI Flight Time (t = ${(bestFlight * 1000).toFixed(0)} ms → h = g·t²/8)`,
+          confidence: detectionRate >= 0.8 ? "GREEN" : "AMBER",
+          method: `AI Jump Kinematics (Hip lift ${(hipLiftNorm * 100).toFixed(1)}%, airtime ${(flightSec * 1000).toFixed(0)} ms)`,
           audit: [
             {
-              label: "Peak Jump",
-              detail: `${heightCm.toFixed(1)} cm (Flight ${(bestFlight * 1000).toFixed(0)} ms at ${Math.round(fps)} fps)`,
+              label: "Jump Height",
+              detail: `${jumpCm.toFixed(1)} cm · Peak hip lift ${(hipLiftNorm * 100).toFixed(1)}% · Airborne ${(flightSec * 1000).toFixed(0)} ms`,
               valid: true
             }
           ]
@@ -521,41 +881,61 @@
       }
 
       if (test.key === "sit_ups") {
-        const winSec = athlete.age < 12 ? 30 : 45;
-        const reps = signals.filter(s => s.repEvent);
-        if (reps.length === 0) {
-          // Synthesize realistic rep audit from captured hip-angle oscillations
-          const estReps = Math.max(8, Math.round(durationSec * 0.52));
-          const audit = [];
-          let validCount = 0;
-          for (let i = 1; i <= estReps; i++) {
-            const isFoul = (i === estReps && estReps > 5);
-            if (!isFoul) validCount++;
-            audit.push({
-              label: `Rep #${i}`,
-              detail: isFoul ? "Rejected — Rule 3c (Elbows did not return flat)" : "Valid — Rules 2, 3a, 3b, 3c PASS",
-              valid: !isFoul
-            });
+        // Real state machine on hipDeg: DOWN (> 110°) -> UP (< 85°) -> DOWN (> 110°)
+        let repState = "DOWN";
+        const audit = [];
+        let validReps = 0;
+        let repNum = 0;
+        let maxWristEar = 0;
+
+        for (const f of validPostureFrames) {
+          if (repState === "DOWN") {
+            if (f.hipDeg < 88) {
+              repState = "UP";
+              maxWristEar = f.wristEarRatio;
+            }
+          } else if (repState === "UP") {
+            maxWristEar = Math.max(maxWristEar, f.wristEarRatio);
+            if (f.hipDeg > 108) {
+              repNum++;
+              const handsOk = maxWristEar <= 1.25;
+              if (handsOk) validReps++;
+              audit.push({
+                label: `Rep #${repNum}`,
+                detail: handsOk
+                  ? `Valid rep — Hip curled <88° & returned >108° (Rules 3a/3c PASS)`
+                  : `Foul Rule 3a — Hands unclasped from behind neck`,
+                valid: handsOk
+              });
+              repState = "DOWN";
+            }
           }
+        }
+
+        if (repNum === 0) {
           return {
-            value: validCount,
+            valid: false,
+            value: 0,
             unit: "reps",
-            confidence: band,
-            method: `AI State Machine (${winSec}s Handbook window, ${validCount}/${estReps} valid)`,
-            audit
+            confidence: "RED",
+            method: "0 sit-up cycles detected in recording",
+            audit: [
+              {
+                label: "No Reps Counted",
+                detail: "Hip angle did not complete a supine (>108°) → curl (<88°) → supine (>108°) sit-up cycle.",
+                valid: false
+              }
+            ]
           };
         }
-        const validCount = reps.filter(r => r.valid).length;
+
         return {
-          value: validCount,
+          valid: true,
+          value: validReps,
           unit: "reps",
-          confidence: band,
-          method: `AI State Machine (${winSec}s Handbook window, ${validCount}/${reps.length} valid)`,
-          audit: reps.map((r, idx) => ({
-            label: `Rep #${idx + 1}`,
-            detail: r.detail,
-            valid: r.valid
-          }))
+          confidence: detectionRate >= 0.8 ? "GREEN" : "AMBER",
+          method: `AI State Machine (${validReps}/${repNum} valid reps counted)`,
+          audit
         };
       }
 
@@ -568,21 +948,13 @@
     function render() {
       persist();
       const root = document.getElementById("app");
-      if (state.route === "home") {
-        renderHome(root);
-      } else if (state.route === "athletes") {
-        renderAthletes(root);
-      } else if (state.route === "setup") {
-        renderSessionSetup(root);
-      } else if (state.route === "session") {
-        renderSession(root);
-      } else if (state.route === "cell") {
-        renderCell(root);
-      } else if (state.route === "capture") {
-        renderCapture(root);
-      } else if (state.route === "report") {
-        renderReport(root);
-      }
+      if (state.route === "home") renderHome(root);
+      else if (state.route === "athletes") renderAthletes(root);
+      else if (state.route === "setup") renderSessionSetup(root);
+      else if (state.route === "session") renderSession(root);
+      else if (state.route === "cell") renderCell(root);
+      else if (state.route === "capture") renderCapture(root);
+      else if (state.route === "report") renderReport(root);
     }
 
     function renderHome(root) {
@@ -639,22 +1011,10 @@
         </div>
       `;
 
-      document.getElementById("toggleLang").onclick = () => {
-        state.lang = state.lang === "en" ? "hi" : "en";
-        render();
-      };
-      document.getElementById("btnNewSession").onclick = () => {
-        state.route = "setup";
-        render();
-      };
-      document.getElementById("cardAthletes").onclick = () => {
-        state.route = "athletes";
-        render();
-      };
-      document.getElementById("cardAssessments").onclick = () => {
-        state.route = "session";
-        render();
-      };
+      document.getElementById("toggleLang").onclick = () => { state.lang = state.lang === "en" ? "hi" : "en"; render(); };
+      document.getElementById("btnNewSession").onclick = () => { state.route = "setup"; render(); };
+      document.getElementById("cardAthletes").onclick = () => { state.route = "athletes"; render(); };
+      document.getElementById("cardAssessments").onclick = () => { state.route = "session"; render(); };
       root.querySelectorAll(".test-row").forEach(el => {
         el.onclick = () => {
           state.selectedTestKey = el.dataset.test;
@@ -676,18 +1036,18 @@
           <div style="font-weight:700;margin-bottom:10px;">${t("Register Athlete", "नया एथलीट जोड़ें")}</div>
           <div class="input-row">
             <label>${t("Full Name", "पूरा नाम")}</label>
-            <input id="inpName" placeholder="e.g. Rohan Verma" />
+            <input id="inpName" placeholder="e.g. Riya Aggarwal" />
           </div>
           <div class="grid-2" style="margin-bottom:0;">
             <div class="input-row">
-              <label>${t("Age (6–18 yrs)", "आयु (6–18 वर्ष)")}</label>
-              <input id="inpAge" type="number" value="14" min="6" max="25" />
+              <label>${t("Age (yrs)", "आयु (वर्ष)")}</label>
+              <input id="inpAge" type="number" value="20" min="6" max="40" />
             </div>
             <div class="input-row">
               <label>${t("Gender", "लिंग")}</label>
               <select id="inpGender">
-                <option value="M">${t("Male", "पुरुष")}</option>
                 <option value="F">${t("Female", "महिला")}</option>
+                <option value="M">${t("Male", "पुरुष")}</option>
               </select>
             </div>
           </div>
@@ -699,7 +1059,7 @@
           <div class="test-row" data-aid="${a.id}">
             <div>
               <div class="t-name">${a.name}</div>
-              <div class="t-meta">${t("Age", "आयु")}: ${a.age} · ${a.gender === "M" ? t("Boys", "बालक") : t("Girls", "बालिका")} · Sit-Ups: ${a.age < 12 ? "30s" : "45s"} · Run: ${a.age < 12 ? "800m" : "1.6km"}</div>
+              <div class="t-meta">${t("Age", "आयु")}: ${a.age} · ${a.gender}</div>
             </div>
             <span class="badge ai">${t("Select", "चुनें")} →</span>
           </div>
@@ -709,11 +1069,11 @@
       document.getElementById("btnBack").onclick = () => { state.route = "home"; render(); };
       document.getElementById("btnAddAthlete").onclick = () => {
         const name = document.getElementById("inpName").value.trim();
-        const age = parseInt(document.getElementById("inpAge").value, 10) || 14;
+        const age = parseInt(document.getElementById("inpAge").value, 10) || 18;
         const gender = document.getElementById("inpGender").value;
         if (!name) return;
         const id = Date.now();
-        state.athletes.push({ id, name, age, gender, heightRefCm: 160 });
+        state.athletes.push({ id, name, age, gender });
         state.selectedAthleteId = id;
         render();
       };
@@ -744,11 +1104,6 @@
             <button id="seqTest" class="${state.sequencing === "TEST_WISE" ? "active" : ""}">
               ${t("Test-wise (Station)", "टेस्ट-वार (स्टेशन)")}
             </button>
-          </div>
-          <div style="font-size:12px;color:var(--text-sub);">
-            ${state.sequencing === "ATHLETE_WISE"
-              ? t("Athlete A completes all 10 tests, then Athlete B.", "एथलीट A सभी 10 परीक्षण पूरा करता है, फिर एथलीट B।")
-              : t("All athletes complete Test 1 at the station, then move to Test 2.", "सभी एथलीट पहले टेस्ट 1 पूरा करते हैं, फिर टेस्ट 2 पर जाते हैं।")}
           </div>
         </div>
 
@@ -794,6 +1149,7 @@
         ${BATTERY_TESTS.map(test => {
           const res = state.results[cellKey(currentAthlete.id, test.key)];
           const badgeClass = test.mode === "AI" ? "ai" : (test.mode === "Planned" ? "planned" : "manual");
+          const attemptsDone = res?.attemptsHistory?.length || 0;
           return `
             <div class="test-row" data-test="${test.key}">
               <div class="left">
@@ -801,8 +1157,10 @@
                 <div>
                   <div class="t-name">${state.lang === "hi" ? test.nameHi : test.nameEn}</div>
                   <div class="t-meta">
-                    ${res
-                      ? `<strong style="color:var(--primary);">${res.value} ${res.unit}</strong> · <span class="badge ${res.confidence.toLowerCase()}" style="padding:1px 6px;">${res.confidence}</span>`
+                    ${res && res.valid && res.value !== null
+                      ? `<strong style="color:var(--primary);">${res.value} ${res.unit}</strong> · <span class="badge ${res.confidence.toLowerCase()}" style="padding:1px 6px;">${res.confidence}</span> (${attemptsDone}/${test.attempts} att)`
+                      : res && !res.valid
+                      ? `<strong style="color:var(--red-fg);">REJECTED / FOUL</strong> · (${attemptsDone}/${test.attempts} att)`
                       : `${t("Pending", "लंबित")} · ${test.attempts} ${t("attempt(s)", "प्रयास")}`}
                   </div>
                 </div>
@@ -835,14 +1193,7 @@
       const test = BATTERY_TESTS.find(x => x.key === state.selectedTestKey) || BATTERY_TESTS[0];
       const key = cellKey(athlete.id, test.key);
       const existing = state.results[key];
-
-      const ageRuleNote = test.key === "sit_ups"
-        ? `${t("Handbook Age Window", "आयु समयावधि")}: ${athlete.age < 12 ? "30 s (<12 yrs)" : "45 s (12+ yrs)"}`
-        : test.key === "endurance_run"
-        ? `${t("Handbook Distance", "दूरी")}: ${athlete.age < 12 ? "800 m (<12 yrs)" : "1.6 km (12+ yrs)"}`
-        : test.key === "medicine_ball_throw"
-        ? `${t("Medicine Ball Weight", "मेडिसिन बॉल वज़न")}: ${(athlete.gender === "M" && athlete.age > 12) ? "2 kg" : "1 kg"}`
-        : "";
+      const history = existing?.attemptsHistory || [];
 
       root.innerHTML = `
         <div class="topbar">
@@ -856,53 +1207,54 @@
 
         <div class="card" style="background:var(--card-muted);">
           <div style="font-size:13px;font-weight:700;">
-            ${existing
-              ? `${t("Completed", "पूर्ण")} · ${existing.value} ${existing.unit}`
+            ${existing && existing.valid && existing.value !== null
+              ? `${t("Best Valid Score", "सर्वश्रेष्ठ वैध स्कोर")}: ${existing.value} ${existing.unit} (${history.length}/${test.attempts} attempts recorded)`
+              : existing && !existing.valid
+              ? `${t("Last Attempt Rejected / Foul", "अंतिम प्रयास अमान्य / फाउल")} (${history.length}/${test.attempts} attempts)`
               : `${t("Attempt 1 · pending", "प्रयास 1 · लंबित")}`}
           </div>
           <div style="font-size:12px;color:var(--text-sub);margin-top:4px;">
             ${test.attempts} ${t("attempt(s) permitted by the Handbook", "प्रयास हैंडबुक द्वारा अनुमत")}
-            ${!test.isPhoto ? ` · ${t("Capture Gate", "कैप्चर गेट")}: ${test.minSec}–${test.maxSec} s, ≥720p, ≥30fps` : ""}
           </div>
-          ${ageRuleNote ? `<div style="font-size:12px;font-weight:600;color:var(--primary);margin-top:4px;">${ageRuleNote}</div>` : ""}
         </div>
 
         <div class="card">
-          <div style="font-size:13px;font-weight:700;margin-bottom:6px;">${t("SAI Protocol & Setup Guidance", "SAI प्रोटोकॉल और दिशा-निर्देश")}</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:6px;">${t("SAI Protocol & Posture Gate", "SAI प्रोटोकॉल और पोस्चर गेट")}</div>
           <div style="font-size:13px;color:var(--text-sub);line-height:1.45;">
             ${state.lang === "hi" ? test.guideHi : test.guideEn}
           </div>
         </div>
 
-        ${existing ? `
+        ${history.length > 0 ? `
           <div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div>
-                <div style="font-size:12px;color:var(--text-sub);">${t("Recorded Measurement", "दर्ज किया गया माप")}</div>
-                <div style="font-size:26px;font-weight:800;color:var(--primary);">${existing.value} ${existing.unit}</div>
-              </div>
-              <span class="badge ${existing.confidence.toLowerCase()}">${existing.confidence}</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <div style="font-size:13px;font-weight:700;">${t("Attempt History & AI Audit", "प्रयास इतिहास और AI ऑडिट")}</div>
+              <button class="lang-btn" id="btnClearAttempts" style="font-size:11px;padding:3px 8px;color:var(--red-fg);">Reset Attempts</button>
             </div>
-            <div style="font-size:12px;color:var(--text-sub);margin-top:4px;">${existing.method}</div>
-            ${existing.audit && existing.audit.length ? `
-              <table class="audit-table">
-                <thead><tr><th>${t("Item", "क्रम")}</th><th>${t("Rule / Audit Detail", "नियम / विवरण")}</th></tr></thead>
-                <tbody>
-                  ${existing.audit.map(a => `
-                    <tr>
-                      <td><strong>${a.label}</strong></td>
-                      <td style="color:${a.valid ? "var(--green-fg)" : "var(--red-fg)"};">${a.detail}</td>
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
-            ` : ""}
+            <table class="audit-table">
+              <thead><tr><th>Attempt</th><th>Result</th><th>Posture / Rule Audit</th></tr></thead>
+              <tbody>
+                ${history.map((att, idx) => `
+                  <tr>
+                    <td><strong>#${idx + 1}</strong></td>
+                    <td>
+                      <span class="badge ${att.valid ? "green" : "red"}">
+                        ${att.valid && att.value !== null ? `${att.value} ${att.unit}` : "REJECTED"}
+                      </span>
+                    </td>
+                    <td style="color:${att.valid ? "var(--text)" : "var(--red-fg)"};">
+                      ${att.audit?.[0]?.detail || att.method}
+                    </td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
           </div>
         ` : ""}
 
         ${test.mode === "AI" ? `
           <button class="btn primary" id="btnOpenCamera">
-            📷 ${t("Record Attempt with iPhone AI Camera", "iPhone AI कैमरे से प्रयास रिकॉर्ड करें")}
+            📷 ${t(`Record Attempt #${history.length + 1} with Live Pose AI`, `प्रयास #${history.length + 1} AI कैमरे से रिकॉर्ड करें`)}
           </button>
         ` : ""}
 
@@ -914,30 +1266,38 @@
           </div>
           <div class="input-row">
             <label>${t("Value", "मान")} (${test.unit})</label>
-            <input id="inpManualVal" type="number" step="0.1" placeholder="Enter ${test.unit}" value="${existing ? existing.value : ""}" />
+            <input id="inpManualVal" type="number" step="0.1" placeholder="Enter ${test.unit}" value="${existing?.value ?? ""}" />
           </div>
-          <button class="btn secondary" id="btnSaveManual">${t("Save Score", "स्कोर सहेजें")} (${test.unit})</button>
+          <button class="btn secondary" id="btnSaveManual">${t("Save Manual Score", "मैनुअल स्कोर सहेजें")} (${test.unit})</button>
         </div>
       `;
 
       document.getElementById("btnBack").onclick = () => { state.route = "session"; render(); };
-      const camBtn = document.getElementById("btnOpenCamera");
-      if (camBtn) {
-        camBtn.onclick = () => {
-          state.route = "capture";
+      const clearBtn = document.getElementById("btnClearAttempts");
+      if (clearBtn) {
+        clearBtn.onclick = () => {
+          delete state.results[key];
           render();
         };
+      }
+      const camBtn = document.getElementById("btnOpenCamera");
+      if (camBtn) {
+        camBtn.onclick = () => { state.route = "capture"; render(); };
       }
       document.getElementById("btnSaveManual").onclick = () => {
         const val = parseFloat(document.getElementById("inpManualVal").value);
         if (isNaN(val)) return;
-        state.results[key] = {
+        const entry = {
+          valid: true,
           value: val,
           unit: test.unit,
           confidence: test.mode === "Manual" ? "GREEN" : "AMBER",
           method: test.mode === "Manual" ? "Assessor Protocol Entry" : "Rung 5 Manual Override",
-          audit: [{ label: "Attempt 1", detail: `Recorded ${val} ${test.unit} manually`, valid: true }]
+          audit: [{ label: "Manual", detail: `Assessor entered ${val} ${test.unit}`, valid: true }]
         };
+        const prevHist = state.results[key]?.attemptsHistory || [];
+        entry.attemptsHistory = [...prevHist, entry];
+        state.results[key] = entry;
         state.route = "session";
         render();
       };
@@ -947,45 +1307,71 @@
       const athlete = state.athletes.find(a => a.id === state.selectedAthleteId) || state.athletes[0];
       const test = BATTERY_TESTS.find(x => x.key === state.selectedTestKey) || BATTERY_TESTS[0];
       captureElapsed = 0;
-      poseSignals = [];
-      liveOverlayStats = { fps: 30, detectedFrames: 0, totalFrames: 0, liveReadout: "Initializing Pose AI..." };
+      const recordedFrames = [];
+      let fps = 30;
+      let isRecording = false;
 
       root.innerHTML = `
         <div class="topbar">
           <button class="back-btn" id="btnCancelCam">✕ ${t("Cancel", "रद्द करें")}</button>
           <div>
             <h1>${state.lang === "hi" ? test.nameHi : test.nameEn}</h1>
-            <div class="sub">${t("Gate", "गेट")}: ${test.minSec}–${test.maxSec}s · ≥720p · ≥30fps</div>
+            <div class="sub">${t("Real-Time Pose Gate", "लाइव पोस्चर गेट")}</div>
           </div>
           <button class="lang-btn" id="btnFlipCam">🔄 ${t("Flip", "कैमरा बदलें")}</button>
         </div>
+
+        ${test.key === "height" ? `
+          <div class="card" style="padding:10px 12px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;">
+              <span>📏 Camera-to-Wall Distance (Scale Calibration)</span>
+              <span id="lblDistVal">${state.cameraDistanceM.toFixed(2)} m</span>
+            </div>
+            <input id="rngDist" type="range" min="1.40" max="3.20" step="0.05" value="${state.cameraDistanceM}" style="width:100%;margin-top:6px;" />
+          </div>
+        ` : ""}
 
         <div class="cam-wrap">
           <video id="camVideo" playsinline muted autoplay></video>
           <canvas id="camCanvas"></canvas>
           <div class="cam-hud-top">
             <span class="hud-pill" id="hudTimer">00:00 / min ${test.minSec}s</span>
-            <span class="hud-pill" id="hudFps">720p+ · 30 fps</span>
+            <span class="hud-pill" id="hudFps">Loading Pose AI...</span>
+          </div>
+          <div class="hud-live-metric bad" id="hudMetric">
+            <span id="hudMetricTitle">Waiting for Pose...</span>
+            <span id="hudMetricVal">—</span>
           </div>
           <div class="cam-hud-bottom" id="hudLive">
-            ${t("Align full body in frame and tap Start Recording.", "पूरे शरीर को फ्रेम में रखें और रिकॉर्डिंग शुरू करें।")}
+            Initializing MediaPipe Pose Landmarker (33 keypoints)...
           </div>
         </div>
 
-        <button class="btn primary" id="btnRecToggle">● ${t("Start Recording", "रिकॉर्डिंग शुरू करें")}</button>
-        <button class="btn secondary" id="btnQuickVerify" style="margin-top:8px;">
-          ⚡ ${t("Complete AI Analysis Now (Demo Fast-Track)", "AI विश्लेषण अभी पूर्ण करें (डेमो फास्ट-ट्रैक)")}
-        </button>
+        <button class="btn primary" id="btnRecToggle">● ${t("Start Recording Attempt", "प्रयास रिकॉर्डिंग शुरू करें")}</button>
       `;
+
+      const rngDist = document.getElementById("rngDist");
+      if (rngDist) {
+        rngDist.oninput = (e) => {
+          state.cameraDistanceM = parseFloat(e.target.value);
+          document.getElementById("lblDistVal").textContent = `${state.cameraDistanceM.toFixed(2)} m`;
+          persist();
+        };
+      }
 
       const videoEl = document.getElementById("camVideo");
       const canvasEl = document.getElementById("camCanvas");
       const ctx = canvasEl.getContext("2d");
       const hudTimer = document.getElementById("hudTimer");
+      const hudFps = document.getElementById("hudFps");
+      const hudMetric = document.getElementById("hudMetric");
+      const hudMetricTitle = document.getElementById("hudMetricTitle");
+      const hudMetricVal = document.getElementById("hudMetricVal");
       const hudLive = document.getElementById("hudLive");
       const btnRec = document.getElementById("btnRecToggle");
-      let isRecording = false;
+
       let lastFrameTime = performance.now();
+      let lastVideoTime = -1;
 
       async function startStream() {
         stopCamera();
@@ -997,9 +1383,16 @@
           videoEl.srcObject = mediaStream;
           await videoEl.play();
         } catch (err) {
-          hudLive.textContent = "Camera notice: Use HTTPS Wi-Fi link on iPhone Safari for live camera, or tap Fast-Track below.";
+          hudLive.textContent = "Camera blocked by iOS: Make sure you opened the https:// link in Safari and accepted the certificate.";
+          return;
         }
-        await ensureMediaPipeLoaded();
+        try {
+          await ensureMediaPipeLoaded();
+          hudFps.textContent = "Pose AI Ready";
+        } catch (err) {
+          hudLive.textContent = "Error loading MediaPipe Pose model — check internet connection on first load.";
+          return;
+        }
         loopPose();
       }
 
@@ -1008,71 +1401,91 @@
         const dt = (now - lastFrameTime) / 1000;
         lastFrameTime = now;
         if (dt > 0 && dt < 1) {
-          liveOverlayStats.fps = 0.9 * liveOverlayStats.fps + 0.1 * (1 / dt);
+          fps = 0.9 * fps + 0.1 * (1 / dt);
         }
 
-        if (videoEl.readyState >= 2) {
+        if (videoEl.readyState >= 2 && poseLandmarker && videoEl.currentTime !== lastVideoTime) {
+          lastVideoTime = videoEl.currentTime;
           canvasEl.width = videoEl.videoWidth || 720;
           canvasEl.height = videoEl.videoHeight || 1280;
           ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-          liveOverlayStats.totalFrames++;
 
-          if (poseLandmarker) {
-            try {
-              const res = poseLandmarker.detectForVideo(videoEl, now);
-              if (res.landmarks && res.landmarks.length > 0) {
-                const lm = res.landmarks[0];
-                liveOverlayStats.detectedFrames++;
+          try {
+            const tsMs = Math.max(lastMpTimestampMs + 1, Math.round(now));
+            lastMpTimestampMs = tsMs;
+            const res = poseLandmarker.detectForVideo(videoEl, tsMs);
+            if (res.landmarks && res.landmarks.length > 0) {
+              const lm = res.landmarks[0];
+              const worldLm = res.worldLandmarks?.[0] || null;
 
-                // Draw skeleton landmarks on iPhone screen
-                ctx.fillStyle = "#00E6A8";
-                ctx.strokeStyle = "#0F6E56";
-                ctx.lineWidth = 3;
-                for (const pt of lm) {
+              const evalRes = evaluateLiveFrame(test.key, lm, worldLm, state.cameraDistanceM);
+
+              // Draw skeleton lines & keypoints color-coded by posture validity
+              const color = evalRes.postureOk ? "#00E6A8" : "#FF4D4F";
+              ctx.strokeStyle = color;
+              ctx.fillStyle = color;
+              ctx.lineWidth = 3;
+
+              const pairs = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[27,29],[27,31],[24,26],[26,28],[28,30],[28,32]];
+              for (const [i, j] of pairs) {
+                if (visOk(lm[i], 0.35) && visOk(lm[j], 0.35)) {
+                  ctx.beginPath();
+                  ctx.moveTo(lm[i].x * canvasEl.width, lm[i].y * canvasEl.height);
+                  ctx.lineTo(lm[j].x * canvasEl.width, lm[j].y * canvasEl.height);
+                  ctx.stroke();
+                }
+              }
+              for (const pt of lm) {
+                if (visOk(pt, 0.35)) {
                   ctx.beginPath();
                   ctx.arc(pt.x * canvasEl.width, pt.y * canvasEl.height, 5, 0, Math.PI * 2);
                   ctx.fill();
                 }
-
-                // Extract per-test signal
-                const nose = lm[0], lHip = lm[23], lKnee = lm[25], lAnkle = lm[27];
-                const lShoulder = lm[11], lElbow = lm[13], lWrist = lm[15], lEar = lm[7];
-                if (nose && lAnkle && lHip && lKnee) {
-                  const bodySpanNorm = Math.abs(lAnkle.y - nose.y);
-                  const estHeightCm = (athlete.heightRefCm || 164.0) * Math.min(1.05, Math.max(0.95, bodySpanNorm / 0.72));
-                  const kneeDeg = angleDeg(lHip, lKnee, lAnkle);
-                  const hipDeg = lShoulder ? angleDeg(lShoulder, lHip, lKnee) : 130;
-                  const reachCm = lWrist ? ((lWrist.x - lAnkle.x) * 85 + 14) : 14.5;
-
-                  if (isRecording) {
-                    poseSignals.push({
-                      t: captureElapsed,
-                      heightCm: estHeightCm,
-                      kneeDeg,
-                      hipDeg,
-                      reachCm: Math.max(-10, Math.min(35, reachCm)),
-                      ankleY: lAnkle.y
-                    });
-                  }
-                  hudLive.textContent = `Pose Locked (33 pts) · Knee ${kneeDeg.toFixed(0)}° · Hip ${hipDeg.toFixed(0)}°`;
-                }
-              } else {
-                hudLive.textContent = t("No subject detected — step into camera view", "कोई व्यक्ति नहीं दिखा — कैमरे के सामने आएं");
               }
-            } catch (_) {}
-          }
+
+              hudFps.textContent = `${Math.round(fps)} fps · ${evalRes.postureOk ? "POSE VALID" : "GATE BLOCKED"}`;
+              hudMetric.className = `hud-live-metric ${evalRes.postureOk ? "" : "bad"}`;
+              hudMetricTitle.textContent = evalRes.postureOk ? "LIVE AI READOUT:" : "POSTURE CHECK:";
+              hudMetricVal.textContent = evalRes.liveMetric;
+              hudLive.textContent = evalRes.reason;
+
+              if (isRecording) {
+                recordedFrames.push({ ...evalRes, t: captureElapsed });
+              }
+            } else {
+              hudMetric.className = "hud-live-metric bad";
+              hudMetricTitle.textContent = "NO PERSON:";
+              hudMetricVal.textContent = "Step into frame";
+              hudLive.textContent = "No human pose detected in camera view.";
+              if (isRecording) {
+                recordedFrames.push({ postureOk: false, reason: "No person detected in camera frame." });
+              }
+            }
+          } catch (e) {}
         }
         animFrameId = requestAnimationFrame(loopPose);
       }
 
-      function finishAndRecord(durationUsed) {
+      function finishRecording() {
         stopCamera();
-        const detRate = liveOverlayStats.totalFrames > 0
-          ? Math.max(0.88, liveOverlayStats.detectedFrames / liveOverlayStats.totalFrames)
-          : 0.94;
-        const result = analyzeSignalsForTest(test, athlete, poseSignals, durationUsed, liveOverlayStats.fps, detRate);
-        if (result) {
-          state.results[cellKey(athlete.id, test.key)] = result;
+        const key = cellKey(athlete.id, test.key);
+        const prevHistory = state.results[key]?.attemptsHistory || [];
+        const attemptOut = computeAttemptResult(test, athlete, recordedFrames, fps);
+        const newHistory = [...prevHistory, attemptOut];
+
+        // Best valid score across attempts (or latest rejected state if no valid attempt yet)
+        const validAttempts = newHistory.filter(a => a.valid && a.value !== null);
+        if (validAttempts.length > 0) {
+          const best = validAttempts.reduce((bestSoFar, cur) => (cur.value > bestSoFar.value ? cur : bestSoFar), validAttempts[0]);
+          state.results[key] = {
+            ...best,
+            attemptsHistory: newHistory
+          };
+        } else {
+          state.results[key] = {
+            ...attemptOut,
+            attemptsHistory: newHistory
+          };
         }
         state.route = "cell";
         render();
@@ -1087,32 +1500,31 @@
         facingMode = facingMode === "environment" ? "user" : "environment";
         startStream();
       };
-      document.getElementById("btnQuickVerify").onclick = () => {
-        finishAndRecord(test.minSec);
-      };
 
       btnRec.onclick = () => {
         if (!isRecording) {
           isRecording = true;
           captureElapsed = 0;
+          recordedFrames.length = 0;
           btnRec.disabled = true;
-          btnRec.textContent = `${t("Recording... wait", "रिकॉर्डिंग जारी...")} (${test.minSec}s min)`;
+          btnRec.textContent = `Recording... (${test.minSec}s min)`;
           captureTimer = setInterval(() => {
             captureElapsed++;
-            hudTimer.textContent = `${captureElapsed}s / ${test.minSec}–${test.maxSec}s`;
+            const validCount = recordedFrames.filter(f => f.postureOk).length;
+            hudTimer.textContent = `${captureElapsed}s / ${test.minSec}–${test.maxSec}s (${validCount} valid frames)`;
             if (captureElapsed >= test.minSec) {
               btnRec.disabled = false;
-              btnRec.textContent = `■ ${t("Stop & Analyze", "रोकें और AI विश्लेषण करें")} (${captureElapsed}s)`;
+              btnRec.textContent = `■ Stop & Compute Score (${captureElapsed}s)`;
             } else {
-              btnRec.textContent = `${t("Keep recording", "रिकॉर्डिंग जारी रखें")} (${test.minSec - captureElapsed}s left)`;
+              btnRec.textContent = `Keep recording (${test.minSec - captureElapsed}s left)`;
             }
             if (captureElapsed >= test.maxSec) {
-              finishAndRecord(captureElapsed);
+              finishRecording();
             }
           }, 1000);
         } else {
           if (captureElapsed < test.minSec) return;
-          finishAndRecord(captureElapsed);
+          finishRecording();
         }
       };
 
@@ -1131,13 +1543,6 @@
           <span></span>
         </div>
 
-        <div class="card">
-          <div style="font-weight:700;font-size:15px;">AthleteIQ™ — Sports Authority of India</div>
-          <div style="font-size:12px;color:var(--text-sub);margin-top:2px;">
-            ${t("Sequencing", "क्रम")}: ${state.sequencing} · ${t("On-Device Offline Assessment", "ऑन-डिवाइस ऑफ़लाइन मूल्यांकन")}
-          </div>
-        </div>
-
         ${BATTERY_TESTS.map(test => {
           const r = state.results[cellKey(athlete.id, test.key)];
           return `
@@ -1150,8 +1555,10 @@
                 </div>
               </div>
               <div>
-                ${r
+                ${r && r.valid && r.value !== null
                   ? `<span class="badge ${r.confidence.toLowerCase()}">${r.value} ${r.unit}</span>`
+                  : r && !r.valid
+                  ? `<span class="badge red">REJECTED</span>`
                   : `<span class="badge manual">—</span>`}
               </div>
             </div>
