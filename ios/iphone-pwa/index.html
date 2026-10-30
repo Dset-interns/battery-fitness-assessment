@@ -829,7 +829,23 @@
           { isWrongExercise: true });
       }
 
-      const kneeDeg = angleDeg(hip, kn, an);
+      const kneeDegPrimary = angleDeg(hip, kn, an);
+      // Also check the opposite knee if clearly visible so bending either knee is caught
+      const oHip = s.hip === 23 ? 24 : 23, oKn = s.kn === 25 ? 26 : 25, oAn = s.an === 27 ? 28 : 27;
+      const kneeDegOther = (vis(lm, oHip, 0.50) && vis(lm, oKn, 0.50) && vis(lm, oAn, 0.50))
+        ? angleDeg(p(oHip), p(oKn), p(oAn))
+        : 180;
+      const kneeDeg = Math.min(kneeDegPrimary, kneeDegOther);
+
+      // Detect if the knee is lifted UP off the hip->ankle floor line ("knees up"):
+      // On a flat floor, the knee Y must stay on/near the line connecting hip.y and an.y,
+      // and the thigh (hip->kn) must not slope upward toward the chest.
+      const floorYAtKnee = 0.5 * (hip.y + an.y);
+      const kneeLiftRatio = (floorYAtKnee - kn.y) / legLen;
+      const otherKneeLiftRatio = (vis(lm, oKn, 0.50)) ? ((floorYAtKnee - p(oKn).y) / legLen) : 0;
+      const maxKneeLiftRatio = Math.max(kneeLiftRatio, otherKneeLiftRatio);
+      const thighUpFoul = kn.y < (hip.y - 0.04 * legLen);
+
       const trunkDeg = angleDeg(sh, hip, kn);
       const u = { x: (an.x - hip.x) / legLen, y: (an.y - hip.y) / legLen };
       const handLm = vis(lm, s.idx, 0.38) ? p(s.idx) : wr;
@@ -849,26 +865,30 @@
       // Projection of fingertips from hip along the leg axis (0.0 = hip, ~0.52 = knee, 1.0 = ankle)
       const handLegRatio = ((tipPt.x - hip.x) * u.x + (tipPt.y - hip.y) * u.y) / legLen;
 
-      // Scale selection: Rung 1/2 (tapped ruler) -> Rung 3 (athlete's measured height / tibia segment length)
+      // Scale selection: Rung 1/2 (tapped ruler) -> Rung 3 (athlete's measured height / full leg & tibia length)
       let cmPerPx = calib?.cmPerPx || null;
       let scaleMode = calib ? "Rung 1/2 Ruler" : "Rung 3 Segment Scale";
       if (!cmPerPx) {
         const refHeightCm = getAthleteRefHeightCm(athlete);
         const tibiaCm = refHeightCm * 0.242;
-        const tibiaPx = Math.max(W * 0.07, dist2D(kn, an));
+        const tibiaPx = Math.max(legLen * 0.46, dist2D(kn, an));
         cmPerPx = tibiaCm / tibiaPx;
       }
 
       const reachCm = reachPx * cmPerPx;
       const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
       const scoreCm = boxOffset + reachCm;
-      const kneeOk = kneeDeg >= 160;
+      // Knees are flat & straight ONLY if angle >= 165°, knee is not lifted above floor line, thigh doesn't point up, and trunk-thigh angle >= 22°
+      const kneeUp = maxKneeLiftRatio > 0.058 || thighUpFoul || trunkDeg < 22;
+      const kneeOk = kneeDeg >= 165 && !kneeUp;
       const isReaching = handLegRatio >= 0.68 && trunkDeg <= 78 && reachCm >= -18.0;
 
       return {
         postureOk: true,
         kneeOk,
+        kneeUp,
         kneeDeg,
+        maxKneeLiftRatio,
         trunkDeg,
         handLegRatio,
         isReaching,
@@ -882,11 +902,13 @@
         toeX: ft.x,
         toeY: ft.y,
         tipSource: tip ? "mask" : "landmark",
-        liveMetric: isReaching
-          ? `${scoreCm.toFixed(1)} cm (${reachCm >= 0 ? "+" : ""}${reachCm.toFixed(1)} cm ${t("vs toes", "पंजों से")})`
-          : t("Seated — bend forward & reach toward toes", "बैठे हैं — आगे झुकें और पंजों की ओर हाथ बढ़ाएँ"),
+        liveMetric: !kneeOk
+          ? `${t("FOUL: Knees up/bent", "फाउल: घुटने उठे/मुड़े")} (${kneeDeg.toFixed(0)}°)`
+          : (isReaching
+              ? `${scoreCm.toFixed(1)} cm (${reachCm >= 0 ? "+" : ""}${reachCm.toFixed(1)} cm ${t("vs toes", "पंजों से")})`
+              : t("Seated — bend forward & reach toward toes", "बैठे हैं — आगे झुकें और पंजों की ओर हाथ बढ़ाएँ")),
         reason: !kneeOk
-          ? `${t("FOUL: knee bent", "फाउल: घुटना मुड़ा")} ${kneeDeg.toFixed(0)}° (≥160°)`
+          ? `${t("FOUL: Keep knees flat on floor", "फाउल: घुटने ज़मीन पर सीधे रखें")} (${kneeDeg.toFixed(0)}° < 165°)`
           : (isReaching
               ? `${scaleMode} · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° ✓ · ${t("Reach", "पहुँच")} ${scoreCm.toFixed(1)} cm`
               : `${t("Trunk", "धड़")} ${trunkDeg.toFixed(0)}° — ${t("Lean forward and slide hands past knees toward toes", "आगे झुकें और हाथों को घुटनों से आगे पंजों की ओर ले जाएँ")}`)
@@ -1010,27 +1032,24 @@
 
       // ---------------- TEST 3: SIT AND REACH ----------------
       if (test.key === "sit_and_reach") {
-        const straight = ok.filter(f => f.kneeOk);
-        if (straight.length < 5) {
-          const minKnee = Math.min(...ok.map(f => f.kneeDeg));
-          return rejected(test, `FOUL — knees bent (${minKnee.toFixed(0)}° < 160°)`,
-            t("Attempt nullified: Knees bent during reach (must stay ≥160°).", "फाउल: पहुँचते समय घुटने मुड़ गए (≥160° आवश्यक)।"));
+        // IMPORTANT: Do NOT filter out bent-knee frames first!
+        // Previously, `ok.filter(f => f.kneeOk)` discarded all frames where the knees were up/bent
+        // and passed the attempt if even 5 transition frames had straight knees!
+        const rAll = medianFilter(ok.map(f => f.reachCm), 5);
+        const kneeSm = medianFilter(ok.map(f => f.kneeDeg), 3);
+        const trunkSm = medianFilter(ok.map(f => f.trunkDeg ?? 65), 3);
+        const startReach = Math.max(-35.0, pct(rAll, 0.12));
+        const peakReachAll = pct(rAll, 0.88);
+        const excursion = Math.min(45.0, Math.max(0.0, peakReachAll - startReach));
+
+        const reachingIndices = [];
+        for (let i = 0; i < ok.length; i++) {
+          if ((ok[i].handLegRatio ?? 0.85) >= 0.68 && rAll[i] >= -18.0 && trunkSm[i] <= 78) {
+            reachingIndices.push(i);
+          }
         }
 
-        const rAll = medianFilter(straight.map(f => f.reachCm), 5);
-        const startReach = pct(rAll, 0.12);
-        const peakReach = pct(rAll, 0.88);
-        const excursion = peakReach - startReach;
-
-        const trunks = straight.map(f => f.trunkDeg ?? 65);
-        const minTrunkDeg = Math.min(...trunks);
-        const maxHandLegRatio = Math.max(...straight.map(f => f.handLegRatio ?? 0.85));
-        const reachingFrames = straight.filter(f => f.isReaching !== false && f.reachCm >= -18.0);
-
-        // Reject when the athlete is just sitting upright / sitting still with hands on knees/lap:
-        // SAI Handbook III requires active forward trunk flexion (trunk angle ≤78°), hands extended past knees
-        // onto the lower shin/foot scale (handLegRatio ≥0.68, reachCm ≥-18 cm vs toes), and forward reach motion (≥5.0 cm).
-        if (reachingFrames.length < 5 || minTrunkDeg > 78 || maxHandLegRatio < 0.68 || peakReach < -18.0) {
+        if (reachingIndices.length < 5 || peakReachAll < -18.0) {
           return rejected(test, t("REJECTED — no forward reach attempt", "अस्वीकृत — आगे झुकने का प्रयास नहीं किया गया"),
             t("Sitting upright without reaching: Bend your torso forward (≤78°) and slide both hands past your knees toward your toes.", "बिना झुके बैठे हैं: कमर से आगे झुकें और दोनों हाथों को घुटनों से आगे पंजों की ओर बढ़ाएँ।"));
         }
@@ -1040,10 +1059,30 @@
             t("No forward reach movement detected. Start seated, slide your hands forward along the scale, and hold your maximum reach for 1–2s.", "आगे झुकने की गति नहीं मिली। बैठकर हाथों को आगे पंजों की ओर बढ़ाएँ और 1–2 सेकंड रोकें।"));
         }
 
-        const r = medianFilter(reachingFrames.map(f => f.reachCm), 3);
+        // Audit knee straightness and flatness across ALL reaching frames and especially the peak reach window:
+        // If knees bend (<165°) or lift up off the floor (kneeUp / trunk <22°) during the reach, NULLIFY the attempt!
+        const peakIndices = reachingIndices.filter(i => rAll[i] >= peakReachAll - 5.0);
+        const auditIndices = peakIndices.length >= 3 ? peakIndices : reachingIndices;
+        const minKneeDuringReach = Math.min(...reachingIndices.map(i => kneeSm[i]));
+        const minKneeAtPeak = Math.min(...auditIndices.map(i => kneeSm[i]));
+        const minTrunkAtPeak = Math.min(...auditIndices.map(i => trunkSm[i]));
+        const kneeUpCount = auditIndices.filter(i => ok[i].kneeUp || kneeSm[i] < 165 || trunkSm[i] < 22).length;
+        const kneeFoulRatio = kneeUpCount / auditIndices.length;
+
+        if (minKneeAtPeak < 165 || minKneeDuringReach < 162 || kneeFoulRatio > 0.15 || minTrunkAtPeak < 22) {
+          const worstKnee = Math.min(minKneeAtPeak, minKneeDuringReach);
+          const why = minTrunkAtPeak < 22
+            ? `knees pulled up (trunk-thigh ${minTrunkAtPeak.toFixed(0)}° < 22°)`
+            : `knees bent/lifted (${worstKnee.toFixed(0)}° < 165°)`;
+          return rejected(test, `FOUL — ${why}`,
+            t(`Attempt nullified: Knees bent or lifted off the floor during reach (${worstKnee.toFixed(0)}°, must stay flat ≥165°).`,
+              `फाउल: पहुँचते समय घुटने मुड़ गए या ज़मीन से उठ गए (${worstKnee.toFixed(0)}°, ≥165° आवश्यक)।`));
+        }
+
+        const reachingFrames = reachingIndices.map(i => ok[i]);
+        const r = reachingIndices.map(i => rAll[i]);
         // Prefer a held plateau window (≥450 ms with spread ≤2.5 cm), fallback to 85th percentile valid reach
         let heldReach = pct(r, 0.85);
-        let heldSpread = Math.abs(pct(r, 0.90) - pct(r, 0.75));
         for (let i = 0; i < reachingFrames.length; i++) {
           let j = i;
           while (j < reachingFrames.length && (reachingFrames[j].t - reachingFrames[i].t) < 450) j++;
@@ -1054,14 +1093,13 @@
             const v = median(win);
             if (v >= heldReach - 1.5) {
               heldReach = v;
-              heldSpread = sp;
             }
           }
         }
 
         const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
         const score = Math.max(0.0, boxOffset + heldReach);
-        const minKnee = Math.min(...reachingFrames.map(f => f.kneeDeg));
+        const minKnee = Math.min(minKneeAtPeak, minKneeDuringReach);
         const isCalib = !!calib && calib.method !== "distance";
 
         return {
@@ -1072,7 +1110,7 @@
           method: `${reachingFrames[0].scaleMode} · Held reach ${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes)`,
           audit: [{
             label: "Peak Held Reach",
-            detail: `${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes) · Excursion ${excursion.toFixed(1)} cm · Trunk ${minTrunkDeg.toFixed(0)}° · Knee ≥${minKnee.toFixed(0)}° PASS`,
+            detail: `${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes) · Excursion ${excursion.toFixed(1)} cm · Trunk ${minTrunkAtPeak.toFixed(0)}° · Knee ≥${minKnee.toFixed(0)}° PASS`,
             valid: true
           }]
         };
