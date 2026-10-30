@@ -766,7 +766,9 @@
       }
 
       if (vertexY <= H * 0.008) {
-        return fail(t("Head cut off", "सिर कट रहा है"), t("Top of head touches the frame edge — step back slightly.", "सिर फ्रेम के किनारे पर है — थोड़ा पीछे हटें।"));
+        return fail(t("Head cut off — Step BACK!", "सिर कट रहा है — पीछे हटें!"),
+          t("🚫 Top of head touches the frame edge — step back slightly into the Green Zone.", "🚫 सिर फ्रेम के किनारे पर है — थोड़ा पीछे हरे ज़ोन में हटें।"),
+          { vertexY });
       }
 
       // Use heel midpoint (29, 30) + thin plantar sole offset (0.02 * headNeckPx) instead of Math.max + 0.14 * headNeckPx
@@ -782,16 +784,32 @@
       }
 
       if (soleY >= H * 0.992) {
-        return fail(t("Feet cut off", "पैर कट रहे हैं"), t("Feet touch the bottom edge — tilt or move phone slightly.", "पैर नीचे किनारे पर हैं — पूरा पैर फ्रेम में रखें।"));
+        return fail(t("Feet cut off — Step BACK!", "पैर कट रहे हैं — पीछे हटें!"),
+          t("🚫 Feet touch the bottom edge — step back until heels are inside the Green Zone.", "🚫 पैर नीचे किनारे पर हैं — पीछे हटें जब तक एड़ी हरे ज़ोन में न आ जाए।"),
+          { soleY, vertexY });
       }
 
       const bodyPx = soleY - vertexY;
+      const vfovFactor = H >= W ? (34.61 / 25.4) : (25.96 / 25.4);
+      const fPx = H / vfovFactor;
+      const lvlNow = phoneLevel();
+      const pitchDeg = lvlNow.known ? Math.max(-7.5, Math.min(7.5, lvlNow.pitch)) : 0;
+      const soleL = levelRow(soleY, pitchDeg, W, H);
+      const camHcm = Number(state.lastCamHcm) || 100.0;
+      const floorDeltaPx = Math.max(H * 0.05, soleL - H / 2);
+      const estDistCm = (fPx * camHcm) / floorDeltaPx;
+      const estDistM = estDistCm / 100.0;
+
       if (bodyPx < H * 0.28) {
-        return fail(`${t("📏 TOO FAR — Step CLOSER", "📏 बहुत दूर — पास आएँ")} (${(bodyPx / H * 100).toFixed(0)}%)`,
-          t("Too far from camera! Step CLOSER until your heels are inside the Green Floor Zone (2.5 m).", "कैमरे से बहुत दूर हैं! थोड़ा पास आएँ जब तक एड़ी हरे ज़ोन में न आ जाए।"));
+        return fail(`${t("📏 TOO FAR", "📏 बहुत दूर")} (~${estDistM.toFixed(2)} m) — ${t("Step CLOSER!", "पास आएँ!")}`,
+          t(`🚫 BLOCKED (~${estDistM.toFixed(2)} m): Too far from camera! Step CLOSER until heels are inside the GREEN Floor Zone (2.15–2.85 m).`,
+            `🚫 अवरुद्ध (~${estDistM.toFixed(2)} मी): कैमरे से बहुत दूर हैं! पास आएँ जब तक एड़ी हरे ज़ोन में न आ जाए।`),
+          { soleY, vertexY, estDistM, distanceError: "TOO_FAR" });
       }
       if (Math.abs(shMid.x - anMid.x) > 0.12 * bodyPx) {
-        return fail(t("Leaning", "झुके हुए"), t("Stand straight and vertical.", "बिल्कुल सीधे खड़े हों।"));
+        return fail(t("Leaning — Stand Straight", "झुके हुए — सीधे खड़े हों"),
+          t("🚫 Stand straight and vertical with weight evenly on both feet.", "🚫 बिल्कुल सीधे खड़े हों।"),
+          { soleY, vertexY, estDistM });
       }
 
       const headRoll = (vis(lm, 7, 0.35) && vis(lm, 8, 0.35))
@@ -804,45 +822,47 @@
       // SAI WALL STADIOMETER MODE (Rung 2, GREEN)
       // ---------------------------------------------------------------
       if (activeCalib.method === "wall") {
-        const lvlNow = phoneLevel();
         const pitchNow = lvlNow.known ? lvlNow.pitch : (activeCalib.pitchAtCal || 0);
         const sy = H / (activeCalib.frameH || H);
         const yF = activeCalib.yFloorLevel !== undefined ? activeCalib.yFloorLevel * sy : activeCalib.yFloor * sy;
         const yM = activeCalib.yMarkLevel !== undefined ? activeCalib.yMarkLevel * sy : activeCalib.yMark * sy;
-        const soleL = levelRow(soleY, pitchNow, W, H);
+        const soleWallL = levelRow(soleY, pitchNow, W, H);
         const vertexL = levelRow(vertexY, pitchNow, W, H);
         const k = (yF - yM) / activeCalib.markCm;
         const cy = yF - k * activeCalib.camHcm;
-        const den = soleL - cy;
+        const den = soleWallL - cy;
         if (den < H * 0.05) {
           return fail(t("Feet too high in frame", "पैर फ्रेम में बहुत ऊपर"),
-            t("Lower the phone to about waist height (80–110 cm) and keep it level.", "फ़ोन को कमर की ऊँचाई (80–110 cm) पर समतल रखें।"));
+            t("Lower the phone to about waist height (80–110 cm) and keep it level.", "फ़ोन को कमर की ऊँचाई (80–110 cm) पर समतल रखें।"),
+            { soleY, vertexY });
         }
-        const fPx = H / (H >= W ? (36.0 / 24.5) : (24.0 / 24.5));
         const wallDistCm = fPx / k;
         const depthRatio = (yF - cy) / den;
         const offWallCm = wallDistCm * (1 - depthRatio);
-        const cmW = activeCalib.camHcm * (soleL - vertexL) / den;
+        const cmW = activeCalib.camHcm * (soleWallL - vertexL) / den;
 
         if (offWallCm > 15) {
           return fail(`${t("📏 TOO CLOSE — Step BACK", "📏 बहुत पास — पीछे हटें")} ~${Math.round(offWallCm)} cm`,
-            t("Stand with heels, buttocks and shoulders touching the wall (do not step closer).", "एड़ी, कूल्हे और कंधे दीवार से सटाकर खड़े हों (आगे न आएँ)।"));
+            t("🚫 Stand with heels, buttocks and shoulders touching the wall (do not step closer).", "🚫 एड़ी, कूल्हे और कंधे दीवार से सटाकर खड़े हों (आगे न आएँ)।"),
+            { soleY, vertexY, estDistM, distanceError: "TOO_CLOSE" });
         }
         if (offWallCm < -15) {
           return fail(t("Feet behind wall line", "पैर दीवार रेखा के पीछे"),
-            t("Phone or wall moved since calibration — tap 'Reset Scale' and lock the wall again.", "कैलिब्रेशन के बाद फ़ोन हिल गया — स्केल रीसेट कर दीवार फिर से लॉक करें।"));
+            t("Phone or wall moved since calibration — tap 'Reset Scale' and lock the wall again.", "कैलिब्रेशन के बाद फ़ोन हिल गया — स्केल रीसेट कर दीवार फिर से लॉक करें।"),
+            { soleY, vertexY });
         }
-        const lvl = phoneLevel();
-        if (lvl.known && activeCalib.pitchAtCal !== null && activeCalib.pitchAtCal !== undefined &&
-            Math.abs(lvl.pitch - activeCalib.pitchAtCal) > 2.5) {
+        if (lvlNow.known && activeCalib.pitchAtCal !== null && activeCalib.pitchAtCal !== undefined &&
+            Math.abs(lvlNow.pitch - activeCalib.pitchAtCal) > 2.5) {
           return fail(t("Phone moved", "फ़ोन हिल गया"),
-            t("Phone tilt changed since the wall was locked — put it back or re-lock the wall.", "दीवार लॉक के बाद फ़ोन का झुकाव बदला — वापस रखें या फिर से लॉक करें।"));
+            t("Phone tilt changed since the wall was locked — put it back or re-lock the wall.", "दीवार लॉक के बाद फ़ोन का झुकाव बदला — वापस रखें या फिर से लॉक करें।"),
+            { soleY, vertexY });
         }
         return {
           postureOk: true,
           bodyPx,
           vertexY,
           soleY,
+          estDistM: wallDistCm / 100.0,
           vertexSource,
           cm: cmW,
           cmPerPx: activeCalib.camHcm / den,
@@ -851,31 +871,36 @@
           offWallCm,
           wallFloorY: yF,
           horizonY: cy,
-          liveMetric: `✅ ${t("DISTANCE OK", "दूरी सही")} · ${cmW.toFixed(1)} cm (±1 cm)`,
+          liveMetric: `✅ ${t("DISTANCE OK", "दूरी सही")} (${(wallDistCm / 100).toFixed(2)} m) · ${cmW.toFixed(1)} cm`,
           reason: `✅ ${t("Distance is CORRECT — Do NOT go closer or further!", "दूरी बिल्कुल सही है — आगे या पीछे न जाएँ!")} · ${calibLabel(activeCalib)}`
         };
       }
 
       // ---------------------------------------------------------------
-      // GUIDED 2.50 m STANDOFF DISTANCE GATE (Default Rung 4 Mode)
-      // Checks heel floor position (soleY) and head/shoulder proximity so if the
-      // athlete steps too close (causing 172–205 cm over-reads) or too far, the gate
-      // blocks recording and instructs the teacher to step BACK or CLOSER!
+      // DYNAMIC FLOOR-PLANE DISTANCE + GREEN ZONE GATE (2.15 m – 2.85 m)
+      // 1. If the athlete is closer than 2.15 m (soleY > 0.848*H) or further than 2.85 m (soleY < 0.745*H),
+      //    BLOCKS recording and displays a live on-screen error so the person can step BACK or CLOSER!
+      // 2. Anywhere inside the 2.15 m – 2.85 m Green Zone (e.g. 2.20 m, 2.35 m, 2.50 m, 2.75 m),
+      //    dynamically computes the exact floor distance `estDistCm` from `soleL` so the athlete
+      //    does NOT have to stand at a rigid 2.500 m!
       // ---------------------------------------------------------------
+      let effCmPerPx = activeCalib.cmPerPx;
       if (activeCalib.method === "distance") {
-        if (soleY > H * 0.840 || headNeckPx > H * 0.074) {
-          return fail(t("📏 TOO CLOSE — Step BACK!", "📏 बहुत पास हैं — पीछे हटें!"),
-            t("⚠️ Athlete is TOO CLOSE to the camera! Step BACK toward the wall until heels are inside the GREEN Floor Zone.",
-              "⚠️ एथलीट कैमरे के बहुत पास है! पीछे दीवार की ओर हटें जब तक एड़ी हरे फ़र्श ज़ोन में न आ जाए।"));
+        if (soleY > H * 0.848 || estDistM < 2.15 || headNeckPx > H * 0.076) {
+          return fail(`${t("📏 TOO CLOSE", "📏 बहुत पास")} (~${estDistM.toFixed(2)} m) — ${t("Step BACK!", "पीछे हटें!")}`,
+            t(`🚫 BLOCKED (~${estDistM.toFixed(2)} m): Athlete is TOO CLOSE! Step BACK until heels are inside the GREEN Floor Zone (2.15–2.85 m).`,
+              `🚫 अवरुद्ध (~${estDistM.toFixed(2)} मी): एथलीट कैमरे के बहुत पास है! पीछे हटें जब तक एड़ी हरे फ़र्श ज़ोन (2.15–2.85 मी) में न आ जाए।`),
+            { soleY, vertexY, estDistM, distanceError: "TOO_CLOSE" });
         }
-        if (soleY < H * 0.750) {
-          return fail(t("📏 TOO FAR — Step CLOSER!", "📏 बहुत दूर हैं — पास आएँ!"),
-            t("⚠️ Athlete is TOO FAR from the camera! Step CLOSER until heels are inside the GREEN Floor Zone.",
-              "⚠️ एथलीट कैमरे से बहुत दूर है! थोड़ा पास आएँ जब तक एड़ी हरे फ़र्श ज़ोन में न आ जाए।"));
+        if (soleY < H * 0.745 || estDistM > 2.85) {
+          return fail(`${t("📏 TOO FAR", "📏 बहुत दूर")} (~${estDistM.toFixed(2)} m) — ${t("Step CLOSER!", "पास आएँ!")}`,
+            t(`🚫 BLOCKED (~${estDistM.toFixed(2)} m): Athlete is TOO FAR! Step CLOSER until heels are inside the GREEN Floor Zone (2.15–2.85 m).`,
+              `🚫 अवरुद्ध (~${estDistM.toFixed(2)} मी): एथलीट कैमरे से बहुत दूर है! थोड़ा पास आएँ जब तक एड़ी हरे फ़र्श ज़ोन (2.15–2.85 मी) में न आ जाए।`),
+            { soleY, vertexY, estDistM, distanceError: "TOO_FAR" });
         }
+        effCmPerPx = (estDistCm * vfovFactor) / H;
       }
 
-      const effCmPerPx = activeCalib.cmPerPx;
       const cm = bodyPx * effCmPerPx;
 
       return {
@@ -883,13 +908,14 @@
         bodyPx,
         vertexY,
         soleY,
+        estDistM,
         vertexSource,
         cm,
         cmPerPx: effCmPerPx,
         calibMethod: activeCalib.method,
         headRoll,
-        liveMetric: `✅ ${t("DISTANCE OK", "दूरी सही")} · ${cm.toFixed(1)} cm (±1.5 cm)`,
-        reason: `✅ ${t("Distance is CORRECT — Do NOT move any closer or further! Hold still.", "दूरी बिल्कुल सही है — अब आगे या पीछे न जाएँ! स्थिर खड़े रहें।")} · ${bodyPx.toFixed(0)} px × ${effCmPerPx.toFixed(4)} cm/px`
+        liveMetric: `✅ ${t("DISTANCE OK", "दूरी सही")} (${estDistM.toFixed(2)} m) · ${cm.toFixed(1)} cm (±1.5 cm)`,
+        reason: `✅ ${t("Distance is CORRECT", "दूरी बिल्कुल सही है")} (${estDistM.toFixed(2)} m) — ${t("Do NOT move closer or further! Hold still.", "आगे या पीछे न जाएँ! स्थिर खड़े रहें।")} · ${bodyPx.toFixed(0)} px × ${effCmPerPx.toFixed(4)} cm/px`
       };
     }
 
@@ -1091,9 +1117,15 @@
       const ok = recordedFrames.filter(f => f.postureOk);
       if (ok.length < 8) {
         const wrongEx = recordedFrames.find(f => f.isWrongExercise);
+        const distErr = [...recordedFrames].reverse().find(f => f.distanceError);
         const last = [...recordedFrames].reverse().find(f => f.reason);
-        return rejected(test, t("REJECTED — posture / landmark gate", "अस्वीकृत — पोस्चर गेट"),
-          wrongEx ? wrongEx.reason : (last?.reason || t("Required posture not detected.", "आवश्यक पोस्चर नहीं मिला।")));
+        const rejMethod = distErr
+          ? (distErr.distanceError === "TOO_CLOSE"
+              ? t("REJECTED — 📏 TOO CLOSE to camera (Step BACK)", "अस्वीकृत — कैमरे के बहुत पास (पीछे हटें)")
+              : t("REJECTED — 📏 TOO FAR from camera (Step CLOSER)", "अस्वीकृत — कैमरे से बहुत दूर (पास आएँ)"))
+          : t("REJECTED — posture / landmark gate", "अस्वीकृत — पोस्चर गेट");
+        return rejected(test, rejMethod,
+          wrongEx ? wrongEx.reason : (distErr ? distErr.reason : (last?.reason || t("Required posture not detected.", "आवश्यक पोस्चर नहीं मिला।"))));
       }
 
       // ---------------- TEST 1: HEIGHT ----------------
@@ -1106,22 +1138,24 @@
         const h = median(core);
         const spread = core.length > 1 ? (core[core.length - 1] - core[0]) : 0.0;
         const roll = median(ok.map(f => f.headRoll || 0));
+        const medDistM = median(ok.map(f => f.estDistM || 2.50));
+        const medCmPerPx = median(ok.map(f => f.cmPerPx));
         const sample = ok[ok.length - 1];
         const isRung12 = sample.calibMethod === "tape" || sample.calibMethod === "person" || sample.calibMethod === "wall";
         const isWall = sample.calibMethod === "wall";
         const band = (isRung12 && spread <= 2.5 && roll <= 8) ? "GREEN" : "AMBER";
         const valid = spread <= 5.0;
-        const tol = isWall ? "±1.0 cm" : (isRung12 ? "±1.5 cm" : "±2.0 cm");
+        const tol = isWall ? "±1.0 cm" : "±1.5 cm";
 
         return {
           valid,
           value: Number(h.toFixed(1)),
           unit: "cm",
           confidence: valid ? band : "RED",
-          method: `Height: ${h.toFixed(1)} cm (${tol}) · ${calibLabel(calib || { method: sample.calibMethod, cmPerPx: sample.cmPerPx })} · ${vals.length} frames median`,
+          method: `Height: ${h.toFixed(1)} cm (${tol}) · Dist ${medDistM.toFixed(2)} m · ${vals.length} frames median`,
           audit: [{
             label: "Standing Height",
-            detail: `Height: ${h.toFixed(1)} cm (${tol}) · Body ${median(ok.map(f => f.bodyPx)).toFixed(0)} px × ${sample.cmPerPx.toFixed(4)} cm/px · vertex: ${sample.vertexSource}${isWall ? ` · off-wall ${median(ok.map(f => f.offWallCm || 0)).toFixed(0)} cm (corrected)` : ""} · spread ${spread.toFixed(1)} cm`,
+            detail: `Height: ${h.toFixed(1)} cm (${tol}) · Dist ${medDistM.toFixed(2)} m · Body ${median(ok.map(f => f.bodyPx)).toFixed(0)} px × ${medCmPerPx.toFixed(4)} cm/px · vertex: ${sample.vertexSource}${isWall ? ` · off-wall ${median(ok.map(f => f.offWallCm || 0)).toFixed(0)} cm (corrected)` : ""} · spread ${spread.toFixed(1)} cm`,
             valid
           }]
         };
@@ -2203,19 +2237,79 @@
         }
       }
 
+      let latestLiveEv = null;
+
       function drawMeasureOverlay(ev) {
         ctx.save();
-        ctx.font = `bold ${Math.max(16, Math.round(frameH * 0.018))}px -apple-system, sans-serif`;
-        if (test.key === "height" && ev.postureOk) {
-          ctx.strokeStyle = "#00E5FF";
-          ctx.fillStyle = "#00E5FF";
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(0, ev.vertexY); ctx.lineTo(frameW, ev.vertexY);
-          ctx.moveTo(0, ev.soleY); ctx.lineTo(frameW, ev.soleY);
-          ctx.stroke();
-          ctx.fillText(`▲ VERTEX (${ev.vertexSource})`, 14, Math.max(22, ev.vertexY - 8));
-          ctx.fillText(`▼ HEELS · ${ev.liveMetric}`, 14, Math.min(frameH - 10, ev.soleY + 24));
+        const fontMain = Math.max(16, Math.round(frameH * 0.018));
+        ctx.font = `bold ${fontMain}px -apple-system, sans-serif`;
+        if (test.key === "height") {
+          if (ev.postureOk) {
+            ctx.strokeStyle = "#00E5FF";
+            ctx.fillStyle = "#00E5FF";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, ev.vertexY); ctx.lineTo(frameW, ev.vertexY);
+            ctx.moveTo(0, ev.soleY); ctx.lineTo(frameW, ev.soleY);
+            ctx.stroke();
+            ctx.fillText(`▲ VERTEX (${ev.vertexSource})`, 14, Math.max(22, ev.vertexY - 8));
+            ctx.fillText(`▼ HEELS · ${ev.liveMetric}`, 14, Math.min(frameH - 10, ev.soleY + 24));
+
+            if (isRecording) {
+              const bw = Math.min(frameW - 24, 620);
+              const bx = (frameW - bw) / 2;
+              const by = Math.max(68, frameH * 0.08);
+              ctx.fillStyle = "rgba(0, 180, 120, 0.88)";
+              ctx.fillRect(bx, by, bw, Math.round(fontMain * 2.5));
+              ctx.fillStyle = "#FFFFFF";
+              ctx.textAlign = "center";
+              ctx.fillText(ev.liveMetric, frameW / 2, by + Math.round(fontMain * 1.6));
+              ctx.textAlign = "left";
+            }
+          } else {
+            // Draw live RED error banner + heel guide on video so the person can adjust distance while recording!
+            const bw = Math.min(frameW - 20, 660);
+            const bh = Math.round(fontMain * 3.6);
+            const bx = (frameW - bw) / 2;
+            const by = Math.max(68, frameH * 0.08);
+            ctx.fillStyle = "rgba(210, 25, 35, 0.92)";
+            ctx.fillRect(bx, by, bw, bh);
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(bx, by, bw, bh);
+            ctx.fillStyle = "#FFFFFF";
+            ctx.textAlign = "center";
+            ctx.font = `bold ${Math.round(fontMain * 1.1)}px -apple-system, sans-serif`;
+            ctx.fillText(`🚫 BLOCKED: ${ev.liveMetric}`, frameW / 2, by + Math.round(fontMain * 1.45));
+            ctx.font = `bold ${Math.round(fontMain * 0.85)}px -apple-system, sans-serif`;
+            ctx.fillText(
+              isRecording
+                ? t("⏸ Recording PAUSED — Adjust position into GREEN Zone to continue!", "⏸ रिकॉर्डिंग रुकी है — जारी रखने के लिए हरे ज़ोन में आएँ!")
+                : t("Move your heels into the GREEN Zone (2.15–2.85 m) below!", "नीचे हरे ज़ोन (2.15–2.85 मी) में अपनी एड़ी लाएँ!"),
+              frameW / 2,
+              by + Math.round(fontMain * 2.85)
+            );
+            ctx.textAlign = "left";
+
+            if (typeof ev.soleY === "number") {
+              const targetY = frameH * 0.795;
+              ctx.strokeStyle = "#FF3B30";
+              ctx.fillStyle = "#FF3B30";
+              ctx.lineWidth = 4;
+              ctx.beginPath();
+              ctx.moveTo(0, ev.soleY); ctx.lineTo(frameW, ev.soleY);
+              ctx.stroke();
+              const distTxt = ev.estDistM ? ` (~${ev.estDistM.toFixed(2)} m)` : "";
+              ctx.font = `bold ${fontMain}px -apple-system, sans-serif`;
+              ctx.fillText(
+                ev.soleY > targetY
+                  ? `▼ YOUR HEELS${distTxt} — ⬆️ STEP BACK INTO GREEN ZONE!`
+                  : `▼ YOUR HEELS${distTxt} — ⬇️ STEP CLOSER INTO GREEN ZONE!`,
+                14,
+                Math.min(frameH - 12, Math.max(30, ev.soleY - 10))
+              );
+            }
+          }
         }
         if (test.key === "sit_and_reach" && ev.postureOk) {
           ctx.strokeStyle = "#FFD166";
@@ -2244,9 +2338,9 @@
             ctx.font = `bold ${Math.max(14, Math.round(frameH * 0.016))}px -apple-system, sans-serif`;
             ctx.fillText(t("WALL FLOOR LINE — heels here", "दीवार फ़र्श रेखा — एड़ी यहाँ"), 10, wc.yFloor * sy - 6);
           } else if (!wc || wc.method === "distance") {
-            // Draw the Green 2.50m Heel Target Zone so the teacher knows the exact standing distance
-            const yTop = frameH * 0.750;
-            const yBot = frameH * 0.840;
+            // Draw the Green 2.15m–2.85m Heel Target Zone (auto-scales distance inside this band)
+            const yTop = frameH * 0.745;
+            const yBot = frameH * 0.848;
             ctx.fillStyle = "rgba(0, 230, 168, 0.14)";
             ctx.fillRect(0, yTop, frameW, yBot - yTop);
             ctx.setLineDash([8, 6]);
@@ -2258,7 +2352,7 @@
             ctx.stroke();
             ctx.fillStyle = "#00E6A8";
             ctx.font = `bold ${Math.max(14, Math.round(frameH * 0.016))}px -apple-system, sans-serif`;
-            ctx.fillText(t("🎯 2.5m HEEL ZONE — Stand with heels inside this green band", "🎯 2.5 मी एड़ी ज़ोन — एड़ी इस हरी पट्टी में रखें"), 12, yTop - 6);
+            ctx.fillText(t("🎯 VALID HEEL ZONE (2.15–2.85 m) — Place heels inside this green band", "🎯 मान्य एड़ी ज़ोन (2.15–2.85 मी) — एड़ी इस हरी पट्टी में रखें"), 12, yTop - 6);
           }
           ctx.restore();
         }
@@ -2285,7 +2379,7 @@
       function showEval(ev) {
         hudFps.textContent = `${Math.round(fps)} fps · ${ev.postureOk ? t("POSE VALID", "पोज़ मान्य") : t("GATE BLOCKED", "गेट अवरुद्ध")}`;
         hudMetric.className = `hud-live-metric ${ev.postureOk ? "" : "bad"}`;
-        hudMetricTitle.textContent = ev.postureOk ? t("LIVE AI READOUT:", "लाइव AI रीडआउट:") : t("POSTURE CHECK:", "पोस्चर जाँच:");
+        hudMetricTitle.textContent = ev.postureOk ? t("LIVE AI READOUT:", "लाइव AI रीडआउट:") : t("🚫 BLOCKED — ADJUST POSITION:", "🚫 अवरुद्ध — स्थिति सुधारें:");
         hudMetricVal.textContent = ev.liveMetric;
         hudLive.textContent = ev.reason;
       }
@@ -2327,10 +2421,12 @@
               const secondVisible = people.length > 1 &&
                 [0, 11, 12, 23, 24].reduce((s, i) => s + (people[1][i]?.visibility ?? 0), 0) / 5 > 0.55;
               if (!people.length) {
-                ev = fail(t("NO PERSON", "कोई व्यक्ति नहीं"), t("Step into the frame (2–3 m away).", "फ्रेम में आएँ (2–3 मीटर दूर)।"));
+                ev = fail(t("NO PERSON — Step into frame", "कोई व्यक्ति नहीं — फ्रेम में आएँ"), t("Step into the frame (2.15–2.85 m away).", "फ्रेम में आएँ (2.15–2.85 मीटर दूर)।"));
+                drawMeasureOverlay(ev);
               } else if (secondVisible) {
                 ev = fail(t("Multiple people", "एक से अधिक व्यक्ति"), t("Only the athlete may be in the frame.", "फ्रेम में केवल एथलीट रहे।"));
                 drawSkeleton(people[1], "#FF4D4F");
+                drawMeasureOverlay(ev);
               } else {
                 const lm = people[0];
                 const mask = maskReader(masks[0]);
@@ -2339,6 +2435,7 @@
                 drawSkeleton(lm, ev.postureOk ? "#00E6A8" : "#FF4D4F");
                 drawMeasureOverlay(ev);
               }
+              latestLiveEv = ev;
               showEval(ev);
               if (isRecording) recordedFrames.push({ ...ev, t: tFrame });
             } catch (err) {
@@ -2390,12 +2487,33 @@
           if (calPanel) calPanel.style.display = "none";
           isRecording = true;
           captureElapsed = 0;
+          let validSec = 0;
           recordedFrames.length = 0;
           btnRec.disabled = true;
           btnRec.textContent = `${t("Recording...", "रिकॉर्डिंग...")} (${test.minSec}s min)`;
           captureTimer = setInterval(() => {
             captureElapsed++;
             const validCount = recordedFrames.filter(f => f.postureOk).length;
+            if (test.key === "height") {
+              const isCurrentlyValid = !!(latestLiveEv && latestLiveEv.postureOk);
+              if (isCurrentlyValid) validSec++;
+              hudTimer.textContent = isCurrentlyValid
+                ? `✅ ${validSec}s / ${test.minSec}s (${validCount} ${t("valid frames", "मान्य फ्रेम")})`
+                : `⏸ ${t("PAUSED — Adjust Distance", "रुका है — दूरी सुधारें")} (${validCount} ${t("valid", "मान्य")})`;
+              if (captureElapsed >= 2) {
+                btnRec.disabled = false;
+              }
+              if (!isCurrentlyValid) {
+                btnRec.textContent = `🚫 ${latestLiveEv?.liveMetric || t("Adjust position into Green Zone", "हरे ज़ोन में आएँ")} (■ ${t("Stop", "रोकें")})`;
+              } else if (validSec >= test.minSec && validCount >= 18) {
+                finishRecording();
+                return;
+              } else {
+                btnRec.textContent = `✅ ${t("Hold still...", "स्थिर रहें...")} (${Math.max(1, test.minSec - validSec)}s)`;
+              }
+              if (captureElapsed >= 20) finishRecording();
+              return;
+            }
             hudTimer.textContent = `${captureElapsed}s / ${test.minSec}–${test.maxSec}s (${validCount} ${t("valid", "मान्य")})`;
             if (captureElapsed >= test.minSec) {
               btnRec.disabled = false;
@@ -2406,7 +2524,7 @@
             if (captureElapsed >= test.maxSec) finishRecording();
           }, 1000);
         } else {
-          if (captureElapsed < test.minSec) return;
+          if (test.key !== "height" && captureElapsed < test.minSec) return;
           finishRecording();
         }
       };
