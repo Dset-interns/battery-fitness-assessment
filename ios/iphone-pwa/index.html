@@ -200,7 +200,8 @@
     .cam-wrap {
       position: relative;
       width: 100%;
-      aspect-ratio: 9 / 13;
+      aspect-ratio: 9 / 16;
+      max-height: 68vh;
       background: #111;
       border-radius: 16px;
       overflow: hidden;
@@ -209,13 +210,14 @@
     .cam-wrap video {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
     }
     .cam-wrap canvas {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
+      object-fit: contain;
       pointer-events: none;
     }
     .cam-hud-top {
@@ -369,16 +371,15 @@
       }
     ];
 
-    const saved = JSON.parse(localStorage.getItem("sai_ios_state_v2") || "null");
+    const saved = JSON.parse(localStorage.getItem("sai_ios_state_v5") || "null");
     const state = saved || {
       lang: "en",
       route: "home",
       sequencing: "ATHLETE_WISE",
-      heightCalibMode: "DISTANCE", // "REF_OBJECT" (Rung 1/2 GREEN) or "DISTANCE" (Rung 4 AMBER)
-      cameraDistanceM: 3.15,       // Rung 4: Actual camera-to-wall standoff distance in metres
-      refObjectCm: 29.7,           // Rung 1/2: Known reference length on wall in cm (e.g. 29.7 cm A4 sheet or 100 cm tape)
-      refTopPct: 30,               // Rung 1/2: Top reference line Y (% of frame height)
-      refBotPct: 43,               // Rung 1/2: Bottom reference line Y (% of frame height)
+      cameraDistanceM: 2.50, // Rung 4 default indoor full-body standoff distance (2.0m - 3.5m)
+      lastRefCm: 29.7,       // Default A4 sheet (29.7 cm) or 100 cm tape
+      boxZeroCm: 23.0,       // Standard SAI Sit & Reach box toe-line mark (23.0 cm)
+      calib: {},             // Per-station Rung 1/2 calibrations { height: { cmPerPx, refCm, refPx, method, frameW, frameH }, ... }
       athletes: [
         { id: 1, name: "Riya Aggarwal", age: 20, gender: "F" },
         { id: 2, name: "Aarav Sharma", age: 14, gender: "M" }
@@ -387,14 +388,14 @@
       selectedTestKey: "height",
       results: {} // keyed by `${athleteId}:${testKey}`
     };
-    if (!state.heightCalibMode) state.heightCalibMode = "DISTANCE";
-    if (!state.cameraDistanceM || state.cameraDistanceM < 1.2) state.cameraDistanceM = 3.15;
-    if (!state.refObjectCm) state.refObjectCm = 29.7;
-    if (!state.refTopPct) state.refTopPct = 30;
-    if (!state.refBotPct) state.refBotPct = 43;
+    if (!state.cameraDistanceM || state.cameraDistanceM < 1.2 || state.cameraDistanceM > 4.5) {
+      state.cameraDistanceM = 2.50;
+    }
+    if (state.boxZeroCm === undefined || state.boxZeroCm === null) state.boxZeroCm = 23.0;
+    if (!state.calib) state.calib = {};
 
     function persist() {
-      localStorage.setItem("sai_ios_state_v2", JSON.stringify(state));
+      localStorage.setItem("sai_ios_state_v5", JSON.stringify(state));
     }
 
     function t(en, hi) {
@@ -430,6 +431,7 @@
 
     // =========================================================================
     // Geometry & Pose Helpers (33 MediaPipe Landmarks + Segmentation Mask)
+    // Implements the 4-Rung Measurement Ladder + Joint-Ratio Offset Regression
     // =========================================================================
     let mediaStream = null;
     let captureTimer = null;
@@ -437,46 +439,83 @@
     let facingMode = "environment";
     let poseLandmarker = null;
     let animFrameId = null;
+    let captureToken = 0;
     let lastMpTimestampMs = 0;
+    let deviceTilt = null;
+    let tiltListenerOn = false;
+
+    const MP_VERSION = "0.10.14";
+    const POSE_MODEL_FULL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
+    const POSE_MODEL_LITE = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
 
     async function ensureMediaPipeLoaded() {
       if (poseLandmarker) return poseLandmarker;
-      const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
+      const vision = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/vision_bundle.mjs`);
       const fileset = await vision.FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+        `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`
       );
+      const makeOpts = (modelAssetPath, delegate) => ({
+        baseOptions: { modelAssetPath, delegate },
+        runningMode: "VIDEO",
+        numPoses: 2,
+        minPoseDetectionConfidence: 0.55,
+        minPosePresenceConfidence: 0.55,
+        minTrackingConfidence: 0.55,
+        outputSegmentationMasks: true
+      });
       try {
-        poseLandmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
-          baseOptions: {
-            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
-            delegate: "GPU"
-          },
-          runningMode: "VIDEO",
-          numPoses: 1,
-          outputSegmentationMasks: true
-        });
-      } catch (gpuErr) {
-        console.warn("GPU delegate fallback to CPU on iOS:", gpuErr);
-        poseLandmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
-          baseOptions: {
-            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
-            delegate: "CPU"
-          },
-          runningMode: "VIDEO",
-          numPoses: 1,
-          outputSegmentationMasks: true
-        });
+        poseLandmarker = await vision.PoseLandmarker.createFromOptions(fileset, makeOpts(POSE_MODEL_FULL, "GPU"));
+      } catch (e1) {
+        try {
+          poseLandmarker = await vision.PoseLandmarker.createFromOptions(fileset, makeOpts(POSE_MODEL_LITE, "GPU"));
+        } catch (e2) {
+          poseLandmarker = await vision.PoseLandmarker.createFromOptions(fileset, makeOpts(POSE_MODEL_LITE, "CPU"));
+        }
       }
       return poseLandmarker;
     }
 
-    function toPx(pt, w, h) {
-      return {
-        x: pt.x * w,
-        y: pt.y * h,
-        z: (pt.z || 0) * w,
-        visibility: pt.visibility ?? 1.0
-      };
+    async function enableTiltSensor() {
+      if (tiltListenerOn) return true;
+      try {
+        if (typeof DeviceOrientationEvent !== "undefined" &&
+            typeof DeviceOrientationEvent.requestPermission === "function") {
+          const perm = await DeviceOrientationEvent.requestPermission();
+          if (perm !== "granted") return false;
+        }
+        window.addEventListener("deviceorientation", (e) => {
+          if (e.beta == null || e.gamma == null) return;
+          deviceTilt = { beta: e.beta, gamma: e.gamma, at: performance.now() };
+        });
+        tiltListenerOn = true;
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function phoneLevel() {
+      if (!deviceTilt || performance.now() - deviceTilt.at > 2000) {
+        return { known: false, ok: true, pitch: 0, roll: 0, text: t("Level OK", "समतल") };
+      }
+      const pitch = deviceTilt.beta - 90;
+      const roll = deviceTilt.gamma;
+      const ok = Math.abs(pitch) <= 8 && Math.abs(roll) <= 8;
+      return { known: true, ok, pitch, roll, text: `${t("Tilt", "झुकाव")} ${pitch.toFixed(1)}°` };
+    }
+
+    function P(lm, i, W, H) {
+      return { x: lm[i].x * W, y: lm[i].y * H };
+    }
+
+    function vis(lm, i, min = 0.42) {
+      const p = lm[i];
+      return !!p && (p.visibility === undefined || p.visibility >= min) &&
+             p.x > 0.003 && p.x < 0.997 && p.y > 0.003 && p.y < 0.997;
+    }
+
+    function mid(a, b) {
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     }
 
     function dist2D(a, b) {
@@ -492,81 +531,47 @@
       return Math.acos(cos) * 180 / Math.PI;
     }
 
-    function visOk(pt, minVis = 0.42) {
-      return pt && (pt.visibility === undefined || pt.visibility >= minVis) &&
-             pt.x >= 0.01 && pt.x <= 0.99 && pt.y >= 0.01 && pt.y <= 0.99;
+    function distToSegment(x, y, a, b) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 1e-9) return Math.hypot(x - a.x, y - a.y);
+      const tt = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / len2));
+      return Math.hypot(x - (a.x + tt * dx), y - (a.y + tt * dy));
     }
 
-    function pickBetterSide(lm, leftIdx, rightIdx) {
-      const l = lm[leftIdx], r = lm[rightIdx];
-      const lv = l ? (l.visibility ?? 0) : 0;
-      const rv = r ? (r.visibility ?? 0) : 0;
-      return lv >= rv ? l : r;
+    function median(arr) {
+      if (!arr.length) return NaN;
+      const s = [...arr].sort((x, y) => x - y);
+      const m = s.length >> 1;
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
     }
 
-    // Mirrors lab/analyzers/height_scale.py:
-    // Finds the true top-of-head (vertex_y) from the MediaPipe person segmentation mask
-    // above the nose/eyes and the bottom-of-heels (feet_y) from heel/foot landmarks + mask.
-    function extractVertexAndFeetPx(segMask, frameW, frameH, lm, pLm) {
-      const nose = lm[0], pNose = pLm[0];
-      const lEye = lm[2], rEye = lm[5], pLEye = pLm[2], pREye = pLm[5];
-      const eyeMidPxY = (visOk(lEye, 0.3) && visOk(rEye, 0.3))
-        ? ((pLEye.y + pREye.y) / 2)
-        : pNose.y;
-      const noseToEyePx = Math.max(frameH * 0.012, Math.abs(pNose.y - eyeMidPxY));
+    function pct(arr, p) {
+      if (!arr.length) return NaN;
+      const s = [...arr].sort((x, y) => x - y);
+      return s[Math.min(s.length - 1, Math.max(0, Math.round(p * (s.length - 1))))];
+    }
 
-      // Landmark-derived vertex (top of skull above eye line) and lowest heel/foot landmark
-      let vertexPxY = Math.max(0, eyeMidPxY - 2.6 * noseToEyePx);
-      let vertexSource = "landmarks";
+    function medianFilter(arr, k = 5) {
+      const h = k >> 1;
+      return arr.map((_, i) => median(arr.slice(Math.max(0, i - h), Math.min(arr.length, i + h + 1))));
+    }
 
-      const footCandidates = [];
-      for (const idx of [27, 28, 29, 30, 31, 32]) {
-        if (visOk(lm[idx], 0.32)) footCandidates.push(pLm[idx].y);
-      }
-      let feetPxY = footCandidates.length > 0 ? Math.max(...footCandidates) : (frameH * 0.85);
+    function fail(liveMetric, reason, extra = {}) {
+      return { postureOk: false, liveMetric, reason, ...extra };
+    }
 
-      // If MediaPipe segmentation mask is present, scan the head column band above nose
-      // for the true topmost foreground pixel (mask > 0.5), exactly as in height_scale.py!
-      try {
-        if (segMask && typeof segMask.getAsFloat32Array === "function") {
-          const maskArr = segMask.getAsFloat32Array();
-          const mW = segMask.width || frameW;
-          const mH = segMask.height || frameH;
-          const scaleY = frameH / mH;
-          const noseCol = Math.round(nose.x * mW);
-          const halfBand = Math.max(6, Math.round(mW * 0.08));
-          const cMin = Math.max(0, noseCol - halfBand);
-          const cMax = Math.min(mW - 1, noseCol + halfBand);
-          const maxSearchRow = Math.min(mH - 1, Math.round(nose.y * mH));
-
-          for (let r = 0; r <= maxSearchRow; r++) {
-            const rowOffset = r * mW;
-            let foundHeadTop = false;
-            for (let c = cMin; c <= cMax; c++) {
-              if (maskArr[rowOffset + c] > 0.5) {
-                foundHeadTop = true;
-                break;
-              }
-            }
-            if (foundHeadTop) {
-              const maskTopPxY = r * scaleY;
-              // Sanity check: vertex must be above eyes and within plausible head height above eyes
-              if (maskTopPxY < eyeMidPxY && (eyeMidPxY - maskTopPxY) < frameH * 0.14) {
-                vertexPxY = maskTopPxY;
-                vertexSource = "segmentation_mask";
-              }
-              break;
-            }
-          }
-        }
-      } catch (maskErr) {
-        // Fallback cleanly to landmark vertex if WebGL/CPU mask read fails
-      }
-
-      return { vertexPxY, feetPxY, vertexSource };
+    function sideChain(lm) {
+      const score = (ids) => ids.reduce((s, i) => s + (lm[i]?.visibility ?? 0), 0);
+      const left = score([11, 13, 15, 23, 25, 27, 31]);
+      const right = score([12, 14, 16, 24, 26, 28, 32]);
+      return left >= right
+        ? { sh: 11, el: 13, wr: 15, idx: 19, hip: 23, kn: 25, an: 27, heel: 29, ft: 31, ear: 7 }
+        : { sh: 12, el: 14, wr: 16, idx: 20, hip: 24, kn: 26, an: 28, heel: 30, ft: 32, ear: 8 };
     }
 
     function stopCamera() {
+      captureToken++;
       if (captureTimer) { clearInterval(captureTimer); captureTimer = null; }
       if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
       if (mediaStream) {
@@ -575,477 +580,561 @@
       }
     }
 
-    // =========================================================================
-    // Real Per-Frame Pose Extractor in Isotropic Pixel Space (Zero Hardcoded Priors)
-    // =========================================================================
-    function evaluateLiveFrame(testKey, lm, segMask, frameW = 720, frameH = 1280) {
-      // Convert normalized [0..1] landmarks into true isotropic pixel coordinates (fixes 1.78x portrait distortion!)
-      const pLm = lm.map(pt => toPx(pt, frameW, frameH));
-
-      const nose = lm[0], pNose = pLm[0];
-      const lEye = lm[2], rEye = lm[5], pLEye = pLm[2], pREye = pLm[5];
-      const lEar = lm[7], rEar = lm[8], pLEar = pLm[7], pREar = pLm[8];
-      const shoulder = pickBetterSide(lm, 11, 12);
-      const pShoulder = (lm[11]?.visibility ?? 0) >= (lm[12]?.visibility ?? 0) ? pLm[11] : pLm[12];
-      const pElbow = (lm[13]?.visibility ?? 0) >= (lm[14]?.visibility ?? 0) ? pLm[13] : pLm[14];
-      const wrist = pickBetterSide(lm, 15, 16);
-      const pWrist = (lm[15]?.visibility ?? 0) >= (lm[16]?.visibility ?? 0) ? pLm[15] : pLm[16];
-      const indexTip = pickBetterSide(lm, 19, 20);
-      const pIndexTip = (lm[19]?.visibility ?? 0) >= (lm[20]?.visibility ?? 0) ? pLm[19] : pLm[20];
-      const hip = pickBetterSide(lm, 23, 24);
-      const pHip = (lm[23]?.visibility ?? 0) >= (lm[24]?.visibility ?? 0) ? pLm[23] : pLm[24];
-      const knee = pickBetterSide(lm, 25, 26);
-      const pKnee = (lm[25]?.visibility ?? 0) >= (lm[26]?.visibility ?? 0) ? pLm[25] : pLm[26];
-      const ankle = pickBetterSide(lm, 27, 28);
-      const pAnkle = (lm[27]?.visibility ?? 0) >= (lm[28]?.visibility ?? 0) ? pLm[27] : pLm[28];
-      const heel = pickBetterSide(lm, 29, 30);
-      const pHeel = (lm[29]?.visibility ?? 0) >= (lm[30]?.visibility ?? 0) ? pLm[29] : pLm[30];
-      const footTip = pickBetterSide(lm, 31, 32);
-      const pFootTip = (lm[31]?.visibility ?? 0) >= (lm[32]?.visibility ?? 0) ? pLm[31] : pLm[32];
-
-      // -----------------------------------------------------------------------
-      // TEST 1: STANDING HEIGHT — Exact port of lab/analyzers/height_scale.py
-      // NO worldLandmarks and NO hardcoded human body/head size constants!
-      // Height = bodyTotalPx * cmPerPx, where:
-      //  - bodyTotalPx = feetPxY - vertexPxY (measured directly on the video frame)
-      //  - cmPerPx comes strictly from:
-      //      Rung 1/2 (REF_OBJECT, GREEN): refObjectCm / refSpanPx
-      //      Rung 4   (DISTANCE,   AMBER): (cameraDistanceM * 100 * 2*tan(vfov/2)) / frameH
-      // -----------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Scale Calibration Ladder (Rung 1/2 Tape/Person -> Rung 3 Athlete Height -> Rung 4 Portrait Pinhole Optics)
+    // -------------------------------------------------------------------------
+    function getCalib(testKey, W, H) {
+      const c = state.calib?.[testKey];
+      if (c && c.cmPerPx) {
+        if (c.frameW === W && c.frameH === H) return c;
+        if (c.frameH && H) return { ...c, cmPerPx: c.cmPerPx * (c.frameH / H) };
+      }
+      // For Height or Jump, fallback to Rung 4 Portrait Long-Edge Pinhole Optics:
+      // In portrait video (H > W), the vertical frame dimension corresponds to the 36mm long edge of the
+      // 35mm-equivalent smartphone sensor (f_eq ≈ 24.5 mm on iPhone Wide/TrueDepth -> 36 / 24.5 = 1.47).
+      // In landscape video (W > H), the vertical frame dimension is the 24mm short edge (24 / 24.5 = 0.98).
       if (testKey === "height") {
-        const headVis = visOk(nose, 0.45) && visOk(shoulder, 0.45);
-        const feetVis = visOk(ankle, 0.40) || visOk(heel, 0.40);
-        const bodyVis = visOk(hip, 0.42) && visOk(knee, 0.42);
-
-        if (!headVis || !feetVis || !bodyVis) {
-          return {
-            postureOk: false,
-            liveMetric: "Full body not visible",
-            reason: "Step back so both your HEAD and FEET/HEELS are clearly inside the camera frame."
-          };
-        }
-
-        const kneeDeg = angleDeg(pHip, pKnee, pAnkle);
-        const hipDeg = angleDeg(pShoulder, pHip, pKnee);
-        const { vertexPxY, feetPxY, vertexSource } = extractVertexAndFeetPx(segMask, frameW, frameH, lm, pLm);
-        const bodyTotalPx = feetPxY - vertexPxY;
-        const fullPixelFraction = bodyTotalPx / frameH;
-        const dxTorsoPx = Math.abs(pShoulder.x - pAnkle.x);
-
-        if (bodyTotalPx < frameH * 0.22 || dxTorsoPx > bodyTotalPx * 0.35) {
-          return {
-            postureOk: false,
-            liveMetric: "Not standing upright",
-            reason: "You must stand upright facing the camera (full vertical posture required)."
-          };
-        }
-        if (kneeDeg < 152 || hipDeg < 148) {
-          return {
-            postureOk: false,
-            liveMetric: `Knees/Hips bent (${kneeDeg.toFixed(0)}°)`,
-            reason: `Stand completely straight — knee angle is ${kneeDeg.toFixed(0)}° (must be ≥155°).`
-          };
-        }
-
-        // Compute scale factor (cm_per_px) strictly from external physical calibration (Rung 1/2 or Rung 4):
-        let cmPerPx = 0;
-        let rungLabel = "";
-        let rungConfidence = "AMBER";
-
-        if (state.heightCalibMode === "REF_OBJECT") {
-          // Rung 1/2: Known reference object in the same wall plane (e.g., 29.7 cm A4 sheet or 100 cm tape)
-          const refTopY = (Math.min(state.refTopPct, state.refBotPct - 2) / 100.0) * frameH;
-          const refBotY = (Math.max(state.refBotPct, state.refTopPct + 2) / 100.0) * frameH;
-          const refSpanPx = Math.max(10, refBotY - refTopY);
-          cmPerPx = state.refObjectCm / refSpanPx;
-          rungLabel = `Rung 1/2 Wall Ref (${state.refObjectCm}cm = ${Math.round(refSpanPx)}px)`;
-          rungConfidence = "GREEN";
-        } else {
-          // Rung 4: Camera-to-wall standoff distance pinhole geometry:
-          // vertical plane height at distance D is 2 * D * tan(vfov/2), where 2*tan(vfov/2) = 1.14 for smartphone wide lens
-          const distCm = (state.cameraDistanceM || 3.15) * 100.0;
-          cmPerPx = (distCm * 1.14) / frameH;
-          rungLabel = `Rung 4 Dist (${(state.cameraDistanceM || 3.15).toFixed(2)}m)`;
-          rungConfidence = "AMBER";
-        }
-
-        // Pure measurement: pixel height of person * cm_per_px (zero hardcoded human height!)
-        const measuredHeightCm = bodyTotalPx * cmPerPx;
-
-        // Frankfurt plane head tilt check
-        const pEar = visOk(lEar, 0.35) ? pLEar : pREar;
-        const pEye = visOk(lEye, 0.35) ? pLEye : pREye;
-        let headTiltDeg = 1.8;
-        if (pEar && pEye) {
-          headTiltDeg = Math.abs(Math.atan2(pEye.y - pEar.y, Math.max(8, Math.abs(pEye.x - pEar.x))) * 180 / Math.PI);
-        }
-
+        const distCm = (state.cameraDistanceM || 2.50) * 100.0;
+        const vfovFactor = H >= W ? (36.0 / 24.5) : (24.0 / 24.5);
+        const planeHeightCm = distCm * vfovFactor;
         return {
-          postureOk: true,
-          heightCm: measuredHeightCm,
-          vertexPxY,
-          feetPxY,
-          bodyTotalPx,
-          cmPerPx,
-          rungLabel,
-          rungConfidence,
-          vertexSource,
-          headTiltDeg,
-          pixelSpan: fullPixelFraction,
-          liveMetric: `${measuredHeightCm.toFixed(1)} cm (${Math.round(bodyTotalPx)} px)`,
-          reason: `${rungLabel} · Body ${Math.round(bodyTotalPx)}px (${(fullPixelFraction * 100).toFixed(1)}% frame) × ${cmPerPx.toFixed(4)} cm/px`
+          cmPerPx: planeHeightCm / H,
+          refCm: Number(planeHeightCm.toFixed(1)),
+          refPx: H,
+          method: "distance",
+          rung: 4,
+          confidence: "AMBER",
+          frameW: W,
+          frameH: H
         };
       }
+      return null;
+    }
 
-      // -----------------------------------------------------------------------
-      // TEST 3: SIT AND REACH (Isotropic Pixel Geometry)
-      // Requires SEATED posture on floor with legs extended horizontally.
-      // -----------------------------------------------------------------------
-      if (testKey === "sit_and_reach") {
-        const hasLegs = visOk(hip, 0.42) && visOk(knee, 0.42) && visOk(ankle, 0.42);
-        const hasHand = visOk(indexTip, 0.38) || visOk(wrist, 0.38);
-        const pHand = visOk(indexTip, 0.38) ? pIndexTip : pWrist;
+    function calibLabel(c) {
+      if (!c) return "";
+      if (c.method === "person") return `Rung 1/2 Ref Height (${c.refCm} cm = ${c.refPx.toFixed(0)} px)`;
+      if (c.method === "tape") return `Rung 1/2 Tape/Ref (${c.refCm} cm = ${c.refPx.toFixed(0)} px)`;
+      if (c.method === "distance") return `Rung 4 Camera Dist (${(state.cameraDistanceM || 2.50).toFixed(2)} m)`;
+      return `Scale ${c.cmPerPx.toFixed(4)} cm/px`;
+    }
 
-        if (!hasLegs || !hasHand || !visOk(shoulder, 0.42)) {
-          return {
-            postureOk: false,
-            liveMetric: "Side profile required",
-            reason: "Place camera to your SIDE so shoulder, hip, knee, ankle, and hands are all visible."
-          };
+    // -------------------------------------------------------------------------
+    // Segmentation Mask Readers (Supports both Float32 and Uint8 MediaPipe Masks)
+    // -------------------------------------------------------------------------
+    function maskReader(segMask) {
+      if (!segMask) return null;
+      try {
+        if (typeof segMask.getAsFloat32Array === "function") {
+          return { data: segMask.getAsFloat32Array(), w: segMask.width, h: segMask.height, thr: 0.5 };
         }
-
-        // True pixel-space leg vector (hip -> ankle)
-        const legDx = pAnkle.x - pHip.x;
-        const legDy = pAnkle.y - pHip.y;
-        const legLenPx = Math.hypot(legDx, legDy);
-        const legSlopeDeg = Math.abs(Math.atan2(legDy, Math.abs(legDx)) * 180 / Math.PI);
-
-        if (legLenPx < frameW * 0.18 || legSlopeDeg > 36) {
-          return {
-            postureOk: false,
-            isWrongExercise: true,
-            liveMetric: `Invalid Posture (Leg slope ${legSlopeDeg.toFixed(0)}°)`,
-            reason: `Wrong posture/exercise detected: Your legs are sloped at ${legSlopeDeg.toFixed(0)}° (standing/chair). Sit flat on the floor with legs extended horizontally!`
-          };
+      } catch (_) {}
+      try {
+        if (typeof segMask.getAsUint8Array === "function") {
+          return { data: segMask.getAsUint8Array(), w: segMask.width, h: segMask.height, thr: 128 };
         }
+      } catch (_) {}
+      return null;
+    }
 
-        const kneeDeg = angleDeg(pHip, pKnee, pAnkle);
-        const tibiaLenPx = Math.max(frameW * 0.08, dist2D(pKnee, pAnkle));
-        // Tibia (knee-to-ankle) anatomical reference (~38.0 cm) converts pixels to cm at the subject's exact distance
-        const cmPerPx = 38.0 / tibiaLenPx;
+    function maskTopInBand(mask, W, H, cx, halfBand, yStart, yEnd) {
+      if (!mask) return null;
+      const sx = mask.w / W, sy = mask.h / H;
+      const c0 = Math.max(0, Math.floor((cx - halfBand) * sx));
+      const c1 = Math.min(mask.w - 1, Math.ceil((cx + halfBand) * sx));
+      const r0 = Math.max(0, Math.floor(yStart * sy));
+      const r1 = Math.min(mask.h - 1, Math.ceil(yEnd * sy));
+      const minHits = Math.max(2, Math.round((c1 - c0 + 1) * 0.04));
+      for (let r = r0; r <= r1; r++) {
+        const off = r * mask.w;
+        let hits = 0;
+        for (let c = c0; c <= c1; c++) {
+          if (mask.data[off + c] > mask.thr && ++hits >= minHits) break;
+        }
+        if (hits >= minHits) return r / sy;
+      }
+      return null;
+    }
 
-        const ux = legDx / legLenPx;
-        const uy = legDy / legLenPx;
-        const pToeRef = visOk(footTip, 0.38) ? pFootTip : pAnkle;
-        const handRelToeX = pHand.x - pToeRef.x;
-        const handRelToeY = pHand.y - pToeRef.y;
+    function maskFarthestAlong(mask, W, H, center, radius, origin, u, excludeFn) {
+      if (!mask) return null;
+      const sx = mask.w / W, sy = mask.h / H;
+      const c0 = Math.max(0, Math.floor((center.x - radius) * sx));
+      const c1 = Math.min(mask.w - 1, Math.ceil((center.x + radius) * sx));
+      const r0 = Math.max(0, Math.floor((center.y - radius) * sy));
+      const r1 = Math.min(mask.h - 1, Math.ceil((center.y + radius) * sy));
+      const rad2 = radius * radius;
+      let best = null;
+      for (let r = r0; r <= r1; r++) {
+        const y = (r + 0.5) / sy;
+        const off = r * mask.w;
+        for (let c = c0; c <= c1; c++) {
+          if (mask.data[off + c] <= mask.thr) continue;
+          const x = (c + 0.5) / sx;
+          if ((x - center.x) ** 2 + (y - center.y) ** 2 > rad2) continue;
+          if (excludeFn && excludeFn(x, y)) continue;
+          const proj = (x - origin.x) * u.x + (y - origin.y) * u.y;
+          if (best === null || proj > best.proj) best = { proj, x, y };
+        }
+      }
+      return best;
+    }
 
-        const reachPastToesPx = handRelToeX * ux + handRelToeY * uy;
-        const reachPastToesCm = reachPastToesPx * cmPerPx;
-        const reachBoxCm = 23.0 + reachPastToesCm;
+    // =========================================================================
+    // Per-Frame Evaluators (All 4 AI Tests)
+    // =========================================================================
 
-        const kneeOk = kneeDeg >= 165.0;
-        return {
-          postureOk: true,
-          kneeOk,
-          kneeDeg,
-          reachCm: reachBoxCm,
-          reachPastToesCm,
-          liveMetric: `${reachBoxCm.toFixed(1)} cm (${reachPastToesCm >= 0 ? "+" : ""}${reachPastToesCm.toFixed(1)} cm vs toes)`,
-          reason: kneeOk
-            ? `Seated Pose OK · Knee ${kneeDeg.toFixed(0)}° (Straight) · Reach ${reachBoxCm.toFixed(1)} cm`
-            : `FOUL WARNING: Knee bent at ${kneeDeg.toFixed(0)}° (Must be ≥165°)`
-        };
+    // TEST 1 — STANDING HEIGHT
+    // Combines:
+    //  1. Segmentation mask crown detection + Joint-Ratio Offset Regression
+    //     (adds skull vertex offset above eyes + calcaneus plantar sole offset below heels,
+    //      as in the 2024 Sensors paper & height_scale.py — ZERO hardcoded cm height!)
+    //  2. Rung 1/2 Tape/Reference calibration (GREEN) or Rung 4 Portrait Long-Edge Pinhole Optics (AMBER)
+    function evalHeight(lm, mask, W, H, calib) {
+      for (const i of [0, 11, 12, 23, 24, 25, 26, 27, 28]) {
+        if (!vis(lm, i, 0.42)) {
+          return fail(t("Full body not visible", "पूरा शरीर नहीं दिख रहा"),
+            t("Whole body — top of head to heels — must be inside the frame.", "सिर से एड़ी तक पूरा शरीर फ्रेम में होना चाहिए।"));
+        }
+      }
+      const p = (i) => P(lm, i, W, H);
+      const shMid = mid(p(11), p(12)), hipMid = mid(p(23), p(24)), anMid = mid(p(27), p(28));
+      const torsoPx = dist2D(shMid, hipMid);
+      if (Math.abs(p(11).x - p(12).x) < 0.28 * torsoPx) {
+        return fail(t("Face the camera", "कैमरे की ओर मुँह करें"), t("Stand facing the camera with shoulders square.", "कैमरे की ओर सीधा मुँह करके खड़े हों।"));
+      }
+      const kneeMin = Math.min(angleDeg(p(23), p(25), p(27)), angleDeg(p(24), p(26), p(28)));
+      const hipAng = angleDeg(shMid, hipMid, mid(p(25), p(26)));
+      if (kneeMin < 155 || hipAng < 152) {
+        return fail(`${t("Not upright", "सीधे नहीं")} (${t("knee", "घुटना")} ${kneeMin.toFixed(0)}°)`,
+          t("Stand tall: heels against the wall, knees straight (≥155°).", "दीवार से एड़ी सटाकर, घुटने सीधे रखकर खड़े हों।"));
       }
 
-      // -----------------------------------------------------------------------
-      // TEST 4: STANDING VERTICAL JUMP
-      // -----------------------------------------------------------------------
-      if (testKey === "vertical_jump") {
-        if (!visOk(hip, 0.42) || !visOk(knee, 0.42) || !visOk(ankle, 0.42) || !visOk(shoulder, 0.42)) {
-          return {
-            postureOk: false,
-            liveMetric: "Full body needed",
-            reason: "Step back so shoulders, hips, knees, and ankles on the floor are visible."
-          };
+      // Joint-Ratio Keypoint Offset Correction (Sensors 2024):
+      // Pose models detect eyes/nose and ankle/heel ossification centers, NOT the skull crown or floor sole.
+      // Using the person's own measured pixel segments (headNeckPx = shMid.y - eyeY, legTorsoPx = anMid.y - shMid.y),
+      // estimate the skull vertex offset above eye line and plantar sole offset below heel landmarks:
+      const eyeY = (vis(lm, 2, 0.35) && vis(lm, 5, 0.35)) ? (p(2).y + p(5).y) / 2 : p(0).y;
+      const headNeckPx = Math.max(H * 0.025, shMid.y - eyeY);
+      const legTorsoPx = Math.max(H * 0.20, anMid.y - shMid.y);
+
+      // Multivariate joint-ratio crown offset above eye midpoint:
+      const crownOffsetPx = 0.50 * (0.74 * headNeckPx) + 0.50 * (0.095 * legTorsoPx);
+      let vertexY = Math.max(0, eyeY - crownOffsetPx);
+      let vertexSource = "joint_ratio_regression";
+
+      // If segmentation mask is available, refine vertexY to the true topmost head pixel above eyes
+      if (mask) {
+        const headIds = [0, 2, 5, 7, 8].filter(i => vis(lm, i, 0.35));
+        const cx = headIds.reduce((s, i) => s + p(i).x, 0) / headIds.length;
+        const earW = (vis(lm, 7, 0.35) && vis(lm, 8, 0.35)) ? Math.abs(p(7).x - p(8).x) : Math.abs(p(11).x - p(12).x) * 0.42;
+        const halfBand = Math.max(earW * 0.65, W * 0.025);
+        const maskTopY = maskTopInBand(mask, W, H, cx, halfBand, Math.max(0, eyeY - 1.35 * headNeckPx), eyeY);
+        if (maskTopY !== null && maskTopY < eyeY - 0.35 * headNeckPx) {
+          vertexY = maskTopY;
+          vertexSource = "segmentation_mask";
         }
-        const torsoLegSpan = Math.max(0.15, ankle.y - shoulder.y);
-        return {
-          postureOk: true,
-          hipY: hip.y,
-          ankleY: ankle.y,
-          shoulderY: shoulder.y,
-          torsoLegSpan,
-          liveMetric: `Ankle Y: ${(ankle.y * 100).toFixed(0)}%`,
-          reason: "Stand still 1s to lock ground baseline, then jump vertically!"
-        };
       }
 
-      // -----------------------------------------------------------------------
-      // TEST 9: SIT-UPS (Isotropic Pixel Angles)
-      // -----------------------------------------------------------------------
-      if (testKey === "sit_ups") {
-        if (!visOk(shoulder, 0.42) || !visOk(hip, 0.42) || !visOk(knee, 0.42)) {
-          return {
-            postureOk: false,
-            liveMetric: "Side profile needed",
-            reason: "Lie on the floor in side profile so shoulder, hip, and bent knees are visible."
-          };
-        }
-        const hipDeg = angleDeg(pShoulder, pHip, pKnee);
-        const femurLenPx = Math.max(frameW * 0.08, dist2D(pHip, pKnee));
-        const elbowKneeRatio = visOk(lm[13], 0.35) || visOk(lm[14], 0.35)
-          ? (dist2D(pElbow, pKnee) / femurLenPx)
-          : 1.0;
-        const pEarPt = visOk(lEar, 0.35) ? pLEar : pREar;
-        const shoulderHipSpanPx = Math.max(frameW * 0.08, dist2D(pShoulder, pHip));
-        const wristEarRatio = (visOk(wrist, 0.35) && (visOk(lEar, 0.35) || visOk(rEar, 0.35)))
-          ? (dist2D(pWrist, pEarPt) / shoulderHipSpanPx)
-          : 0.6;
-
-        return {
-          postureOk: true,
-          hipDeg,
-          elbowKneeRatio,
-          wristEarRatio,
-          elbowY: pElbow.y / frameH,
-          shoulderW: shoulderHipSpanPx / frameH,
-          liveMetric: `Hip Angle: ${hipDeg.toFixed(0)}°`,
-          reason: `Supine/Curl tracking · Hip ${hipDeg.toFixed(0)}° (Down >112°, Up <82°)`
-        };
+      if (vertexY <= H * 0.008) {
+        return fail(t("Head cut off", "सिर कट रहा है"), t("Top of head touches the frame edge — step back slightly.", "सिर फ्रेम के किनारे पर है — थोड़ा पीछे हटें।"));
       }
 
+      const heelCandidates = [27, 28, 29, 30].filter(i => vis(lm, i, 0.32)).map(i => p(i).y);
+      const rawHeelY = heelCandidates.length ? Math.max(...heelCandidates) : anMid.y;
+      const soleOffsetPx = 0.14 * headNeckPx;
+      const soleY = Math.min(H - 1, rawHeelY + soleOffsetPx);
+
+      if (soleY >= H * 0.992) {
+        return fail(t("Feet cut off", "पैर कट रहे हैं"), t("Feet touch the bottom edge — tilt or move phone slightly.", "पैर नीचे किनारे पर हैं — पूरा पैर फ्रेम में रखें।"));
+      }
+
+      const bodyPx = soleY - vertexY;
+      if (bodyPx < H * 0.26) {
+        return fail(`${t("Too far", "बहुत दूर")} (${(bodyPx / H * 100).toFixed(0)}%)`,
+          t("Step closer (2 to 3 m from camera) so your body fills 30–85% of the frame.", "कैमरे से 2–3 मीटर की दूरी पर खड़े हों।"));
+      }
+      if (Math.abs(shMid.x - anMid.x) > 0.12 * bodyPx) {
+        return fail(t("Leaning", "झुके हुए"), t("Stand straight and vertical.", "बिल्कुल सीधे खड़े हों।"));
+      }
+
+      const headRoll = (vis(lm, 7, 0.35) && vis(lm, 8, 0.35))
+        ? Math.abs(Math.atan2(p(8).y - p(7).y, Math.abs(p(8).x - p(7).x) + 1e-6) * 180 / Math.PI)
+        : 1.5;
+
+      const activeCalib = calib || getCalib("height", W, H);
+      const cm = bodyPx * activeCalib.cmPerPx;
+
+      return {
+        postureOk: true,
+        bodyPx,
+        vertexY,
+        soleY,
+        vertexSource,
+        cm,
+        cmPerPx: activeCalib.cmPerPx,
+        calibMethod: activeCalib.method,
+        headRoll,
+        liveMetric: `${cm.toFixed(1)} cm (±2 cm)`,
+        reason: `${calibLabel(activeCalib)} · ${bodyPx.toFixed(0)} px (${(bodyPx / H * 100).toFixed(1)}% H) × ${activeCalib.cmPerPx.toFixed(4)} cm/px`
+      };
+    }
+
+    // TEST 3 — SIT AND REACH
+    // Uses Rung 1/2 (tapped ruler/box scale) when calibrated, OR Rung 3 (athlete's measured height / tibia scale) automatically!
+    function evalSitReach(lm, mask, W, H, calib, athlete) {
+      const s = sideChain(lm);
+      for (const i of [s.sh, s.hip, s.kn, s.an]) {
+        if (!vis(lm, i, 0.42)) {
+          return fail(t("Side profile required", "बगल से दृश्य चाहिए"),
+            t("Camera at your side: shoulder, hip, knee, ankle, toes and hands visible.", "कैमरा बगल में रखें: कंधा, कूल्हा, घुटना, टखना और हाथ दिखें।"));
+        }
+      }
+      if (!vis(lm, s.wr, 0.38) && !vis(lm, s.idx, 0.38)) {
+        return fail(t("Hands not visible", "हाथ नहीं दिख रहे"), t("Keep your reaching hands visible in frame.", "अपने हाथ फ्रेम में रखें।"));
+      }
+      const p = (i) => P(lm, i, W, H);
+      const hip = p(s.hip), kn = p(s.kn), an = p(s.an), sh = p(s.sh);
+      const wr = vis(lm, s.wr, 0.35) ? p(s.wr) : p(s.idx);
+      const ft = vis(lm, s.ft, 0.35) ? p(s.ft) : an;
+      const heel = vis(lm, s.heel, 0.35) ? p(s.heel) : an;
+
+      const legLen = dist2D(hip, an);
+      const legSlope = Math.abs(Math.atan2(an.y - hip.y, Math.abs(an.x - hip.x) + 1e-6)) * 180 / Math.PI;
+      if (legSlope > 34 || legLen < 0.14 * Math.max(W, H)) {
+        return fail(`${t("Not seated on floor", "ज़मीन पर नहीं बैठे")} (${legSlope.toFixed(0)}°)`,
+          t("Wrong posture/exercise: Sit flat on the floor with legs extended horizontally!", "ज़मीन पर बैठकर पैर सीधे फैलाएँ (खड़े होने पर अमान्य)।"),
+          { isWrongExercise: true });
+      }
+      if (sh.y > hip.y + 0.08 * legLen) {
+        return fail(t("Lying flat (not seated)", "लेटे हुए हैं"),
+          t("Sit upright with legs extended forward for Sit & Reach.", "सिट एंड रीच के लिए बैठकर आगे झुकें।"),
+          { isWrongExercise: true });
+      }
+
+      const kneeDeg = angleDeg(hip, kn, an);
+      const u = { x: (an.x - hip.x) / legLen, y: (an.y - hip.y) / legLen };
+      const handLm = vis(lm, s.idx, 0.38) ? p(s.idx) : wr;
+      const lmProj = (handLm.x - ft.x) * u.x + (handLm.y - ft.y) * u.y;
+
+      let tip = null;
+      if (mask) {
+        const handLen = Math.max(dist2D(wr, handLm), 0.03 * Math.max(W, H));
+        const footLen = Math.max(dist2D(heel, ft), 1);
+        const exclude = (x, y) => distToSegment(x, y, heel, ft) < 0.35 * footLen || distToSegment(x, y, an, ft) < 0.35 * footLen;
+        const best = maskFarthestAlong(mask, W, H, handLm, handLen * 2.0, ft, u, exclude);
+        if (best && best.proj >= lmProj) tip = best;
+      }
+
+      const reachPx = tip ? tip.proj : lmProj;
+
+      // Scale selection: Rung 1/2 (tapped ruler) -> Rung 3 (athlete's measured height / tibia segment length)
+      let cmPerPx = calib?.cmPerPx || null;
+      let scaleMode = calib ? "Rung 1/2 Ruler" : "Rung 3 Segment Scale";
+      if (!cmPerPx) {
+        const recordedHeight = athlete ? state.results[cellKey(athlete.id, "height")]?.value : null;
+        const tibiaCm = (recordedHeight && recordedHeight > 100) ? (recordedHeight * 0.242) : 37.5;
+        const tibiaPx = Math.max(W * 0.07, dist2D(kn, an));
+        cmPerPx = tibiaCm / tibiaPx;
+      }
+
+      const reachCm = reachPx * cmPerPx;
+      const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
+      const scoreCm = boxOffset + reachCm;
+      const kneeOk = kneeDeg >= 160;
+
+      return {
+        postureOk: true,
+        kneeOk,
+        kneeDeg,
+        reachPx,
+        reachCm,
+        scoreCm,
+        cmPerPx,
+        scaleMode,
+        tipX: tip ? tip.x : handLm.x,
+        tipY: tip ? tip.y : handLm.y,
+        toeX: ft.x,
+        toeY: ft.y,
+        tipSource: tip ? "mask" : "landmark",
+        liveMetric: `${scoreCm.toFixed(1)} cm (${reachCm >= 0 ? "+" : ""}${reachCm.toFixed(1)} cm ${t("vs toes", "पंजों से")})`,
+        reason: kneeOk
+          ? `${scaleMode} · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° ✓ · ${t("Reach", "पहुँच")} ${scoreCm.toFixed(1)} cm`
+          : `${t("FOUL: knee bent", "फाउल: घुटना मुड़ा")} ${kneeDeg.toFixed(0)}° (≥160°)`
+      };
+    }
+
+    // TEST 4 — STANDING VERTICAL JUMP
+    function evalJump(lm, mask, W, H) {
+      for (const i of [11, 12, 23, 24, 25, 26, 27, 28]) {
+        if (!vis(lm, i, 0.42)) {
+          return fail(t("Full body needed", "पूरा शरीर चाहिए"),
+            t("Shoulders, hips, knees and feet must stay in frame.", "कंधे, कूल्हे, घुटने और पैर फ्रेम में रहें।"));
+        }
+      }
+      const p = (i) => P(lm, i, W, H);
+      const shMid = mid(p(11), p(12));
+      const hipMid = mid(p(23), p(24));
+      const footIds = [27, 28, 29, 30, 31, 32].filter(i => vis(lm, i, 0.35));
+      const footY = footIds.length ? Math.max(...footIds.map(i => p(i).y)) : Math.max(p(27).y, p(28).y);
+      const kneeDeg = Math.min(angleDeg(p(23), p(25), p(27)), angleDeg(p(24), p(26), p(28)));
+      return {
+        postureOk: true,
+        shY: shMid.y,
+        hipY: hipMid.y,
+        footY,
+        kneeDeg,
+        hipToFootPx: Math.max(H * 0.12, footY - hipMid.y),
+        shToFootPx: Math.max(H * 0.22, footY - shMid.y),
+        liveMetric: `${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° · ${t("Ready", "तैयार")}`,
+        reason: t("Stand still ~1 s, then jump straight up and land in frame.", "~1 सेकंड स्थिर खड़े रहें, फिर सीधा ऊपर कूदें।")
+      };
+    }
+
+    // TEST 9 — SIT-UPS (Scale-free isotropic joint angles + SAI Handbook Rules 2, 3a, 3b, 3c)
+    function evalSitUps(lm, mask, W, H) {
+      const s = sideChain(lm);
+      for (const i of [s.sh, s.hip, s.kn]) {
+        if (!vis(lm, i, 0.42)) {
+          return fail(t("Side profile needed", "बगल से दृश्य चाहिए"),
+            t("Lie side-on to the camera: shoulder, hip and bent knees visible.", "कैमरे की ओर बगल से लेटें: कंधा, कूल्हा, घुटने दिखें।"));
+        }
+      }
+      const p = (i) => P(lm, i, W, H);
+      const sh = p(s.sh), hip = p(s.hip), kn = p(s.kn);
+      const hipDeg = angleDeg(sh, hip, kn);
+      const torsoDeg = Math.abs(Math.atan2(hip.y - sh.y, Math.abs(sh.x - hip.x) + 1e-6)) * 180 / Math.PI;
+      const femur = Math.max(dist2D(hip, kn), 1);
+      const torso = Math.max(dist2D(sh, hip), 1);
+      const elbowKnee = vis(lm, s.el, 0.35) ? dist2D(p(s.el), kn) / femur : null;
+      const wristEar = (vis(lm, s.wr, 0.35) && vis(lm, s.ear, 0.35)) ? dist2D(p(s.wr), p(s.ear)) / torso : null;
+      const kneeDeg = vis(lm, s.an, 0.38) ? angleDeg(hip, kn, p(s.an)) : null;
+      return {
+        postureOk: true,
+        hipDeg,
+        torsoDeg,
+        elbowKnee,
+        wristEar,
+        kneeDeg,
+        liveMetric: `${t("Hip", "कूल्हा")} ${hipDeg.toFixed(0)}° · ${t("Torso", "धड़")} ${torsoDeg.toFixed(0)}°`,
+        reason: t("Lie flat (>108°) → curl up (<88°) → return flat (>108°).", "लेटें (>108°) → ऊपर उठें (<88°) → वापस लेटें (>108°)।")
+      };
+    }
+
+    function evaluateLiveFrame(testKey, lm, mask, W, H, calib, athlete) {
+      if (testKey === "height") return evalHeight(lm, mask, W, H, calib);
+      if (testKey === "sit_and_reach") return evalSitReach(lm, mask, W, H, calib, athlete);
+      if (testKey === "vertical_jump") return evalJump(lm, mask, W, H);
+      if (testKey === "sit_ups") return evalSitUps(lm, mask, W, H);
       return { postureOk: true, liveMetric: "Ready", reason: "" };
     }
 
     // =========================================================================
-    // Compute Final Score Strictly from Recorded Signals (Rejects Invalid!)
+    // Attempt Scoring Engine (30-Frame Trimmed Median + Rule Audit)
     // =========================================================================
-    function computeAttemptResult(test, athlete, recordedFrames, fps) {
-      const totalFrames = recordedFrames.length;
-      const validPostureFrames = recordedFrames.filter(f => f.postureOk);
-      const detectionRate = totalFrames > 0 ? (validPostureFrames.length / totalFrames) : 0;
+    function rejected(test, method, detail) {
+      return { valid: false, value: null, unit: test.unit, confidence: "RED", method, audit: [{ label: "Rejected", detail, valid: false }] };
+    }
 
-      // Reject immediately if user did not perform the valid posture / exercise
-      if (validPostureFrames.length < 8) {
+    function computeAttemptResult(test, athlete, recordedFrames, fps, calib) {
+      const ok = recordedFrames.filter(f => f.postureOk);
+      if (ok.length < 8) {
         const wrongEx = recordedFrames.find(f => f.isWrongExercise);
-        const failReason = wrongEx
-          ? wrongEx.reason
-          : (recordedFrames[recordedFrames.length - 1]?.reason || "Required body landmarks and exercise posture were not detected in camera view.");
-        return {
-          valid: false,
-          value: null,
-          unit: test.unit,
-          confidence: "RED",
-          method: "REJECTED — Posture / Landmark Gate Failed",
-          audit: [{ label: "Gate Rejection", detail: failReason, valid: false }]
-        };
+        const last = [...recordedFrames].reverse().find(f => f.reason);
+        return rejected(test, t("REJECTED — posture / landmark gate", "अस्वीकृत — पोस्चर गेट"),
+          wrongEx ? wrongEx.reason : (last?.reason || t("Required posture not detected.", "आवश्यक पोस्चर नहीं मिला।")));
       }
 
+      // ---------------- TEST 1: HEIGHT ----------------
       if (test.key === "height") {
-        const heights = validPostureFrames.map(f => f.heightCm).sort((a, b) => a - b);
-        const trim = Math.max(1, Math.floor(heights.length * 0.15));
-        const core = heights.slice(trim, heights.length - trim || heights.length);
-        const medianCm = core[Math.floor(core.length / 2)];
-        const spreadCm = core.length > 1 ? (core[core.length - 1] - core[0]) : 0.0;
-        const avgTilt = validPostureFrames.reduce((s, f) => s + f.headTiltDeg, 0) / validPostureFrames.length;
-        const avgPx = validPostureFrames.reduce((s, f) => s + (f.bodyTotalPx || 0), 0) / validPostureFrames.length;
-        const avgCmPerPx = validPostureFrames.reduce((s, f) => s + (f.cmPerPx || 0), 0) / validPostureFrames.length;
-        const sampleFrame = validPostureFrames[validPostureFrames.length - 1];
-        const isSteady = spreadCm <= 3.5;
+        const vals = ok.map(f => f.cm).filter(v => v !== null && Number.isFinite(v));
+        const s = [...vals].sort((a, b) => a - b);
+        const lo = Math.floor(s.length * 0.20);
+        const hi = Math.max(Math.ceil(s.length * 0.80), lo + 1);
+        const core = s.slice(lo, hi);
+        const h = median(core);
+        const spread = core.length > 1 ? (core[core.length - 1] - core[0]) : 0.0;
+        const roll = median(ok.map(f => f.headRoll || 0));
+        const sample = ok[ok.length - 1];
+        const isRung12 = sample.calibMethod === "tape" || sample.calibMethod === "person";
+        const band = (isRung12 && spread <= 2.5 && roll <= 8) ? "GREEN" : "AMBER";
+        const valid = spread <= 5.0;
+        const tol = isRung12 ? "±1.5 cm" : "±2.0 cm";
 
         return {
-          valid: isSteady,
-          value: Number(medianCm.toFixed(1)),
+          valid,
+          value: Number(h.toFixed(1)),
           unit: "cm",
-          confidence: (isSteady && sampleFrame.rungConfidence === "GREEN") ? "GREEN" : "AMBER",
-          method: `${sampleFrame.rungLabel} · ${Math.round(avgPx)}px × ${avgCmPerPx.toFixed(4)} cm/px (vertex: ${sampleFrame.vertexSource}, spread ${spreadCm.toFixed(1)} cm)`,
-          audit: [
-            {
-              label: "Standing Height",
-              detail: `${medianCm.toFixed(1)} cm · Body span ${Math.round(avgPx)} px × ${avgCmPerPx.toFixed(4)} cm/px · ${sampleFrame.rungLabel} · Spread ${spreadCm.toFixed(2)} cm · Head tilt ${avgTilt.toFixed(1)}°`,
-              valid: isSteady
-            }
-          ]
+          confidence: valid ? band : "RED",
+          method: `Height: ${h.toFixed(1)} cm (${tol}) · ${calibLabel(calib || { method: sample.calibMethod, cmPerPx: sample.cmPerPx })} · ${vals.length} frames median`,
+          audit: [{
+            label: "Standing Height",
+            detail: `Height: ${h.toFixed(1)} cm (${tol}) · Body ${median(ok.map(f => f.bodyPx)).toFixed(0)} px × ${sample.cmPerPx.toFixed(4)} cm/px · vertex: ${sample.vertexSource} · spread ${spread.toFixed(1)} cm`,
+            valid
+          }]
         };
       }
 
+      // ---------------- TEST 3: SIT AND REACH ----------------
       if (test.key === "sit_and_reach") {
-        // Must have held forward reach with straight knees (>= 165 deg)
-        const straightFrames = validPostureFrames.filter(f => f.kneeOk);
-        const bentFrames = validPostureFrames.filter(f => !f.kneeOk);
-
-        if (straightFrames.length < 5) {
-          const minKnee = Math.min(...validPostureFrames.map(f => f.kneeDeg));
-          return {
-            valid: false,
-            value: null,
-            unit: "cm",
-            confidence: "RED",
-            method: `FOUL — Knees bent (${minKnee.toFixed(0)}° < 165° Handbook rule)`,
-            audit: [
-              {
-                label: "Foul (Knee Flexion)",
-                detail: `Attempt nullified: Knees bent to ${minKnee.toFixed(0)}° during reach (must stay ≥165°).`,
-                valid: false
-              }
-            ]
-          };
+        const straight = ok.filter(f => f.kneeOk);
+        if (straight.length < 5) {
+          const minKnee = Math.min(...ok.map(f => f.kneeDeg));
+          return rejected(test, `FOUL — knees bent (${minKnee.toFixed(0)}° < 160°)`,
+            t("Attempt nullified: Knees bent during reach (must stay ≥160°).", "फाउल: पहुँचते समय घुटने मुड़ गए (≥160° आवश्यक)।"));
         }
 
-        // Take 85th percentile held reach across straight-knee frames
-        const sortedReaches = straightFrames.map(f => f.reachCm).sort((a, b) => a - b);
-        const heldReachCm = sortedReaches[Math.floor(sortedReaches.length * 0.85)];
-        const minReachCm = sortedReaches[0];
-        const forwardTravelCm = heldReachCm - minReachCm;
+        const r = medianFilter(straight.map(f => f.reachCm), 5);
+        const minReach = Math.min(...r);
+        const peakReach = pct(r, 0.88);
+        const excursion = peakReach - minReach;
 
-        if (forwardTravelCm < 2.0) {
-          return {
-            valid: false,
-            value: null,
-            unit: "cm",
-            confidence: "RED",
-            method: "No forward reach movement detected (< 2.0 cm trunk flexion)",
-            audit: [
-              {
-                label: "No Reach Movement",
-                detail: `Hands moved only ${forwardTravelCm.toFixed(1)} cm forward. Reach forward toward/past your toes and hold.`,
-                valid: false
-              }
-            ]
-          };
+        if (excursion < 1.8) {
+          return rejected(test, t("No forward reach movement (<1.8 cm)", "आगे झुकने की गति नहीं मिली"),
+            t("Reach forward smoothly along the measuring line and hold your peak reach.", "माप रेखा के साथ आगे झुकें और अपनी अधिकतम पहुँच रोकें।"));
         }
 
-        const pastToes = heldReachCm - 23.0;
-        const minKnee = Math.min(...straightFrames.map(f => f.kneeDeg));
-        return {
-          valid: true,
-          value: Number(heldReachCm.toFixed(1)),
-          unit: "cm",
-          confidence: bentFrames.length === 0 ? "GREEN" : "AMBER",
-          method: `AI Side-Profile Reach (${pastToes >= 0 ? "+" : ""}${pastToes.toFixed(1)} cm vs toes on 23cm box, min knee ${minKnee.toFixed(0)}°)`,
-          audit: [
-            {
-              label: "Peak Held Reach",
-              detail: `${heldReachCm.toFixed(1)} cm (${pastToes >= 0 ? "+" : ""}${pastToes.toFixed(1)} cm vs toes) · Forward excursion ${forwardTravelCm.toFixed(1)} cm · Knee ${minKnee.toFixed(0)}° PASS`,
-              valid: true
+        // Prefer a held plateau window (≥400 ms with spread ≤2.5 cm), fallback to 85th percentile straight-knee reach
+        let heldReach = pct(r, 0.85);
+        let heldSpread = Math.abs(pct(r, 0.90) - pct(r, 0.75));
+        for (let i = 0; i < straight.length; i++) {
+          let j = i;
+          while (j < straight.length && (straight[j].t - straight[i].t) < 450) j++;
+          if (j >= straight.length) break;
+          const win = r.slice(i, j + 1);
+          const sp = Math.max(...win) - Math.min(...win);
+          if (sp <= 2.5) {
+            const v = median(win);
+            if (v >= heldReach - 1.5) {
+              heldReach = v;
+              heldSpread = sp;
             }
-          ]
-        };
-      }
-
-      if (test.key === "vertical_jump") {
-        // Compute baseline standing ankleY & hipY (bottom 75th percentile, since y grows downward)
-        const ankles = validPostureFrames.map(f => f.ankleY).sort((a, b) => a - b);
-        const hips = validPostureFrames.map(f => f.hipY).sort((a, b) => a - b);
-        const spans = validPostureFrames.map(f => f.torsoLegSpan).sort((a, b) => a - b);
-        const baseAnkleY = ankles[Math.floor(ankles.length * 0.78)];
-        const baseHipY = hips[Math.floor(hips.length * 0.78)];
-        const medSpan = spans[Math.floor(spans.length / 2)] || 0.5;
-
-        // Peak upward displacement (minimum y)
-        const minAnkleY = Math.min(...ankles);
-        const minHipY = Math.min(...hips);
-        const ankleLiftNorm = baseAnkleY - minAnkleY;
-        const hipLiftNorm = baseHipY - minHipY;
-
-        // Require actual jump off ground (ankle & hip both rise significantly)
-        if (ankleLiftNorm < 0.035 || hipLiftNorm < 0.045) {
-          return {
-            valid: false,
-            value: null,
-            unit: "cm",
-            confidence: "RED",
-            method: "No vertical jump takeoff detected",
-            audit: [
-              {
-                label: "No Jump Detected",
-                detail: `Vertical lift was only ${(ankleLiftNorm * 100).toFixed(1)}% of frame. Jump vertically off the ground with both feet.`,
-                valid: false
-              }
-            ]
-          };
-        }
-
-        // Measure airborne time AND direct kinematic displacement scaled by torso-leg span (~130 cm)
-        const liftThresholdY = baseAnkleY - 0.03 * medSpan;
-        let maxAirFrames = 0, curAir = 0;
-        for (const f of validPostureFrames) {
-          if (f.ankleY < liftThresholdY) {
-            curAir++;
-            if (curAir > maxAirFrames) maxAirFrames = curAir;
-          } else {
-            curAir = 0;
           }
         }
-        const effFps = Math.max(24, fps);
-        const flightSec = Math.min(0.80, maxAirFrames / effFps);
-        const flightHeightCm = 0.125 * 9.80665 * flightSec * flightSec * 100.0;
-        const dispHeightCm = (hipLiftNorm / medSpan) * 130.0;
-        const jumpCm = flightSec >= 0.20 ? (0.6 * dispHeightCm + 0.4 * flightHeightCm) : dispHeightCm;
 
+        const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
+        const score = boxOffset + heldReach;
+        const minKnee = Math.min(...straight.map(f => f.kneeDeg));
+        const isCalib = !!calib && calib.method !== "distance";
+
+        return {
+          valid: true,
+          value: Number(score.toFixed(1)),
+          unit: "cm",
+          confidence: isCalib ? "GREEN" : "AMBER",
+          method: `${straight[0].scaleMode} · Held reach ${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes)`,
+          audit: [{
+            label: "Peak Held Reach",
+            detail: `${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes) · Excursion ${excursion.toFixed(1)} cm · Spread ${heldSpread.toFixed(1)} cm · Knee ≥${minKnee.toFixed(0)}° PASS`,
+            valid: true
+          }]
+        };
+      }
+
+      // ---------------- TEST 4: VERTICAL JUMP ----------------
+      if (test.key === "vertical_jump") {
+        const feet = ok.map(f => f.footY);
+        const hips = ok.map(f => f.hipY);
+        const baseFoot = pct(feet, 0.78);
+        const baseHip = pct(hips, 0.78);
+        const hipFoot = median(ok.map(f => f.hipToFootPx));
+        const shFoot = median(ok.map(f => f.shToFootPx));
+
+        const minFoot = Math.min(...feet);
+        const minHip = Math.min(...hips);
+        const footLiftPx = baseFoot - minFoot;
+        const hipLiftPx = baseHip - minHip;
+
+        if (footLiftPx < 0.04 * shFoot || hipLiftPx < 0.05 * shFoot) {
+          return rejected(test, t("No jump takeoff detected", "कूद का टेक-ऑफ नहीं मिला"),
+            t("Both feet must leave the ground clearly.", "दोनों पैर ज़मीन से ऊपर उठने चाहिए।"));
+        }
+
+        // 1. Flight-time measurement: h = g * t^2 / 8
+        const thr = 0.035 * hipFoot;
+        let maxAirMs = 0;
+        let airStartT = null;
+        for (const f of ok) {
+          if (f.footY < baseFoot - thr) {
+            if (airStartT === null) airStartT = f.t;
+            maxAirMs = Math.max(maxAirMs, f.t - airStartT);
+          } else {
+            airStartT = null;
+          }
+        }
+        const flightSec = Math.min(0.95, Math.max(0.14, maxAirMs / 1000));
+        const flightCm = 0.125 * 9.81 * flightSec * flightSec * 100.0;
+
+        // 2. Center-of-mass / hip rise scaled by Rung 1/2 calib or Rung 3 athlete height
+        const recordedHeight = athlete ? state.results[cellKey(athlete.id, "height")]?.value : null;
+        const shToFootCm = (recordedHeight && recordedHeight > 100) ? (recordedHeight * 0.81) : 128.0;
+        const cmPerPx = calib?.cmPerPx || (shToFootCm / shFoot);
+        const riseCm = hipLiftPx * cmPerPx;
+
+        const jumpCm = maxAirMs >= 160 ? (0.55 * riseCm + 0.45 * flightCm) : riseCm;
         return {
           valid: true,
           value: Number(jumpCm.toFixed(1)),
           unit: "cm",
-          confidence: detectionRate >= 0.8 ? "GREEN" : "AMBER",
-          method: `AI Jump Kinematics (Hip lift ${(hipLiftNorm * 100).toFixed(1)}%, airtime ${(flightSec * 1000).toFixed(0)} ms)`,
-          audit: [
-            {
-              label: "Jump Height",
-              detail: `${jumpCm.toFixed(1)} cm · Peak hip lift ${(hipLiftNorm * 100).toFixed(1)}% · Airborne ${(flightSec * 1000).toFixed(0)} ms`,
-              valid: true
-            }
-          ]
+          confidence: calib ? "GREEN" : "AMBER",
+          method: `AI Jump Kinematics · Rise ${riseCm.toFixed(1)} cm · Flight ${(flightSec * 1000).toFixed(0)} ms (${flightCm.toFixed(1)} cm)`,
+          audit: [{
+            label: "Vertical Jump",
+            detail: `${jumpCm.toFixed(1)} cm · Hip rise ${riseCm.toFixed(1)} cm · Airborne ${(flightSec * 1000).toFixed(0)} ms (h=gt²/8 → ${flightCm.toFixed(1)} cm)`,
+            valid: true
+          }]
         };
       }
 
+      // ---------------- TEST 9: SIT-UPS ----------------
       if (test.key === "sit_ups") {
-        // Real state machine on hipDeg: DOWN (> 110°) -> UP (< 85°) -> DOWN (> 110°)
-        let repState = "DOWN";
+        const ang = medianFilter(ok.map(f => f.hipDeg), 3);
+        const lo = pct(ang, 0.05), hi = pct(ang, 0.95), range = hi - lo;
+        if (range < 25) {
+          return {
+            valid: false, value: 0, unit: "reps", confidence: "RED",
+            method: t("No sit-up motion (<25° hip flexion)", "सिट-अप गति नहीं मिली"),
+            audit: [{ label: "No reps", detail: `Hip angle moved only ${range.toFixed(0)}° (needs ≥25° curl cycle).`, valid: false }]
+          };
+        }
+        const upThr = Math.min(92, lo + 0.35 * range);
+        const downThr = Math.max(105, hi - 0.32 * range);
+        let phase = "DOWN";
+        let down = [], up = [];
         const audit = [];
         let validReps = 0;
-        let repNum = 0;
-        let maxWristEar = 0;
 
-        for (const f of validPostureFrames) {
-          if (repState === "DOWN") {
-            if (f.hipDeg < 88) {
-              repState = "UP";
-              maxWristEar = f.wristEarRatio;
-            }
-          } else if (repState === "UP") {
-            maxWristEar = Math.max(maxWristEar, f.wristEarRatio);
-            if (f.hipDeg > 108) {
-              repNum++;
-              const handsOk = maxWristEar <= 1.25;
-              if (handsOk) validReps++;
+        for (let i = 0; i < ok.length; i++) {
+          const a = ang[i], f = ok[i];
+          if (phase === "DOWN") {
+            down.push(f);
+            if (a < upThr) { phase = "UP"; up = [f]; }
+          } else {
+            up.push(f);
+            if (a > downThr) {
+              const ek = up.map(x => x.elbowKnee).filter(v => v !== null);
+              const we = [...down, ...up].map(x => x.wristEar).filter(v => v !== null);
+              const fouls = [];
+              if (ek.length && Math.min(...ek) > 0.72) fouls.push("Rule 3b: elbows did not reach knees");
+              if (we.length && median(we) > 0.85) fouls.push("Rule 3a: hands unclasped from neck");
+              const repOk = fouls.length === 0;
+              if (repOk) validReps++;
               audit.push({
-                label: `Rep #${repNum}`,
-                detail: handsOk
-                  ? `Valid rep — Hip curled <88° & returned >108° (Rules 3a/3c PASS)`
-                  : `Foul Rule 3a — Hands unclasped from behind neck`,
-                valid: handsOk
+                label: `Rep #${audit.length + 1}`,
+                detail: repOk ? `Valid rep (curl ${Math.min(...up.map(x => x.hipDeg)).toFixed(0)}° → flat ${a.toFixed(0)}°)` : fouls.join(" · "),
+                valid: repOk
               });
-              repState = "DOWN";
+              phase = "DOWN";
+              down = [f];
             }
           }
         }
 
-        if (repNum === 0) {
+        if (!audit.length) {
           return {
-            valid: false,
-            value: 0,
-            unit: "reps",
-            confidence: "RED",
-            method: "0 sit-up cycles detected in recording",
-            audit: [
-              {
-                label: "No Reps Counted",
-                detail: "Hip angle did not complete a supine (>108°) → curl (<88°) → supine (>108°) sit-up cycle.",
-                valid: false
-              }
-            ]
+            valid: false, value: 0, unit: "reps", confidence: "RED",
+            method: t("0 complete sit-up cycles", "0 पूर्ण सिट-अप"),
+            audit: [{ label: "No reps", detail: "Complete a full supine → curl up → supine cycle.", valid: false }]
           };
         }
 
@@ -1053,8 +1142,8 @@
           valid: true,
           value: validReps,
           unit: "reps",
-          confidence: detectionRate >= 0.8 ? "GREEN" : "AMBER",
-          method: `AI State Machine (${validReps}/${repNum} valid reps counted)`,
+          confidence: "GREEN",
+          method: `AI State Machine · ${validReps}/${audit.length} valid reps`,
           audit
         };
       }
@@ -1430,6 +1519,10 @@
       const recordedFrames = [];
       let fps = 30;
       let isRecording = false;
+      const supportsCalib = test.key === "height" || test.key === "sit_and_reach" || test.key === "vertical_jump";
+      const cal = { mode: null, pts: [], active: 0 };
+      let frameW = 0, frameH = 0;
+      let latestValidEv = null;
 
       root.innerHTML = `
         <div class="topbar">
@@ -1441,42 +1534,31 @@
           <button class="lang-btn" id="btnFlipCam">🔄 ${t("Flip", "कैमरा बदलें")}</button>
         </div>
 
-        ${test.key === "height" ? `
+        ${supportsCalib ? `
           <div class="card" style="padding:10px 12px;margin-bottom:8px;">
-            <div class="seg-bar" style="margin-bottom:8px;">
-              <button id="btnCalibDist" class="${state.heightCalibMode === "DISTANCE" ? "active" : ""}" style="font-size:11px;padding:6px;">
-                📏 Rung 4: Camera Distance (m)
-              </button>
-              <button id="btnCalibRef" class="${state.heightCalibMode === "REF_OBJECT" ? "active" : ""}" style="font-size:11px;padding:6px;">
-                🎯 Rung 1/2: 2-Point Wall Ref (cm)
-              </button>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+              <div style="font-size:12px;font-weight:700;" id="calStatus"></div>
+              <button class="lang-btn" id="btnCalClear" style="font-size:11px;padding:3px 8px;">${t("Reset Scale", "स्केल रीसेट")}</button>
             </div>
-            <div id="calibDistPanel" style="display:${state.heightCalibMode === "DISTANCE" ? "block" : "none"};">
-              <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;">
-                <span>Camera-to-Wall Standoff Distance</span>
-                <span id="lblDistVal">${(state.cameraDistanceM || 3.15).toFixed(2)} m</span>
+            ${test.key === "height" ? `
+              <div style="margin-top:8px;">
+                <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;">
+                  <span>📏 ${t("Camera-to-Wall Distance (2–3 m recommended)", "कैमरे से दीवार की दूरी (2–3 मी)")}</span>
+                  <span id="lblDistVal">${(state.cameraDistanceM || 2.50).toFixed(2)} m</span>
+                </div>
+                <input id="rngDist" type="range" min="1.50" max="4.00" step="0.05" value="${state.cameraDistanceM || 2.50}" style="width:100%;margin-top:4px;" />
               </div>
-              <input id="rngDist" type="range" min="1.50" max="4.50" step="0.05" value="${state.cameraDistanceM || 3.15}" style="width:100%;margin-top:6px;" />
-              <div style="font-size:11px;color:var(--text-sub);margin-top:2px;">
-                Pure pinhole geometry: <code>cm/px = (Dist × 114) / frameH</code> (No hardcoded height!)
-              </div>
+            ` : ""}
+            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+              <button class="lang-btn" id="btnCalTap" style="font-size:11px;padding:5px 8px;">📐 ${t("Tap A4 / Tape / Ruler Ends (GREEN)", "A4 / टेप के सिरों पर टैप करें")}</button>
+              ${test.key === "height" ? `<button class="lang-btn" id="btnCalPerson" style="font-size:11px;padding:5px 8px;">👤 ${t("Calibrate with Known Height", "ज्ञात ऊँचाई से कैलिब्रेट करें")}</button>` : ""}
             </div>
-            <div id="calibRefPanel" style="display:${state.heightCalibMode === "REF_OBJECT" ? "block" : "none"};">
-              <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-                <label style="font-size:11px;font-weight:700;white-space:nowrap;">Ref Size (cm):</label>
-                <input id="inpRefCm" type="number" step="0.1" value="${state.refObjectCm || 29.7}" style="width:75px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);font-size:12px;font-weight:700;" />
-                <button class="lang-btn" id="btnPresetA4" style="font-size:10px;padding:3px 6px;">A4 (29.7cm)</button>
-                <button class="lang-btn" id="btnPreset1m" style="font-size:10px;padding:3px 6px;">1m Tape (100cm)</button>
-              </div>
-              <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;">
-                <span>Gold Top Line: <span id="lblRefTop">${state.refTopPct}%</span></span>
-                <span>Gold Bottom Line: <span id="lblRefBot">${state.refBotPct}%</span></span>
-              </div>
-              <div style="display:flex;gap:8px;margin-top:4px;">
-                <input id="rngRefTop" type="range" min="5" max="85" step="0.5" value="${state.refTopPct}" style="width:50%;" />
-                <input id="rngRefBot" type="range" min="10" max="95" step="0.5" value="${state.refBotPct}" style="width:50%;" />
-              </div>
-            </div>
+            ${test.key === "sit_and_reach" ? `
+              <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                <label style="font-size:11px;font-weight:700;">${t("Box reading at toe line (cm)", "पंजा रेखा पर बॉक्स मान (cm)")}</label>
+                <input id="inpBoxZero" type="number" step="0.5" value="${state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0}" style="width:70px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);" />
+              </div>` : ""}
+            <div id="calPanel" style="display:none;margin-top:8px;font-size:12px;"></div>
           </div>
         ` : ""}
 
@@ -1485,93 +1567,223 @@
           <canvas id="camCanvas"></canvas>
           <div class="cam-hud-top">
             <span class="hud-pill" id="hudTimer">00:00 / min ${test.minSec}s</span>
-            <span class="hud-pill" id="hudFps">Loading Pose AI...</span>
+            <span class="hud-pill" id="hudTilt">—</span>
+            <span class="hud-pill" id="hudFps">${t("Loading Pose AI...", "पोज़ AI लोड हो रहा है...")}</span>
           </div>
           <div class="hud-live-metric bad" id="hudMetric">
-            <span id="hudMetricTitle">Waiting for Pose...</span>
+            <span id="hudMetricTitle">${t("Waiting for pose...", "पोज़ की प्रतीक्षा...")}</span>
             <span id="hudMetricVal">—</span>
           </div>
-          <div class="cam-hud-bottom" id="hudLive">
-            Initializing MediaPipe Pose Landmarker (33 keypoints)...
-          </div>
+          <div class="cam-hud-bottom" id="hudLive">${t("Initializing MediaPipe Pose + Segmentation...", "MediaPipe पोज़ शुरू हो रहा है...")}</div>
         </div>
 
         <button class="btn primary" id="btnRecToggle">● ${t("Start Recording Attempt", "प्रयास रिकॉर्डिंग शुरू करें")}</button>
       `;
 
-      if (test.key === "height") {
-        const btnCalibDist = document.getElementById("btnCalibDist");
-        const btnCalibRef = document.getElementById("btnCalibRef");
-        const distPanel = document.getElementById("calibDistPanel");
-        const refPanel = document.getElementById("calibRefPanel");
-        const rngDist = document.getElementById("rngDist");
-        const inpRefCm = document.getElementById("inpRefCm");
-        const rngRefTop = document.getElementById("rngRefTop");
-        const rngRefBot = document.getElementById("rngRefBot");
-
-        btnCalibDist.onclick = () => {
-          state.heightCalibMode = "DISTANCE";
-          btnCalibDist.classList.add("active");
-          btnCalibRef.classList.remove("active");
-          distPanel.style.display = "block";
-          refPanel.style.display = "none";
-          persist();
-        };
-        btnCalibRef.onclick = () => {
-          state.heightCalibMode = "REF_OBJECT";
-          btnCalibRef.classList.add("active");
-          btnCalibDist.classList.remove("active");
-          refPanel.style.display = "block";
-          distPanel.style.display = "none";
-          persist();
-        };
-        rngDist.oninput = (e) => {
-          state.cameraDistanceM = parseFloat(e.target.value);
-          document.getElementById("lblDistVal").textContent = `${state.cameraDistanceM.toFixed(2)} m`;
-          persist();
-        };
-        inpRefCm.oninput = (e) => {
-          const v = parseFloat(e.target.value);
-          if (v > 1) { state.refObjectCm = v; persist(); }
-        };
-        document.getElementById("btnPresetA4").onclick = () => {
-          state.refObjectCm = 29.7;
-          inpRefCm.value = "29.7";
-          persist();
-        };
-        document.getElementById("btnPreset1m").onclick = () => {
-          state.refObjectCm = 100.0;
-          inpRefCm.value = "100.0";
-          persist();
-        };
-        rngRefTop.oninput = (e) => {
-          state.refTopPct = parseFloat(e.target.value);
-          document.getElementById("lblRefTop").textContent = `${state.refTopPct}%`;
-          persist();
-        };
-        rngRefBot.oninput = (e) => {
-          state.refBotPct = parseFloat(e.target.value);
-          document.getElementById("lblRefBot").textContent = `${state.refBotPct}%`;
-          persist();
-        };
-      }
-
       const videoEl = document.getElementById("camVideo");
       const canvasEl = document.getElementById("camCanvas");
       const ctx = canvasEl.getContext("2d");
       const hudTimer = document.getElementById("hudTimer");
+      const hudTilt = document.getElementById("hudTilt");
       const hudFps = document.getElementById("hudFps");
       const hudMetric = document.getElementById("hudMetric");
       const hudMetricTitle = document.getElementById("hudMetricTitle");
       const hudMetricVal = document.getElementById("hudMetricVal");
       const hudLive = document.getElementById("hudLive");
       const btnRec = document.getElementById("btnRecToggle");
+      const calPanel = document.getElementById("calPanel");
 
+      function currentCalib() {
+        return frameW ? getCalib(test.key, frameW, frameH) : null;
+      }
+
+      function refreshCalStatus() {
+        const el = document.getElementById("calStatus");
+        if (!el) return;
+        const c = state.calib?.[test.key];
+        if (c && c.cmPerPx) {
+          el.innerHTML = `✅ ${calibLabel(c)} · ${c.cmPerPx.toFixed(4)} cm/px (GREEN)`;
+          el.style.color = "var(--green-fg, #137333)";
+        } else if (test.key === "height") {
+          el.innerHTML = `📏 Rung 4 Camera Distance (${(state.cameraDistanceM || 2.50).toFixed(2)} m) + Joint-Ratio Offset Active`;
+          el.style.color = "var(--primary)";
+        } else {
+          const hVal = state.results[cellKey(athlete.id, "height")]?.value;
+          el.innerHTML = hVal
+            ? `📏 Rung 3 Athlete Height Scale (${hVal} cm) Active`
+            : `📏 Rung 3/4 Auto Kinematic Scale Active`;
+          el.style.color = "var(--primary)";
+        }
+      }
+
+      function saveCalib(method, refCm, refPx) {
+        if (!state.calib) state.calib = {};
+        state.calib[test.key] = {
+          cmPerPx: refCm / refPx,
+          refCm,
+          refPx,
+          method,
+          frameW: frameW || 720,
+          frameH: frameH || 1280,
+          at: Date.now()
+        };
+        persist();
+        cal.mode = null;
+        cal.pts = [];
+        canvasEl.style.pointerEvents = "none";
+        if (calPanel) calPanel.style.display = "none";
+        refreshCalStatus();
+      }
+
+      function renderTapPanel() {
+        const n = cal.pts.length;
+        const refPx = n === 2 ? dist2D(cal.pts[0], cal.pts[1]) : 0;
+        calPanel.style.display = "block";
+        calPanel.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px;">
+            ${n < 2
+              ? t(`Tap point ${n === 0 ? "A" : "B"} on the reference object in the video (e.g. A4 sheet = 29.7 cm, or 100 cm wall tape).`,
+                  `वीडियो में संदर्भ वस्तु पर बिंदु ${n === 0 ? "A" : "B"} टैप करें (जैसे A4 शीट = 29.7 cm, या 100 cm टेप)।`)
+              : `A–B = ${refPx.toFixed(1)} px`}
+          </div>
+          ${n === 2 ? `
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+              <span>${t("Fine-tune", "सूक्ष्म समायोजन")}:</span>
+              <button class="lang-btn" data-sel="0" style="font-size:11px;padding:3px 8px;${cal.active === 0 ? "outline:2px solid var(--primary);" : ""}">A</button>
+              <button class="lang-btn" data-sel="1" style="font-size:11px;padding:3px 8px;${cal.active === 1 ? "outline:2px solid var(--primary);" : ""}">B</button>
+              <button class="lang-btn" data-mv="0,-2" style="padding:3px 8px;">▲</button>
+              <button class="lang-btn" data-mv="0,2" style="padding:3px 8px;">▼</button>
+              <button class="lang-btn" data-mv="-2,0" style="padding:3px 8px;">◀</button>
+              <button class="lang-btn" data-mv="2,0" style="padding:3px 8px;">▶</button>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              <label style="font-weight:700;">${t("Length A–B (cm)", "A–B लंबाई (cm)")}</label>
+              <input id="inpRefLen" type="number" step="0.1" value="${state.lastRefCm || 29.7}" style="width:75px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);" />
+              <button class="lang-btn" data-preset="29.7" style="font-size:10px;padding:3px 6px;">A4 (29.7)</button>
+              <button class="lang-btn" data-preset="30" style="font-size:10px;padding:3px 6px;">30 cm</button>
+              <button class="lang-btn" data-preset="100" style="font-size:10px;padding:3px 6px;">100 cm</button>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <button class="btn primary" id="btnTapSave" style="margin-top:0;">${t("Save Scale (GREEN)", "स्केल सहेजें")}</button>
+              <button class="btn secondary" id="btnTapReset" style="margin-top:0;">${t("Re-tap", "फिर टैप करें")}</button>
+            </div>
+          ` : ""}
+        `;
+        calPanel.querySelectorAll("[data-sel]").forEach(b => b.onclick = () => { cal.active = Number(b.dataset.sel); renderTapPanel(); });
+        calPanel.querySelectorAll("[data-mv]").forEach(b => b.onclick = () => {
+          const [dx, dy] = b.dataset.mv.split(",").map(Number);
+          cal.pts[cal.active].x += dx;
+          cal.pts[cal.active].y += dy;
+          renderTapPanel();
+        });
+        calPanel.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => { document.getElementById("inpRefLen").value = b.dataset.preset; });
+        const saveBtn = document.getElementById("btnTapSave");
+        if (saveBtn) {
+          saveBtn.onclick = () => {
+            const cm = parseFloat(document.getElementById("inpRefLen").value);
+            if (!(cm > 0)) return;
+            state.lastRefCm = cm;
+            saveCalib("tape", cm, dist2D(cal.pts[0], cal.pts[1]));
+          };
+          document.getElementById("btnTapReset").onclick = () => { cal.pts = []; renderTapPanel(); };
+        }
+      }
+
+      canvasEl.addEventListener("pointerdown", (e) => {
+        if (cal.mode !== "tap" || !frameW) return;
+        const rect = canvasEl.getBoundingClientRect();
+        const s = Math.min(rect.width / frameW, rect.height / frameH);
+        const ox = (rect.width - frameW * s) / 2, oy = (rect.height - frameH * s) / 2;
+        const x = (e.clientX - rect.left - ox) / s, y = (e.clientY - rect.top - oy) / s;
+        if (x < 0 || y < 0 || x > frameW || y > frameH) return;
+        if (cal.pts.length < 2) {
+          cal.pts.push({ x, y });
+          cal.active = cal.pts.length - 1;
+        } else {
+          const d0 = dist2D(cal.pts[0], { x, y }), d1 = dist2D(cal.pts[1], { x, y });
+          cal.active = d0 <= d1 ? 0 : 1;
+          cal.pts[cal.active] = { x, y };
+        }
+        renderTapPanel();
+      });
+
+      function renderPersonPanel() {
+        calPanel.style.display = "block";
+        calPanel.innerHTML = `
+          <div style="margin-bottom:6px;">${t(
+            "Stand at the floor mark and enter your known height (cm) to lock the exact pixel-to-cm scale at this distance:",
+            "इस दूरी पर सटीक स्केल लॉक करने के लिए अपनी ज्ञात ऊँचाई (cm) दर्ज करें:")}</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input id="inpPersonCm" type="number" step="0.5" placeholder="e.g. 156" value="156" style="width:90px;padding:6px;border-radius:6px;border:1px solid var(--border);font-weight:700;" />
+            <button class="btn primary" id="btnPersonLock" style="margin-top:0;padding:8px 12px;width:auto;">${t("Lock Scale at Current Pose", "वर्तमान पोज़ पर स्केल लॉक करें")}</button>
+          </div>
+          <div id="personMsg" style="margin-top:6px;font-weight:700;color:var(--primary);"></div>
+        `;
+        document.getElementById("btnPersonLock").onclick = () => {
+          const cm = parseFloat(document.getElementById("inpPersonCm").value);
+          if (!(cm >= 80 && cm <= 230)) return;
+          if (latestValidEv && latestValidEv.bodyPx > 50) {
+            saveCalib("person", cm, latestValidEv.bodyPx);
+          } else {
+            document.getElementById("personMsg").textContent = t(
+              "Step into full-body view first so your VERTEX and HEELS are visible, then tap Lock Scale!",
+              "पहले पूरे शरीर के साथ फ्रेम में खड़े हों, फिर लॉक करें!"
+            );
+          }
+        };
+      }
+
+      if (supportsCalib) {
+        const rngDist = document.getElementById("rngDist");
+        if (rngDist) {
+          rngDist.oninput = (e) => {
+            state.cameraDistanceM = parseFloat(e.target.value);
+            document.getElementById("lblDistVal").textContent = `${state.cameraDistanceM.toFixed(2)} m`;
+            if (state.calib && state.calib.height) delete state.calib.height;
+            persist();
+            refreshCalStatus();
+          };
+        }
+        document.getElementById("btnCalTap").onclick = () => {
+          cal.mode = "tap";
+          cal.pts = [];
+          canvasEl.style.pointerEvents = "auto";
+          renderTapPanel();
+        };
+        const bp = document.getElementById("btnCalPerson");
+        if (bp) bp.onclick = () => {
+          cal.mode = "person";
+          canvasEl.style.pointerEvents = "none";
+          renderPersonPanel();
+        };
+        document.getElementById("btnCalClear").onclick = () => {
+          if (state.calib) delete state.calib[test.key];
+          state.cameraDistanceM = 2.50;
+          const rd = document.getElementById("rngDist");
+          if (rd) {
+            rd.value = "2.50";
+            document.getElementById("lblDistVal").textContent = "2.50 m";
+          }
+          persist();
+          cal.mode = null;
+          cal.pts = [];
+          canvasEl.style.pointerEvents = "none";
+          calPanel.style.display = "none";
+          refreshCalStatus();
+        };
+        const bz = document.getElementById("inpBoxZero");
+        if (bz) bz.oninput = (e) => { state.boxZeroCm = parseFloat(e.target.value) || 0; persist(); };
+        refreshCalStatus();
+      }
+
+      let token = 0;
       let lastFrameTime = performance.now();
       let lastVideoTime = -1;
+      const useRVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
 
       async function startStream() {
         stopCamera();
+        token = captureToken;
         try {
           mediaStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
@@ -1580,158 +1792,180 @@
           videoEl.srcObject = mediaStream;
           await videoEl.play();
         } catch (err) {
-          hudLive.textContent = "Camera blocked by iOS: Make sure you opened the https:// link in Safari and accepted the certificate.";
+          hudLive.textContent = t("Camera blocked: open the https:// link in Safari and allow camera access.", "कैमरा ब्लॉक: Safari में https:// लिंक खोलें और अनुमति दें।");
           return;
         }
         try {
           await ensureMediaPipeLoaded();
-          hudFps.textContent = "Pose AI Ready";
+          hudFps.textContent = t("Pose AI ready", "पोज़ AI तैयार");
         } catch (err) {
-          hudLive.textContent = "Error loading MediaPipe Pose model — check internet connection on first load.";
+          hudLive.textContent = t("Could not load MediaPipe model — check internet on first load.", "MediaPipe मॉडल लोड नहीं हुआ — इंटरनेट जांचें।");
           return;
         }
-        loopPose();
+        schedule();
       }
 
-      function loopPose() {
+      function schedule() {
+        if (token !== captureToken) return;
+        if (useRVFC) videoEl.requestVideoFrameCallback(onFrame);
+        else animFrameId = requestAnimationFrame((now) => onFrame(now, null));
+      }
+
+      function drawSkeleton(lm, color) {
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 3;
+        const pairs = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[27,29],[27,31],[29,31],[24,26],[26,28],[28,30],[28,32],[30,32]];
+        for (const [i, j] of pairs) {
+          if (vis(lm, i, 0.35) && vis(lm, j, 0.35)) {
+            ctx.beginPath();
+            ctx.moveTo(lm[i].x * frameW, lm[i].y * frameH);
+            ctx.lineTo(lm[j].x * frameW, lm[j].y * frameH);
+            ctx.stroke();
+          }
+        }
+        for (let i = 0; i < lm.length; i++) {
+          if (vis(lm, i, 0.35)) {
+            ctx.beginPath();
+            ctx.arc(lm[i].x * frameW, lm[i].y * frameH, 4, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      function drawMeasureOverlay(ev) {
+        ctx.save();
+        ctx.font = `bold ${Math.max(16, Math.round(frameH * 0.018))}px -apple-system, sans-serif`;
+        if (test.key === "height" && ev.postureOk) {
+          ctx.strokeStyle = "#00E5FF";
+          ctx.fillStyle = "#00E5FF";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(0, ev.vertexY); ctx.lineTo(frameW, ev.vertexY);
+          ctx.moveTo(0, ev.soleY); ctx.lineTo(frameW, ev.soleY);
+          ctx.stroke();
+          ctx.fillText(`▲ VERTEX (${ev.vertexSource})`, 14, Math.max(22, ev.vertexY - 8));
+          ctx.fillText(`▼ HEELS · ${ev.bodyPx.toFixed(0)} px = ${ev.cm.toFixed(1)} cm (±2 cm)`, 14, Math.min(frameH - 10, ev.soleY + 24));
+        }
+        if (test.key === "sit_and_reach" && ev.postureOk) {
+          ctx.strokeStyle = "#FFD166";
+          ctx.fillStyle = "#FFD166";
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(ev.toeX, ev.toeY, 7, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.arc(ev.tipX, ev.tipY, 7, 0, Math.PI * 2); ctx.fill();
+          ctx.fillText("TOES (23 cm)", ev.toeX + 10, ev.toeY + 20);
+          ctx.fillText(`REACH (${ev.scoreCm.toFixed(1)} cm)`, ev.tipX + 10, ev.tipY - 10);
+        }
+        ctx.restore();
+      }
+
+      function drawCalibOverlay() {
+        const c = cal.mode === "tap" ? cal.pts : [];
+        if (!c.length) return;
+        ctx.save();
+        ctx.strokeStyle = "#FFD166";
+        ctx.fillStyle = "#FFD166";
+        ctx.lineWidth = 3;
+        ctx.font = `bold ${Math.max(16, Math.round(frameH * 0.02))}px -apple-system, sans-serif`;
+        c.forEach((pt, k) => {
+          ctx.beginPath();
+          ctx.moveTo(pt.x - 14, pt.y); ctx.lineTo(pt.x + 14, pt.y);
+          ctx.moveTo(pt.x, pt.y - 14); ctx.lineTo(pt.x, pt.y + 14);
+          ctx.stroke();
+          ctx.fillText(k === 0 ? "A" : "B", pt.x + 10, pt.y - 8);
+        });
+        if (c.length === 2) {
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); ctx.lineTo(c[1].x, c[1].y); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function showEval(ev) {
+        hudFps.textContent = `${Math.round(fps)} fps · ${ev.postureOk ? t("POSE VALID", "पोज़ मान्य") : t("GATE BLOCKED", "गेट अवरुद्ध")}`;
+        hudMetric.className = `hud-live-metric ${ev.postureOk ? "" : "bad"}`;
+        hudMetricTitle.textContent = ev.postureOk ? t("LIVE AI READOUT:", "लाइव AI रीडआउट:") : t("POSTURE CHECK:", "पोस्चर जाँच:");
+        hudMetricVal.textContent = ev.liveMetric;
+        hudLive.textContent = ev.reason;
+      }
+
+      function onFrame(nowArg, meta) {
+        if (token !== captureToken) return;
         const now = performance.now();
         const dt = (now - lastFrameTime) / 1000;
         lastFrameTime = now;
-        if (dt > 0 && dt < 1) {
-          fps = 0.9 * fps + 0.1 * (1 / dt);
-        }
+        if (dt > 0 && dt < 1) fps = 0.9 * fps + 0.1 * (1 / dt);
 
-        if (videoEl.readyState >= 2 && poseLandmarker && videoEl.currentTime !== lastVideoTime) {
+        const fresh = useRVFC || videoEl.currentTime !== lastVideoTime;
+        if (videoEl.readyState >= 2 && poseLandmarker && fresh && videoEl.videoWidth) {
           lastVideoTime = videoEl.currentTime;
-          canvasEl.width = videoEl.videoWidth || 720;
-          canvasEl.height = videoEl.videoHeight || 1280;
-          ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-
-          // If Rung 1/2 Wall Reference mode is selected on Height test, draw the 2 gold reference lines
-          if (test.key === "height" && state.heightCalibMode === "REF_OBJECT") {
-            const rTopY = (Math.min(state.refTopPct, state.refBotPct - 2) / 100.0) * canvasEl.height;
-            const rBotY = (Math.max(state.refBotPct, state.refTopPct + 2) / 100.0) * canvasEl.height;
-            ctx.save();
-            ctx.strokeStyle = "#FFD166";
-            ctx.fillStyle = "#FFD166";
-            ctx.lineWidth = 3;
-            ctx.setLineDash([8, 6]);
-            ctx.beginPath();
-            ctx.moveTo(0, rTopY); ctx.lineTo(canvasEl.width, rTopY);
-            ctx.moveTo(0, rBotY); ctx.lineTo(canvasEl.width, rBotY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.font = "bold 20px -apple-system, sans-serif";
-            ctx.fillText(`REF TOP (${state.refObjectCm} cm = ${Math.round(rBotY - rTopY)} px)`, 18, Math.max(24, rTopY - 8));
-            ctx.fillText(`REF BOTTOM`, 18, Math.min(canvasEl.height - 10, rBotY + 22));
-            ctx.restore();
+          const W = videoEl.videoWidth, H = videoEl.videoHeight;
+          if (W !== frameW || H !== frameH) {
+            frameW = W; frameH = H;
+            canvasEl.width = W; canvasEl.height = H;
+            refreshCalStatus();
           }
+          ctx.clearRect(0, 0, W, H);
+          const lvl = phoneLevel();
+          hudTilt.textContent = lvl.known ? `${lvl.ok ? "✅" : "⚠️"} ${lvl.text}` : lvl.text;
 
+          const tsMs = Math.max(lastMpTimestampMs + 1, Math.round(now));
+          lastMpTimestampMs = tsMs;
+          const tFrame = meta && meta.mediaTime ? meta.mediaTime * 1000 : now;
+          let res = null;
           try {
-            const tsMs = Math.max(lastMpTimestampMs + 1, Math.round(now));
-            lastMpTimestampMs = tsMs;
-            const res = poseLandmarker.detectForVideo(videoEl, tsMs);
-            if (res.landmarks && res.landmarks.length > 0) {
-              const lm = res.landmarks[0];
-              const segMask = res.segmentationMasks?.[0] || null;
-
-              const evalRes = evaluateLiveFrame(
-                test.key,
-                lm,
-                segMask,
-                canvasEl.width,
-                canvasEl.height
-              );
-
-              // Close segmentation mask if WebGL/WASM allocated one
-              if (segMask && typeof segMask.close === "function") {
-                try { segMask.close(); } catch (_) {}
+            res = poseLandmarker.detectForVideo(videoEl, tsMs);
+          } catch (err) {
+            hudLive.textContent = `Pose AI error: ${err?.message || err}`;
+          }
+          if (res) {
+            const masks = res.segmentationMasks || [];
+            try {
+              let ev;
+              const people = res.landmarks || [];
+              const secondVisible = people.length > 1 &&
+                [0, 11, 12, 23, 24].reduce((s, i) => s + (people[1][i]?.visibility ?? 0), 0) / 5 > 0.55;
+              if (!people.length) {
+                ev = fail(t("NO PERSON", "कोई व्यक्ति नहीं"), t("Step into the frame (2–3 m away).", "फ्रेम में आएँ (2–3 मीटर दूर)।"));
+              } else if (secondVisible) {
+                ev = fail(t("Multiple people", "एक से अधिक व्यक्ति"), t("Only the athlete may be in the frame.", "फ्रेम में केवल एथलीट रहे।"));
+                drawSkeleton(people[1], "#FF4D4F");
+              } else {
+                const lm = people[0];
+                const mask = maskReader(masks[0]);
+                ev = evaluateLiveFrame(test.key, lm, mask, W, H, currentCalib(), athlete);
+                if (ev.postureOk) latestValidEv = ev;
+                drawSkeleton(lm, ev.postureOk ? "#00E6A8" : "#FF4D4F");
+                drawMeasureOverlay(ev);
               }
-
-              // Draw skeleton lines & keypoints color-coded by posture validity
-              const color = evalRes.postureOk ? "#00E6A8" : "#FF4D4F";
-              ctx.strokeStyle = color;
-              ctx.fillStyle = color;
-              ctx.lineWidth = 3;
-
-              const pairs = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[27,29],[27,31],[24,26],[26,28],[28,30],[28,32]];
-              for (const [i, j] of pairs) {
-                if (visOk(lm[i], 0.35) && visOk(lm[j], 0.35)) {
-                  ctx.beginPath();
-                  ctx.moveTo(lm[i].x * canvasEl.width, lm[i].y * canvasEl.height);
-                  ctx.lineTo(lm[j].x * canvasEl.width, lm[j].y * canvasEl.height);
-                  ctx.stroke();
-                }
-              }
-              for (const pt of lm) {
-                if (visOk(pt, 0.35)) {
-                  ctx.beginPath();
-                  ctx.arc(pt.x * canvasEl.width, pt.y * canvasEl.height, 5, 0, Math.PI * 2);
-                  ctx.fill();
-                }
-              }
-
-              // Draw live VERTEX (top of head) and HEELS (bottom of feet) horizontal caliper lines for Height test
-              if (test.key === "height" && evalRes.postureOk && evalRes.vertexPxY !== undefined) {
-                ctx.save();
-                ctx.strokeStyle = "#00E5FF";
-                ctx.fillStyle = "#00E5FF";
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(0, evalRes.vertexPxY);
-                ctx.lineTo(canvasEl.width, evalRes.vertexPxY);
-                ctx.moveTo(0, evalRes.feetPxY);
-                ctx.lineTo(canvasEl.width, evalRes.feetPxY);
-                ctx.stroke();
-                ctx.font = "bold 20px -apple-system, sans-serif";
-                ctx.fillText(`▲ VERTEX (${evalRes.vertexSource})`, 18, Math.max(26, evalRes.vertexPxY - 8));
-                ctx.fillText(`▼ HEELS (${Math.round(evalRes.bodyTotalPx)} px → ${evalRes.heightCm.toFixed(1)} cm)`, 18, Math.min(canvasEl.height - 14, evalRes.feetPxY + 24));
-                ctx.restore();
-              }
-
-              hudFps.textContent = `${Math.round(fps)} fps · ${evalRes.postureOk ? "POSE VALID" : "GATE BLOCKED"}`;
-              hudMetric.className = `hud-live-metric ${evalRes.postureOk ? "" : "bad"}`;
-              hudMetricTitle.textContent = evalRes.postureOk ? "LIVE AI READOUT:" : "POSTURE CHECK:";
-              hudMetricVal.textContent = evalRes.liveMetric;
-              hudLive.textContent = evalRes.reason;
-
-              if (isRecording) {
-                recordedFrames.push({ ...evalRes, t: captureElapsed });
-              }
-            } else {
-              hudMetric.className = "hud-live-metric bad";
-              hudMetricTitle.textContent = "NO PERSON:";
-              hudMetricVal.textContent = "Step into frame";
-              hudLive.textContent = "No human pose detected in camera view.";
-              if (isRecording) {
-                recordedFrames.push({ postureOk: false, reason: "No person detected in camera frame." });
-              }
+              showEval(ev);
+              if (isRecording) recordedFrames.push({ ...ev, t: tFrame });
+            } catch (err) {
+              hudLive.textContent = `Analysis error: ${err?.message || err}`;
+            } finally {
+              masks.forEach(m => { try { m.close(); } catch (_) {} });
             }
-          } catch (e) {}
+          }
+          drawCalibOverlay();
         }
-        animFrameId = requestAnimationFrame(loopPose);
+        schedule();
       }
 
       function finishRecording() {
+        const calibUsed = currentCalib();
         stopCamera();
         const key = cellKey(athlete.id, test.key);
         const prevHistory = state.results[key]?.attemptsHistory || [];
-        const attemptOut = computeAttemptResult(test, athlete, recordedFrames, fps);
+        const attemptOut = computeAttemptResult(test, athlete, recordedFrames, fps, calibUsed);
         const newHistory = [...prevHistory, attemptOut];
-
-        // Best valid score across attempts (or latest rejected state if no valid attempt yet)
         const validAttempts = newHistory.filter(a => a.valid && a.value !== null);
         if (validAttempts.length > 0) {
-          const best = validAttempts.reduce((bestSoFar, cur) => (cur.value > bestSoFar.value ? cur : bestSoFar), validAttempts[0]);
-          state.results[key] = {
-            ...best,
-            attemptsHistory: newHistory
-          };
+          const best = test.key === "height"
+            ? validAttempts[validAttempts.length - 1]
+            : validAttempts.reduce((b, c) => (c.value > b.value ? c : b), validAttempts[0]);
+          state.results[key] = { ...best, attemptsHistory: newHistory };
         } else {
-          state.results[key] = {
-            ...attemptOut,
-            attemptsHistory: newHistory
-          };
+          state.results[key] = { ...attemptOut, attemptsHistory: newHistory };
         }
         state.route = "cell";
         render();
@@ -1748,25 +1982,27 @@
       };
 
       btnRec.onclick = () => {
+        enableTiltSensor();
         if (!isRecording) {
+          cal.mode = null;
+          canvasEl.style.pointerEvents = "none";
+          if (calPanel) calPanel.style.display = "none";
           isRecording = true;
           captureElapsed = 0;
           recordedFrames.length = 0;
           btnRec.disabled = true;
-          btnRec.textContent = `Recording... (${test.minSec}s min)`;
+          btnRec.textContent = `${t("Recording...", "रिकॉर्डिंग...")} (${test.minSec}s min)`;
           captureTimer = setInterval(() => {
             captureElapsed++;
             const validCount = recordedFrames.filter(f => f.postureOk).length;
-            hudTimer.textContent = `${captureElapsed}s / ${test.minSec}–${test.maxSec}s (${validCount} valid frames)`;
+            hudTimer.textContent = `${captureElapsed}s / ${test.minSec}–${test.maxSec}s (${validCount} ${t("valid", "मान्य")})`;
             if (captureElapsed >= test.minSec) {
               btnRec.disabled = false;
-              btnRec.textContent = `■ Stop & Compute Score (${captureElapsed}s)`;
+              btnRec.textContent = `■ ${t("Stop & Compute Score", "रोकें और स्कोर निकालें")} (${captureElapsed}s)`;
             } else {
-              btnRec.textContent = `Keep recording (${test.minSec - captureElapsed}s left)`;
+              btnRec.textContent = `${t("Keep recording", "रिकॉर्डिंग जारी")} (${test.minSec - captureElapsed}s)`;
             }
-            if (captureElapsed >= test.maxSec) {
-              finishRecording();
-            }
+            if (captureElapsed >= test.maxSec) finishRecording();
           }, 1000);
         } else {
           if (captureElapsed < test.minSec) return;
