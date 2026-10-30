@@ -619,6 +619,23 @@
       return `Scale ${c.cmPerPx.toFixed(4)} cm/px`;
     }
 
+    // Used ONLY as Rung 3b fallback for Sit & Reach / Vertical Jump when the user
+    // has NOT yet run Test 1 (Height) and has NOT tapped a ruler in frame.
+    // (Test 1 Height itself NEVER uses this — it measures purely from camera pixels!)
+    function getAthleteRefHeightCm(athlete) {
+      const recorded = athlete ? state.results[cellKey(athlete.id, "height")]?.value : null;
+      if (recorded && recorded > 80) return recorded;
+      const age = Number(athlete?.age) || 16;
+      const isMale = (athlete?.gender || "").toLowerCase() === "male";
+      if (age <= 6) return isMale ? 115 : 114;
+      if (age <= 8) return isMale ? 126 : 125;
+      if (age <= 10) return isMale ? 137 : 137;
+      if (age <= 12) return isMale ? 148 : 149;
+      if (age <= 14) return isMale ? 160 : 155;
+      if (age <= 16) return isMale ? 167 : 157;
+      return isMale ? 170 : 158;
+    }
+
     // -------------------------------------------------------------------------
     // Segmentation Mask Readers (Supports both Float32 and Uint8 MediaPipe Masks)
     // -------------------------------------------------------------------------
@@ -836,8 +853,8 @@
       let cmPerPx = calib?.cmPerPx || null;
       let scaleMode = calib ? "Rung 1/2 Ruler" : "Rung 3 Segment Scale";
       if (!cmPerPx) {
-        const recordedHeight = athlete ? state.results[cellKey(athlete.id, "height")]?.value : null;
-        const tibiaCm = (recordedHeight && recordedHeight > 100) ? (recordedHeight * 0.242) : 37.5;
+        const refHeightCm = getAthleteRefHeightCm(athlete);
+        const tibiaCm = refHeightCm * 0.242;
         const tibiaPx = Math.max(W * 0.07, dist2D(kn, an));
         cmPerPx = tibiaCm / tibiaPx;
       }
@@ -1071,8 +1088,8 @@
         const shSm = medianFilter(ok.map(f => f.shY), 3);
         const shFoot = median(ok.map(f => f.shToFootPx));
 
-        const recordedHeight = athlete ? state.results[cellKey(athlete.id, "height")]?.value : null;
-        const shToFootCm = (recordedHeight && recordedHeight > 100) ? (recordedHeight * 0.78) : 122.0;
+        const refHeightCm = getAthleteRefHeightCm(athlete);
+        const shToFootCm = refHeightCm * 0.78;
         const cmPerPx = calib?.cmPerPx || (shToFootCm / shFoot);
 
         // Local running floor level (+/- 20 frames) so walking back/forward from camera is tracked smoothly
