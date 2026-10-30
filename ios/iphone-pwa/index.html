@@ -813,6 +813,7 @@
       }
 
       const kneeDeg = angleDeg(hip, kn, an);
+      const trunkDeg = angleDeg(sh, hip, kn);
       const u = { x: (an.x - hip.x) / legLen, y: (an.y - hip.y) / legLen };
       const handLm = vis(lm, s.idx, 0.38) ? p(s.idx) : wr;
       const lmProj = (handLm.x - ft.x) * u.x + (handLm.y - ft.y) * u.y;
@@ -827,6 +828,9 @@
       }
 
       const reachPx = tip ? tip.proj : lmProj;
+      const tipPt = tip ? { x: tip.x, y: tip.y } : handLm;
+      // Projection of fingertips from hip along the leg axis (0.0 = hip, ~0.52 = knee, 1.0 = ankle)
+      const handLegRatio = ((tipPt.x - hip.x) * u.x + (tipPt.y - hip.y) * u.y) / legLen;
 
       // Scale selection: Rung 1/2 (tapped ruler) -> Rung 3 (athlete's measured height / tibia segment length)
       let cmPerPx = calib?.cmPerPx || null;
@@ -842,11 +846,15 @@
       const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
       const scoreCm = boxOffset + reachCm;
       const kneeOk = kneeDeg >= 160;
+      const isReaching = handLegRatio >= 0.68 && trunkDeg <= 78 && reachCm >= -18.0;
 
       return {
         postureOk: true,
         kneeOk,
         kneeDeg,
+        trunkDeg,
+        handLegRatio,
+        isReaching,
         reachPx,
         reachCm,
         scoreCm,
@@ -857,10 +865,14 @@
         toeX: ft.x,
         toeY: ft.y,
         tipSource: tip ? "mask" : "landmark",
-        liveMetric: `${scoreCm.toFixed(1)} cm (${reachCm >= 0 ? "+" : ""}${reachCm.toFixed(1)} cm ${t("vs toes", "पंजों से")})`,
-        reason: kneeOk
-          ? `${scaleMode} · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° ✓ · ${t("Reach", "पहुँच")} ${scoreCm.toFixed(1)} cm`
-          : `${t("FOUL: knee bent", "फाउल: घुटना मुड़ा")} ${kneeDeg.toFixed(0)}° (≥160°)`
+        liveMetric: isReaching
+          ? `${scoreCm.toFixed(1)} cm (${reachCm >= 0 ? "+" : ""}${reachCm.toFixed(1)} cm ${t("vs toes", "पंजों से")})`
+          : t("Seated — bend forward & reach toward toes", "बैठे हैं — आगे झुकें और पंजों की ओर हाथ बढ़ाएँ"),
+        reason: !kneeOk
+          ? `${t("FOUL: knee bent", "फाउल: घुटना मुड़ा")} ${kneeDeg.toFixed(0)}° (≥160°)`
+          : (isReaching
+              ? `${scaleMode} · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° ✓ · ${t("Reach", "पहुँच")} ${scoreCm.toFixed(1)} cm`
+              : `${t("Trunk", "धड़")} ${trunkDeg.toFixed(0)}° — ${t("Lean forward and slide hands past knees toward toes", "आगे झुकें और हाथों को घुटनों से आगे पंजों की ओर ले जाएँ")}`)
       };
     }
 
@@ -988,23 +1000,37 @@
             t("Attempt nullified: Knees bent during reach (must stay ≥160°).", "फाउल: पहुँचते समय घुटने मुड़ गए (≥160° आवश्यक)।"));
         }
 
-        const r = medianFilter(straight.map(f => f.reachCm), 5);
-        const minReach = Math.min(...r);
-        const peakReach = pct(r, 0.88);
-        const excursion = peakReach - minReach;
+        const rAll = medianFilter(straight.map(f => f.reachCm), 5);
+        const startReach = pct(rAll, 0.12);
+        const peakReach = pct(rAll, 0.88);
+        const excursion = peakReach - startReach;
 
-        if (excursion < 1.8) {
-          return rejected(test, t("No forward reach movement (<1.8 cm)", "आगे झुकने की गति नहीं मिली"),
-            t("Reach forward smoothly along the measuring line and hold your peak reach.", "माप रेखा के साथ आगे झुकें और अपनी अधिकतम पहुँच रोकें।"));
+        const trunks = straight.map(f => f.trunkDeg ?? 65);
+        const minTrunkDeg = Math.min(...trunks);
+        const maxHandLegRatio = Math.max(...straight.map(f => f.handLegRatio ?? 0.85));
+        const reachingFrames = straight.filter(f => f.isReaching !== false && f.reachCm >= -18.0);
+
+        // Reject when the athlete is just sitting upright / sitting still with hands on knees/lap:
+        // SAI Handbook III requires active forward trunk flexion (trunk angle ≤78°), hands extended past knees
+        // onto the lower shin/foot scale (handLegRatio ≥0.68, reachCm ≥-18 cm vs toes), and forward reach motion (≥5.0 cm).
+        if (reachingFrames.length < 5 || minTrunkDeg > 78 || maxHandLegRatio < 0.68 || peakReach < -18.0) {
+          return rejected(test, t("REJECTED — no forward reach attempt", "अस्वीकृत — आगे झुकने का प्रयास नहीं किया गया"),
+            t("Sitting upright without reaching: Bend your torso forward (≤78°) and slide both hands past your knees toward your toes.", "बिना झुके बैठे हैं: कमर से आगे झुकें और दोनों हाथों को घुटनों से आगे पंजों की ओर बढ़ाएँ।"));
         }
 
-        // Prefer a held plateau window (≥400 ms with spread ≤2.5 cm), fallback to 85th percentile straight-knee reach
+        if (excursion < 5.0) {
+          return rejected(test, t("REJECTED — sitting still (<5.0 cm forward reach)", "अस्वीकृत — स्थिर बैठे हैं (<5.0 सेमी गति)"),
+            t("No forward reach movement detected. Start seated, slide your hands forward along the scale, and hold your maximum reach for 1–2s.", "आगे झुकने की गति नहीं मिली। बैठकर हाथों को आगे पंजों की ओर बढ़ाएँ और 1–2 सेकंड रोकें।"));
+        }
+
+        const r = medianFilter(reachingFrames.map(f => f.reachCm), 3);
+        // Prefer a held plateau window (≥450 ms with spread ≤2.5 cm), fallback to 85th percentile valid reach
         let heldReach = pct(r, 0.85);
         let heldSpread = Math.abs(pct(r, 0.90) - pct(r, 0.75));
-        for (let i = 0; i < straight.length; i++) {
+        for (let i = 0; i < reachingFrames.length; i++) {
           let j = i;
-          while (j < straight.length && (straight[j].t - straight[i].t) < 450) j++;
-          if (j >= straight.length) break;
+          while (j < reachingFrames.length && (reachingFrames[j].t - reachingFrames[i].t) < 450) j++;
+          if (j >= reachingFrames.length) break;
           const win = r.slice(i, j + 1);
           const sp = Math.max(...win) - Math.min(...win);
           if (sp <= 2.5) {
@@ -1017,8 +1043,8 @@
         }
 
         const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
-        const score = boxOffset + heldReach;
-        const minKnee = Math.min(...straight.map(f => f.kneeDeg));
+        const score = Math.max(0.0, boxOffset + heldReach);
+        const minKnee = Math.min(...reachingFrames.map(f => f.kneeDeg));
         const isCalib = !!calib && calib.method !== "distance";
 
         return {
@@ -1026,10 +1052,10 @@
           value: Number(score.toFixed(1)),
           unit: "cm",
           confidence: isCalib ? "GREEN" : "AMBER",
-          method: `${straight[0].scaleMode} · Held reach ${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes)`,
+          method: `${reachingFrames[0].scaleMode} · Held reach ${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes)`,
           audit: [{
             label: "Peak Held Reach",
-            detail: `${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes) · Excursion ${excursion.toFixed(1)} cm · Spread ${heldSpread.toFixed(1)} cm · Knee ≥${minKnee.toFixed(0)}° PASS`,
+            detail: `${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes) · Excursion ${excursion.toFixed(1)} cm · Trunk ${minTrunkDeg.toFixed(0)}° · Knee ≥${minKnee.toFixed(0)}° PASS`,
             valid: true
           }]
         };
