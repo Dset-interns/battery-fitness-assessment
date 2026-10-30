@@ -867,25 +867,29 @@
     // TEST 4 — STANDING VERTICAL JUMP
     function evalJump(lm, mask, W, H) {
       for (const i of [11, 12, 23, 24, 25, 26, 27, 28]) {
-        if (!vis(lm, i, 0.42)) {
+        if (!vis(lm, i, 0.45)) {
           return fail(t("Full body needed", "पूरा शरीर चाहिए"),
-            t("Shoulders, hips, knees and feet must stay in frame.", "कंधे, कूल्हे, घुटने और पैर फ्रेम में रहें।"));
+            t("Shoulders, hips, knees and ankles must stay clearly in frame.", "कंधे, कूल्हे, घुटने और टखने फ्रेम में रहें।"));
         }
       }
       const p = (i) => P(lm, i, W, H);
       const shMid = mid(p(11), p(12));
       const hipMid = mid(p(23), p(24));
-      const footIds = [27, 28, 29, 30, 31, 32].filter(i => vis(lm, i, 0.35));
-      const footY = footIds.length ? Math.max(...footIds.map(i => p(i).y)) : Math.max(p(27).y, p(28).y);
+      // Use consistent ankle landmarks (27, 28) — NEVER switch dynamically between toes (31,32) and ankles (27,28),
+      // because toe visibility flickering across frames causes a false ~7 cm vertical jump when standing still!
+      // Using Math.max(p(27).y, p(28).y) ensures BOTH ankles must leave the ground for footY to rise.
+      const footY = Math.max(p(27).y, p(28).y);
+      const ankleMidY = 0.5 * (p(27).y + p(28).y);
       const kneeDeg = Math.min(angleDeg(p(23), p(25), p(27)), angleDeg(p(24), p(26), p(28)));
       return {
         postureOk: true,
         shY: shMid.y,
         hipY: hipMid.y,
         footY,
+        ankleMidY,
         kneeDeg,
-        hipToFootPx: Math.max(H * 0.12, footY - hipMid.y),
-        shToFootPx: Math.max(H * 0.22, footY - shMid.y),
+        hipToFootPx: Math.max(H * 0.12, ankleMidY - hipMid.y),
+        shToFootPx: Math.max(H * 0.22, ankleMidY - shMid.y),
         liveMetric: `${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° · ${t("Ready", "तैयार")}`,
         reason: t("Stand still ~1 s, then jump straight up and land in frame.", "~1 सेकंड स्थिर खड़े रहें, फिर सीधा ऊपर कूदें।")
       };
@@ -1032,15 +1036,17 @@
       }
 
       // ---------------- TEST 4: VERTICAL JUMP ----------------
-      // Uses a Local Ballistic Parabola detector so walking back from the phone
-      // after pressing Record (or crouching before takeoff) NEVER inflates the score!
+      // Whole-Body Coupled Ballistic Jump Detector:
+      // Requires BOTH ankles, hips, and shoulders to rise simultaneously above their local upright standing baselines
+      // and return to the same floor level. Standing still, toe-landmark flicker, walking back, or squatting = REJECTED.
       if (test.key === "vertical_jump") {
         const footSm = medianFilter(ok.map(f => f.footY), 3);
         const hipSm = medianFilter(ok.map(f => f.hipY), 3);
+        const shSm = medianFilter(ok.map(f => f.shY), 3);
         const shFoot = median(ok.map(f => f.shToFootPx));
 
         const recordedHeight = athlete ? state.results[cellKey(athlete.id, "height")]?.value : null;
-        const shToFootCm = (recordedHeight && recordedHeight > 100) ? (recordedHeight * 0.81) : 126.0;
+        const shToFootCm = (recordedHeight && recordedHeight > 100) ? (recordedHeight * 0.78) : 122.0;
         const cmPerPx = calib?.cmPerPx || (shToFootCm / shFoot);
 
         // Local running floor level (+/- 20 frames) so walking back/forward from camera is tracked smoothly
@@ -1050,8 +1056,8 @@
           return pct(w, 0.75);
         });
 
-        // Minimum foot lift to enter airborne state: at least 2.5 cm above local floor
-        const liftThrPx = Math.max(2.5 / cmPerPx, 0.022 * shFoot);
+        // Minimum simultaneous ankle lift to enter airborne state: at least 3.2 cm above local floor
+        const liftThrPx = Math.max(3.2 / cmPerPx, 0.026 * shFoot);
 
         // Find contiguous airborne intervals [sIdx .. eIdx] bounded by ground contact before AND after
         const candidates = [];
@@ -1062,65 +1068,87 @@
             sIdx = i;
           } else if ((!isAir || i === n - 1) && sIdx >= 0) {
             const eIdx = isAir ? i : (i - 1);
-            if (sIdx >= 2 && eIdx <= n - 3) {
-              const preFloor = median(footSm.slice(Math.max(0, sIdx - 6), sIdx));
-              const postFloor = median(footSm.slice(eIdx + 1, Math.min(n, eIdx + 7)));
+            const airFrames = eIdx - sIdx + 1;
+            // Must be airborne for at least 2 consecutive frames and bounded by ground frames before & after
+            if (airFrames >= 2 && sIdx >= 3 && eIdx <= n - 4) {
+              const preFloor = median(footSm.slice(Math.max(0, sIdx - 8), sIdx));
+              const postFloor = median(footSm.slice(eIdx + 1, Math.min(n, eIdx + 9)));
               const floorDiffCm = Math.abs(preFloor - postFloor) * cmPerPx;
+              // Use the higher on-screen floor (smaller Y) of pre and post so stepping back NEVER creates artificial lift
+              const floorY = Math.min(preFloor, postFloor);
+              const meanFloorY = 0.5 * (preFloor + postFloor);
 
-              // Sub-frame linear interpolation for takeoff and landing timestamps
-              const floorY = 0.5 * (preFloor + postFloor);
-              const thrY = floorY - liftThrPx;
-              const y0 = footSm[sIdx - 1], y1 = footSm[sIdx];
-              const fracTake = (y0 > y1) ? Math.max(0, Math.min(1, (y0 - thrY) / (y0 - y1))) : 0.5;
-              const tTake = ok[sIdx - 1].t + fracTake * (ok[sIdx].t - ok[sIdx - 1].t);
-
-              const y2 = footSm[eIdx], y3 = footSm[eIdx + 1];
-              const fracLand = (y3 > y2) ? Math.max(0, Math.min(1, (thrY - y2) / (y3 - y2))) : 0.5;
-              const tLand = ok[eIdx].t + fracLand * (ok[eIdx + 1].t - ok[eIdx].t);
-
-              // Time spent above thrY (which is liftThrCm above the ground):
-              // h_total = liftThrCm + 1/8 * g * dt_above_thr^2
-              const dtAboveThrSec = (tLand - tTake) / 1000.0;
-              const liftThrCm = liftThrPx * cmPerPx;
-              const rawFlightCm = liftThrCm + 0.125 * 9.81 * dtAboveThrSec * dtAboveThrSec * 100.0;
-              const flightSec = Math.sqrt(Math.max(0, (8.0 * (rawFlightCm / 100.0)) / 9.81));
-
-              // A real jump lands on the same spot (floorDiff <= 7 cm) and has a realistic airborne duration
-              if (floorDiffCm <= 7.0 && dtAboveThrSec >= 0.06 && flightSec <= 0.75) {
-                const rawFootWindow = ok.slice(sIdx, eIdx + 1).map(f => f.footY);
-                const apexFootY = Math.min(...footSm.slice(sIdx, eIdx + 1), median(rawFootWindow.slice().sort((a, b) => a - b).slice(0, 2)));
-                const footClearanceCm = (floorY - apexFootY) * cmPerPx;
-
-                // Standing hip baseline from UPRIGHT standing frames (kneeDeg >= 162°) near the jump
-                // so pre-jump squat/crouch depth is NEVER added to hip rise!
-                const nearStandingHips = [];
-                for (let k = Math.max(0, sIdx - 18); k <= Math.min(n - 1, eIdx + 18); k++) {
-                  if (k >= sIdx - 2 && k <= eIdx + 2) continue;
-                  if (ok[k].kneeDeg >= 162 && Math.abs(footSm[k] - floorY) <= liftThrPx) {
-                    nearStandingHips.push(hipSm[k]);
-                  }
+              // Grounded frames before takeoff and after landing:
+              // Taking the 20th percentile of Y (highest upright position while grounded) automatically ignores
+              // any pre-jump crouch or post-landing squat (which have larger Y) AND prevents step-back drift!
+              const preGroundHips = [], preGroundShs = [];
+              for (let k = Math.max(0, sIdx - 25); k < sIdx; k++) {
+                if (Math.abs(footSm[k] - preFloor) <= liftThrPx * 1.1) {
+                  preGroundHips.push(hipSm[k]);
+                  preGroundShs.push(shSm[k]);
                 }
-                const rawHipWindow = ok.slice(sIdx, eIdx + 1).map(f => f.hipY);
-                const apexHipY = Math.min(...hipSm.slice(sIdx, eIdx + 1), median(rawHipWindow.slice().sort((a, b) => a - b).slice(0, 2)));
-                const hipRiseCm = nearStandingHips.length >= 2
-                  ? (median(nearStandingHips) - apexHipY) * cmPerPx
-                  : footClearanceCm;
+              }
+              const postGroundHips = [], postGroundShs = [];
+              for (let k = eIdx + 1; k <= Math.min(n - 1, eIdx + 25); k++) {
+                if (Math.abs(footSm[k] - postFloor) <= liftThrPx * 1.1) {
+                  postGroundHips.push(hipSm[k]);
+                  postGroundShs.push(shSm[k]);
+                }
+              }
 
-                // Guard against knee-tuck inflating footClearanceCm or crouch inflating hipRiseCm
-                const kinematicCm = Math.max(2.0, Math.min(footClearanceCm * 1.15, Math.max(footClearanceCm * 0.85, hipRiseCm)));
-                // Bound flight-time estimate by kinematic displacement (±frame uncertainty)
-                const boundedFlightCm = Math.min(rawFlightCm, kinematicCm * 1.25 + 2.5);
-                const jumpCm = 0.60 * kinematicCm + 0.40 * boundedFlightCm;
+              if (floorDiffCm <= 6.0 && preGroundHips.length >= 2 && postGroundHips.length >= 2) {
+                const standingHipY = Math.min(pct(preGroundHips, 0.25), pct(postGroundHips, 0.25));
+                const standingShY = Math.min(pct(preGroundShs, 0.25), pct(postGroundShs, 0.25));
 
-                if (footClearanceCm >= 2.5 && kinematicCm >= 2.5) {
-                  candidates.push({
-                    jumpCm,
-                    kinematicCm,
-                    footClearanceCm,
-                    hipRiseCm,
-                    flightSec,
-                    flightCm: rawFlightCm
-                  });
+                // Sub-frame linear interpolation for takeoff and landing timestamps
+                const thrY = meanFloorY - liftThrPx;
+                const y0 = footSm[sIdx - 1], y1 = footSm[sIdx];
+                const fracTake = (y0 > y1) ? Math.max(0, Math.min(1, (y0 - thrY) / (y0 - y1))) : 0.5;
+                const tTake = ok[sIdx - 1].t + fracTake * (ok[sIdx].t - ok[sIdx - 1].t);
+
+                const y2 = footSm[eIdx], y3 = footSm[eIdx + 1];
+                const fracLand = (y3 > y2) ? Math.max(0, Math.min(1, (thrY - y2) / (y3 - y2))) : 0.5;
+                const tLand = ok[eIdx].t + fracLand * (ok[eIdx + 1].t - ok[eIdx].t);
+
+                const dtAboveThrSec = (tLand - tTake) / 1000.0;
+                const liftThrCm = liftThrPx * cmPerPx;
+                const rawFlightCm = liftThrCm + 0.125 * 9.81 * dtAboveThrSec * dtAboveThrSec * 100.0;
+                const flightSec = Math.sqrt(Math.max(0, (8.0 * (rawFlightCm / 100.0)) / 9.81));
+
+                if (dtAboveThrSec >= 0.06 && flightSec <= 0.75) {
+                  const rawFootWin = ok.slice(sIdx, eIdx + 1).map(f => f.footY);
+                  const rawHipWin = ok.slice(sIdx, eIdx + 1).map(f => f.hipY);
+                  const rawShWin = ok.slice(sIdx, eIdx + 1).map(f => f.shY);
+
+                  const apexFootY = Math.min(...footSm.slice(sIdx, eIdx + 1), median(rawFootWin.slice().sort((a, b) => a - b).slice(0, 2)));
+                  const apexHipY = Math.min(...hipSm.slice(sIdx, eIdx + 1), median(rawHipWin.slice().sort((a, b) => a - b).slice(0, 2)));
+                  const apexShY = Math.min(...shSm.slice(sIdx, eIdx + 1), median(rawShWin.slice().sort((a, b) => a - b).slice(0, 2)));
+
+                  const footClearanceCm = (floorY - apexFootY) * cmPerPx;
+                  const hipRiseCm = (standingHipY - apexHipY) * cmPerPx;
+                  const shRiseCm = (standingShY - apexShY) * cmPerPx;
+
+                  // Rigid-Body Coupling Check:
+                  // In a real jump, both ankles, hips, and shoulders ALL rise together by at least 3.5 cm
+                  // above BOTH pre-jump and post-jump upright standing levels.
+                  const coMRiseCm = 0.55 * hipRiseCm + 0.45 * shRiseCm;
+                  const minBodyPartRiseCm = Math.min(footClearanceCm, hipRiseCm, shRiseCm);
+
+                  if (minBodyPartRiseCm >= 3.5 && coMRiseCm >= 3.8 && footClearanceCm >= 3.8) {
+                    const kinematicCm = Math.min(footClearanceCm * 1.08, coMRiseCm);
+                    const boundedFlightCm = Math.min(rawFlightCm, kinematicCm * 1.12);
+                    const jumpCm = 0.65 * kinematicCm + 0.35 * boundedFlightCm;
+
+                    candidates.push({
+                      jumpCm,
+                      kinematicCm,
+                      footClearanceCm,
+                      hipRiseCm,
+                      shRiseCm,
+                      flightSec,
+                      flightCm: rawFlightCm
+                    });
+                  }
                 }
               }
             }
@@ -1142,7 +1170,7 @@
           method: `AI Ballistic Jump · Foot lift ${best.footClearanceCm.toFixed(1)} cm · CoM rise ${best.kinematicCm.toFixed(1)} cm · Flight ${(best.flightSec * 1000).toFixed(0)} ms`,
           audit: candidates.map((c, idx) => ({
             label: `Jump #${idx + 1}`,
-            detail: `${c.jumpCm.toFixed(1)} cm (Foot clearance ${c.footClearanceCm.toFixed(1)} cm · Hip rise ${c.hipRiseCm.toFixed(1)} cm · Airborne ${(c.flightSec * 1000).toFixed(0)} ms)`,
+            detail: `${c.jumpCm.toFixed(1)} cm (Ankles +${c.footClearanceCm.toFixed(1)} cm · Hips +${c.hipRiseCm.toFixed(1)} cm · Shoulders +${c.shRiseCm.toFixed(1)} cm · Airborne ${(c.flightSec * 1000).toFixed(0)} ms)`,
             valid: true
           }))
         };
