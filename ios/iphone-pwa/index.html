@@ -722,7 +722,9 @@
     //     or white A4 paper sheet surrounded by smooth wall
     // =========================================================================
     let _stickyCanvas = null, _stickyCtx = null;
-    let _autoStickyCalib = null;
+    let _autoStickyCalib = (state.calib && state.calib.height && state.calib.height.method === "sticky150")
+      ? { ...state.calib.height }
+      : null;
     let _tesseractPromise = null;
 
     function extractPatchTemplate(gray, grad, SW, SH, cx, cy) {
@@ -797,7 +799,7 @@
             }
           }
         }
-        if (bestNcc >= 0.42) {
+        if (bestNcc >= 0.52) {
           const noteH = (uploadedCalib.noteHNorm || 0.08) * H;
           const noteW = (uploadedCalib.noteWNorm || 0.08) * W;
           const topY = Math.max(4, (bestY / SH) * H - noteH * 0.45);
@@ -805,6 +807,7 @@
           const leftX = Math.max(4, (bestX / SW) * W - noteW * 0.5);
           const rightX = Math.min(W - 4, leftX + noteW);
           return {
+            ...uploadedCalib,
             topY, botY, leftX, rightX, noteH, noteW,
             markCm: uploadedCalib.markCm || 150.0,
             objSizeCm: uploadedCalib.objSizeCm || 9.5,
@@ -859,17 +862,36 @@
           if (noteH >= H * 0.025 && noteH <= H * 0.22 && noteW >= W * 0.03 && noteW <= W * 0.30) {
             const cx = Math.round(xm), cy = Math.round(ym);
             return {
+              ...(uploadedCalib || {}),
               topY, botY, leftX, rightX, noteH, noteW,
               cxNorm: cx / SW, cyNorm: cy / SH,
               noteHNorm: noteH / H, noteWNorm: noteW / W,
-              template: extractPatchTemplate(gray, grad, SW, SH, cx, cy),
-              markCm: state.lastWallMarkCm || 150.0,
-              objSizeCm: 9.5,
-              refLabel: `${state.lastWallMarkCm || 150} cm Sticky Note`,
+              template: (uploadedCalib && uploadedCalib.template) || extractPatchTemplate(gray, grad, SW, SH, cx, cy),
+              markCm: uploadedCalib?.markCm || state.lastWallMarkCm || 150.0,
+              objSizeCm: uploadedCalib?.objSizeCm || 9.5,
+              refLabel: uploadedCalib?.refLabel || `${state.lastWallMarkCm || 150} cm Sticky Note`,
               frameW: W, frameH: H
             };
           }
         }
+      }
+
+      // If the user already uploaded/locked a reference photo, keep using that saved reference
+      // instead of letting a random wall shadow/edge overwrite it when the athlete steps in front!
+      if (uploadedCalib && uploadedCalib.topY > 0) {
+        const sy = H / (uploadedCalib.frameH || H);
+        const sx = W / (uploadedCalib.frameW || W);
+        return {
+          ...uploadedCalib,
+          topY: uploadedCalib.topY * sy,
+          botY: (uploadedCalib.botY || (uploadedCalib.topY + (uploadedCalib.noteH || H * 0.08))) * sy,
+          leftX: (uploadedCalib.leftX || W * 0.42) * sx,
+          rightX: (uploadedCalib.rightX || W * 0.58) * sx,
+          noteH: (uploadedCalib.noteH || H * 0.08) * sy,
+          noteW: (uploadedCalib.noteW || W * 0.16) * sx,
+          frameW: W,
+          frameH: H
+        };
       }
 
       // 3. Pure Grayscale Wall-Mark / Handwriting / A4 Detector (when someone draws a line
@@ -2101,6 +2123,39 @@
           </div>
         ` : ""}
 
+        ${test.key === "height" ? `
+          <div class="card" id="cellHeightRefCard" style="border:2px solid ${state.calib?.height?.method === "sticky150" ? "var(--green-fg, #137333)" : "var(--border)"};">
+            ${state.calib?.height?.method === "sticky150" ? `
+              <div style="display:flex;gap:10px;align-items:center;">
+                ${state.calib.height.thumbDataUrl ? `<img src="${state.calib.height.thumbDataUrl}" alt="Saved Wall Reference" style="width:58px;height:102px;object-fit:cover;border-radius:6px;border:2px solid #00E6A8;flex-shrink:0;" />` : ""}
+                <div style="flex:1;">
+                  <div style="font-size:13px;font-weight:800;color:var(--green-fg, #137333);">
+                    ✅ ${t("Saved Reference Photo Active", "सहेजी गई संदर्भ फोटो सक्रिय")}: ${state.calib.height.refLabel || ((state.calib.height.markCm || 150) + " cm")}
+                  </div>
+                  <div style="font-size:11px;color:var(--text-sub);margin-top:3px;line-height:1.35;">
+                    ${t("Automatically reused for every height attempt & athlete — no need to upload again unless you move the mark.", "हर प्रयास और एथलीट के लिए स्वतः उपयोग किया जाएगा — दोबारा अपलोड करने की आवश्यकता नहीं है।")}
+                  </div>
+                  <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+                    <input type="file" id="inpCellRefPhoto" accept="image/*" style="display:none;" />
+                    <button class="lang-btn" id="btnCellUploadRef" style="font-size:11px;padding:4px 8px;font-weight:700;">🔄 ${t("Change Reference Photo", "संदर्भ फोटो बदलें")}</button>
+                    <button class="lang-btn" id="btnCellClearRef" style="font-size:11px;padding:4px 8px;color:var(--red-fg);">🗑️ ${t("Clear Reference", "संदर्भ हटाएँ")}</button>
+                  </div>
+                </div>
+              </div>
+            ` : `
+              <div style="font-size:13px;font-weight:800;margin-bottom:4px;">
+                📌 ${t("Wall Reference Photo (Set Once — Reused Automatically)", "दीवार संदर्भ फोटो (एक बार सेट करें — हर बार स्वतः उपयोग)")}
+              </div>
+              <div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;line-height:1.4;">
+                ${t("Upload a photo of your wall sticky note, A4 sheet, or written wall mark (e.g. 150 cm or 100 cm) once. It stays saved for all measurements until you change it.", "अपने स्टिकी नोट, A4 शीट, या दीवार के निशान (जैसे 150 cm या 100 cm) की फोटो एक बार अपलोड करें। यह अगले सभी मापों के लिए सहेजी रहेगी।")}
+              </div>
+              <input type="file" id="inpCellRefPhoto" accept="image/*" style="display:none;" />
+              <button class="btn secondary" id="btnCellUploadRef" style="margin-top:0;font-weight:800;">📸 ${t("Upload Reference Photo Once (Sticky Note / A4 / Wall Mark)", "संदर्भ फोटो एक बार अपलोड करें")}</button>
+            `}
+            <div id="cellRefPhotoPanel" style="display:none;margin-top:10px;font-size:12px;"></div>
+          </div>
+        ` : ""}
+
         ${test.mode === "AI" ? `
           <button class="btn primary" id="btnOpenCamera">
             📷 ${t(`Record Attempt #${history.length + 1} with Live Pose AI`, `प्रयास #${history.length + 1} AI कैमरे से रिकॉर्ड करें`)}
@@ -2126,6 +2181,30 @@
       if (clearBtn) {
         clearBtn.onclick = () => {
           delete state.results[key];
+          persist();
+          render();
+        };
+      }
+      const btnCellUp = document.getElementById("btnCellUploadRef");
+      const inpCellUp = document.getElementById("inpCellRefPhoto");
+      const cellPanel = document.getElementById("cellRefPhotoPanel");
+      if (btnCellUp && inpCellUp && cellPanel) {
+        btnCellUp.onclick = () => inpCellUp.click();
+        inpCellUp.onchange = (e) => {
+          const f = e.target.files?.[0];
+          if (f) {
+            openRefPhotoEditor(f, cellPanel, 720, 1280, (closed) => {
+              if (closed) render();
+            });
+          }
+        };
+      }
+      const btnCellClr = document.getElementById("btnCellClearRef");
+      if (btnCellClr) {
+        btnCellClr.onclick = () => {
+          if (state.calib) delete state.calib.height;
+          _autoStickyCalib = null;
+          persist();
           render();
         };
       }
@@ -2150,6 +2229,177 @@
         state.route = "session";
         render();
       };
+    }
+
+    function openRefPhotoEditor(file, targetPanel, W0, H0, onSaved) {
+      if (!file || !targetPanel) return;
+      const url = URL.createObjectURL(file);
+      const imgEl = new Image();
+      imgEl.onload = async () => {
+        const SW = 144, SH = 256;
+        const off = document.createElement("canvas");
+        off.width = SW; off.height = SH;
+        const octx = off.getContext("2d", { willReadFrequently: true });
+        octx.drawImage(imgEl, 0, 0, SW, SH);
+        const buf = octx.getImageData(0, 0, SW, SH).data;
+        let det = analyzeWallImageBuffer(buf, SW, SH, W0, H0, null, null);
+        if (!det) {
+          det = {
+            topY: H0 * 0.20,
+            botY: H0 * 0.28,
+            leftX: W0 * 0.42,
+            rightX: W0 * 0.58,
+            noteH: H0 * 0.08,
+            noteW: W0 * 0.16,
+            cxNorm: 0.50,
+            cyNorm: 0.24,
+            noteHNorm: 0.08,
+            noteWNorm: 0.16,
+            markCm: state.lastWallMarkCm || 150.0,
+            objSizeCm: 9.5,
+            frameW: W0,
+            frameH: H0
+          };
+        }
+
+        targetPanel.style.display = "block";
+        targetPanel.innerHTML = `
+          <div style="font-weight:800;color:var(--primary);margin-bottom:6px;">
+            📸 ${t("Reference Photo Setup (Saved automatically for all future attempts):", "संदर्भ फोटो सेटअप (सभी अगले प्रयासों के लिए स्वतः सहेजा जाएगा):")}
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+            <canvas id="refPhotoCanvas" width="180" height="320" style="width:140px;height:248px;border-radius:8px;border:2px solid var(--primary);cursor:crosshair;touch-action:none;"></canvas>
+            <div style="flex:1;min-width:190px;">
+              <div id="ocrStatusMsg" style="font-size:11px;font-weight:700;color:var(--green-fg,#137333);margin-bottom:6px;">
+                🔍 ${t("Scanning reference mark & reading written height...", "निशान और लिखी हुई ऊँचाई पढ़ी जा रही है...")}
+              </div>
+              <label style="font-size:11px;font-weight:700;display:block;margin-bottom:3px;">${t("1. Reference Object / Marking Type:", "1. संदर्भ वस्तु / निशान का प्रकार:")}</label>
+              <select id="selRefObjType" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);font-weight:700;margin-bottom:8px;">
+                <option value="9.5" selected>📌 ${t("Sticky Note / Written Wall Mark (~8–10 cm)", "स्टिकी नोट / दीवार पर लिखा निशान")}</option>
+                <option value="29.7">📄 ${t("A4 Sheet Portrait on Wall (29.7 cm tall)", "दीवार पर A4 शीट (29.7 सेमी)")}</option>
+                <option value="21.0">📄 ${t("A4 Sheet Landscape on Wall (21.0 cm tall)", "A4 शीट लैंडस्केप (21.0 सेमी)")}</option>
+                <option value="30.0">📏 ${t("30 cm Ruler / Scale on Wall", "30 सेमी स्केल / रूलर")}</option>
+                <option value="15.0">📏 ${t("15 cm Small Scale on Wall", "15 सेमी छोटा स्केल")}</option>
+              </select>
+              <label style="font-size:11px;font-weight:700;display:block;margin-bottom:3px;">${t("2. Height Written on Mark / Wall (cm from floor):", "2. निशान की फ़र्श से ऊँचाई (cm):")}</label>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">
+                <input id="inpPhotoMarkCm" type="number" step="0.5" value="${det.markCm || 150}" style="width:76px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);font-weight:800;" />
+                <button class="lang-btn" data-hpreset="100" style="font-size:10px;padding:3px 6px;">100 cm</button>
+                <button class="lang-btn" data-hpreset="120" style="font-size:10px;padding:3px 6px;">120 cm</button>
+                <button class="lang-btn" data-hpreset="140" style="font-size:10px;padding:3px 6px;">140 cm</button>
+                <button class="lang-btn" data-hpreset="150" style="font-size:10px;padding:3px 6px;">150 cm</button>
+                <button class="lang-btn" data-hpreset="160" style="font-size:10px;padding:3px 6px;">160 cm</button>
+              </div>
+              <button class="btn primary" id="btnLockRefPhoto" style="margin-top:4px;padding:8px 10px;">✅ ${t("Save & Keep Using This Reference", "सहेजें और इसी संदर्भ का उपयोग जारी रखें")}</button>
+            </div>
+          </div>
+        `;
+
+        const pCan = targetPanel.querySelector("#refPhotoCanvas");
+        const pCtx = pCan.getContext("2d");
+
+        function drawPreview() {
+          pCtx.clearRect(0, 0, pCan.width, pCan.height);
+          pCtx.drawImage(imgEl, 0, 0, pCan.width, pCan.height);
+          const sx = pCan.width / W0, sy = pCan.height / H0;
+          pCtx.strokeStyle = "#FFD166";
+          pCtx.lineWidth = 2;
+          pCtx.strokeRect(det.leftX * sx, det.topY * sy, (det.rightX - det.leftX) * sx, (det.botY - det.topY) * sy);
+          pCtx.strokeStyle = "#00E6A8";
+          pCtx.lineWidth = 3;
+          pCtx.beginPath();
+          pCtx.moveTo(0, det.topY * sy);
+          pCtx.lineTo(pCan.width, det.topY * sy);
+          pCtx.stroke();
+          pCtx.fillStyle = "rgba(0,0,0,0.72)";
+          pCtx.fillRect(4, Math.max(4, det.topY * sy - 20), pCan.width - 8, 18);
+          pCtx.fillStyle = "#00E6A8";
+          pCtx.font = "bold 11px -apple-system, sans-serif";
+          const curCm = parseFloat(targetPanel.querySelector("#inpPhotoMarkCm")?.value) || det.markCm || 150;
+          pCtx.fillText(`📌 ${curCm} cm MARK`, 8, Math.max(16, det.topY * sy - 7));
+        }
+
+        function applyPhotoCalib(closePanel) {
+          drawPreview();
+          const markCm = parseFloat(targetPanel.querySelector("#inpPhotoMarkCm")?.value) || 150.0;
+          const objSizeCm = parseFloat(targetPanel.querySelector("#selRefObjType")?.value) || 9.5;
+          state.lastWallMarkCm = markCm;
+          const refLabel = `${markCm} cm (${objSizeCm === 29.7 ? "A4" : objSizeCm === 30 ? "Ruler" : "Wall Note/Mark"})`;
+          let thumbDataUrl = state.calib?.height?.thumbDataUrl || "";
+          try {
+            const tCan = document.createElement("canvas");
+            tCan.width = 90; tCan.height = 160;
+            tCan.getContext("2d").drawImage(pCan, 0, 0, 90, 160);
+            thumbDataUrl = tCan.toDataURL("image/jpeg", 0.68);
+          } catch (_) {}
+          const calibObj = {
+            ...det,
+            method: "sticky150",
+            lockedFromPhoto: true,
+            thumbDataUrl,
+            markCm,
+            objSizeCm,
+            refLabel,
+            cmPerPx: objSizeCm / Math.max(15, det.noteH),
+            refCm: markCm,
+            refPx: det.noteH,
+            frameW: W0,
+            frameH: H0,
+            at: Date.now()
+          };
+          _autoStickyCalib = calibObj;
+          if (!state.calib) state.calib = {};
+          state.calib.height = calibObj;
+          persist();
+          if (closePanel) {
+            targetPanel.style.display = "none";
+          }
+          if (onSaved) onSaved(closePanel);
+        }
+
+        applyPhotoCalib(false);
+
+        pCan.addEventListener("pointerdown", (ev) => {
+          const r = pCan.getBoundingClientRect();
+          const ny = Math.max(0.04, Math.min(0.85, (ev.clientY - r.top) / r.height));
+          const nx = Math.max(0.10, Math.min(0.90, (ev.clientX - r.left) / r.width));
+          det.topY = ny * H0;
+          det.botY = Math.min(H0 - 10, det.topY + det.noteH);
+          det.leftX = Math.max(10, nx * W0 - det.noteW / 2);
+          det.rightX = Math.min(W0 - 10, det.leftX + det.noteW);
+          det.cxNorm = nx;
+          det.cyNorm = ny + (det.noteH / H0) * 0.45;
+          applyPhotoCalib(false);
+        });
+
+        targetPanel.querySelectorAll("[data-hpreset]").forEach(b => {
+          b.onclick = () => {
+            targetPanel.querySelector("#inpPhotoMarkCm").value = b.dataset.hpreset;
+            applyPhotoCalib(false);
+          };
+        });
+        targetPanel.querySelector("#inpPhotoMarkCm").oninput = () => applyPhotoCalib(false);
+        targetPanel.querySelector("#selRefObjType").onchange = () => applyPhotoCalib(false);
+        targetPanel.querySelector("#btnLockRefPhoto").onclick = () => applyPhotoCalib(true);
+
+        const ocrBox = {
+          leftX: (det.leftX / W0) * imgEl.width,
+          rightX: (det.rightX / W0) * imgEl.width,
+          topY: (det.topY / H0) * imgEl.height,
+          botY: (det.botY / H0) * imgEl.height
+        };
+        const ocrCm = await ocrReadHeightFromPhoto(imgEl, ocrBox, imgEl.width, imgEl.height);
+        const ocrEl = targetPanel.querySelector("#ocrStatusMsg");
+        if (ocrCm && ocrCm >= 50 && ocrCm <= 220) {
+          const inp = targetPanel.querySelector("#inpPhotoMarkCm");
+          if (inp) inp.value = String(ocrCm);
+          if (ocrEl) ocrEl.textContent = `✅ ${t("Auto-read from photo:", "फोटो से स्वतः पढ़ा गया:")} ${ocrCm} cm — ${t("Saved for all attempts!", "सभी प्रयासों के लिए सहेजा गया!")}`;
+          applyPhotoCalib(false);
+        } else if (ocrEl) {
+          ocrEl.textContent = `✅ ${t("Reference mark saved! Confirm height (e.g. 150 cm or 100 cm) below.", "संदर्भ निशान सहेजा गया! नीचे ऊँचाई की पुष्टि करें।")}`;
+        }
+      };
+      imgEl.src = url;
     }
 
     async function renderCapture(root) {
@@ -2181,7 +2431,18 @@
               <button class="lang-btn" id="btnCalClear" style="font-size:11px;padding:3px 8px;">${t("Reset Scale", "स्केल रीसेट")}</button>
             </div>
             ${test.key === "height" ? `
-              <details style="margin-top:8px;font-size:12px;line-height:1.45;" ${state.calib?.height?.method === "wall" ? "" : "open"}>
+              <div id="savedRefBanner" style="display:${state.calib?.height?.method === "sticky150" ? "flex" : "none"};gap:8px;align-items:center;margin-top:6px;padding:6px 8px;border-radius:8px;background:rgba(0,230,168,0.12);border:1px solid #00E6A8;">
+                ${state.calib?.height?.thumbDataUrl ? `<img id="savedRefThumb" src="${state.calib.height.thumbDataUrl}" alt="Ref" style="width:42px;height:74px;object-fit:cover;border-radius:5px;border:1.5px solid #00E6A8;" />` : ""}
+                <div style="flex:1;font-size:11px;line-height:1.35;">
+                  <div style="font-weight:800;color:var(--green-fg,#137333);" id="savedRefTitle">
+                    ✅ ${t("Using Saved Reference Photo Automatically", "सहेजी गई संदर्भ फोटो स्वतः उपयोग में")}: ${state.calib?.height?.refLabel || ((state.calib?.height?.markCm || 150) + " cm")}
+                  </div>
+                  <div style="color:var(--text-sub);margin-top:2px;">
+                    ${t("Kept active for all height attempts — no need to upload again unless you want to change it.", "सभी प्रयासों के लिए सक्रिय — बदलने की आवश्यकता नहीं है।")}
+                  </div>
+                </div>
+              </div>
+              <details style="margin-top:8px;font-size:12px;line-height:1.45;" ${(state.calib?.height?.method === "wall" || state.calib?.height?.method === "sticky150") ? "" : "open"}>
                 <summary style="font-weight:800;cursor:pointer;">📋 ${t("Teacher setup — SAI Wall Stadiometer (do once per station)", "शिक्षक सेटअप — SAI दीवार स्टेडियोमीटर (प्रति स्टेशन एक बार)")}</summary>
                 <ol style="margin:6px 0 0 18px;padding:0;">
                   <li>${t("Stick a measuring tape (or two marks) on a flat wall: one at the floor (0 cm) and one at <b>150 cm</b>.", "समतल दीवार पर टेप लगाएँ: एक निशान फ़र्श (0 cm) पर और एक <b>150 cm</b> पर।")}</li>
@@ -2191,7 +2452,7 @@
                   <li>${t("Do not move the phone again. Each athlete stands barefoot, <b>heels, buttocks and shoulders touching the wall</b>, beside the tape, looking straight ahead.", "फ़ोन को फिर न हिलाएँ। हर एथलीट नंगे पैर, <b>एड़ी, कूल्हे और कंधे दीवार से सटाकर</b>, टेप के बगल में सीधा देखते हुए खड़ा हो।")}</li>
                 </ol>
               </details>
-              <div style="margin-top:8px;">
+              <div style="margin-top:8px;display:${state.calib?.height?.method === "sticky150" ? "none" : "block"};">
                 <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;">
                   <span>📏 ${t("Camera-to-Wall Distance (estimate mode only)", "कैमरे से दीवार की दूरी (केवल अनुमान)")}</span>
                   <span id="lblDistVal">${(state.cameraDistanceM || 2.50).toFixed(2)} m</span>
@@ -2202,7 +2463,11 @@
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
               ${test.key === "height" ? `
                 <input type="file" id="inpRefPhoto" accept="image/*" style="display:none;" />
-                <button class="lang-btn" id="btnUploadRefPhoto" style="font-size:11px;padding:5px 8px;font-weight:800;background:var(--primary);color:#fff;border:none;">📸 ${t("Upload Reference Photo (Sticky Note / A4 / Wall Mark)", "संदर्भ फोटो अपलोड करें (स्टिकी नोट / A4 / दीवार निशान)")}</button>
+                <button class="lang-btn" id="btnUploadRefPhoto" style="font-size:11px;padding:5px 8px;font-weight:800;background:var(--primary);color:#fff;border:none;">
+                  ${state.calib?.height?.method === "sticky150"
+                    ? `🔄 ${t("Change Reference Photo", "संदर्भ फोटो बदलें")}`
+                    : `📸 ${t("Upload Reference Photo Once (Sticky Note / A4 / Wall Mark)", "संदर्भ फोटो एक बार अपलोड करें")}`}
+                </button>
                 <button class="lang-btn" id="btnCalWall" style="font-size:11px;padding:5px 8px;font-weight:800;">📌 ${t("1-Tap Wall Mark / Sticky Note", "1-टैप दीवार निशान / स्टिकी नोट")}</button>
               ` : ""}
               <button class="lang-btn" id="btnCalTap" style="font-size:11px;padding:5px 8px;">📐 ${t("Tap A4 / Tape / Ruler Ends (GREEN)", "A4 / टेप के सिरों पर टैप करें")}</button>
@@ -2268,6 +2533,21 @@
             ? `📏 Rung 3 Athlete Height Scale (${hVal} cm) Active`
             : `📏 Rung 3/4 Auto Kinematic Scale Active`;
           el.style.color = "var(--primary)";
+        }
+        const savedBanner = document.getElementById("savedRefBanner");
+        const savedTitle = document.getElementById("savedRefTitle");
+        const btnUpRef = document.getElementById("btnUploadRefPhoto");
+        if (test.key === "height") {
+          const hasSavedPhoto = c && c.method === "sticky150";
+          if (savedBanner) savedBanner.style.display = hasSavedPhoto ? "flex" : "none";
+          if (savedTitle && hasSavedPhoto) {
+            savedTitle.textContent = `✅ ${t("Using Saved Reference Photo Automatically", "सहेजी गई संदर्भ फोटो स्वतः उपयोग में")}: ${c.refLabel || ((c.markCm || 150) + " cm")}`;
+          }
+          if (btnUpRef) {
+            btnUpRef.innerHTML = hasSavedPhoto
+              ? `🔄 ${t("Change Reference Photo", "संदर्भ फोटो बदलें")}`
+              : `📸 ${t("Upload Reference Photo Once (Sticky Note / A4 / Wall Mark)", "संदर्भ फोटो एक बार अपलोड करें")}`;
+          }
         }
       }
 
@@ -2479,168 +2759,7 @@
       }
 
       function renderRefPhotoPanel(file) {
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        const imgEl = new Image();
-        imgEl.onload = async () => {
-          const SW = 144, SH = 256;
-          const off = document.createElement("canvas");
-          off.width = SW; off.height = SH;
-          const octx = off.getContext("2d", { willReadFrequently: true });
-          octx.drawImage(imgEl, 0, 0, SW, SH);
-          const buf = octx.getImageData(0, 0, SW, SH).data;
-          const W0 = frameW || 720, H0 = frameH || 1280;
-          let det = analyzeWallImageBuffer(buf, SW, SH, W0, H0, null, null);
-          if (!det) {
-            det = {
-              topY: H0 * 0.20,
-              botY: H0 * 0.28,
-              leftX: W0 * 0.42,
-              rightX: W0 * 0.58,
-              noteH: H0 * 0.08,
-              noteW: W0 * 0.16,
-              cxNorm: 0.50,
-              cyNorm: 0.24,
-              noteHNorm: 0.08,
-              noteWNorm: 0.16,
-              markCm: state.lastWallMarkCm || 150.0,
-              objSizeCm: 9.5,
-              frameW: W0,
-              frameH: H0
-            };
-          }
-
-          calPanel.style.display = "block";
-          calPanel.innerHTML = `
-            <div style="font-weight:800;color:var(--primary);margin-bottom:6px;">
-              📸 ${t("Uploaded Reference Photo — Tap photo to adjust mark line if needed:", "अपलोड की गई संदर्भ फोटो — यदि आवश्यक हो तो निशान समायोजित करने के लिए फोटो पर टैप करें:")}
-            </div>
-            <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
-              <canvas id="refPhotoCanvas" width="180" height="320" style="width:150px;height:266px;border-radius:8px;border:2px solid var(--primary);cursor:crosshair;touch-action:none;"></canvas>
-              <div style="flex:1;min-width:190px;">
-                <div id="ocrStatusMsg" style="font-size:11px;font-weight:700;color:var(--green-fg,#137333);margin-bottom:6px;">
-                  🔍 ${t("Scanning reference mark & reading written height...", "निशान और लिखी हुई ऊँचाई पढ़ी जा रही है...")}
-                </div>
-                <label style="font-size:11px;font-weight:700;display:block;margin-bottom:3px;">${t("1. Reference Object / Marking Type:", "1. संदर्भ वस्तु / निशान का प्रकार:")}</label>
-                <select id="selRefObjType" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);font-weight:700;margin-bottom:8px;">
-                  <option value="9.5" selected>📌 ${t("Sticky Note / Written Wall Mark (~8–10 cm)", "स्टिकी नोट / दीवार पर लिखा निशान")}</option>
-                  <option value="29.7">📄 ${t("A4 Sheet Portrait on Wall (29.7 cm tall)", "दीवार पर A4 शीट (29.7 सेमी)")}</option>
-                  <option value="21.0">📄 ${t("A4 Sheet Landscape on Wall (21.0 cm tall)", "A4 शीट लैंडस्केप (21.0 सेमी)")}</option>
-                  <option value="30.0">📏 ${t("30 cm Ruler / Scale on Wall", "30 सेमी स्केल / रूलर")}</option>
-                  <option value="15.0">📏 ${t("15 cm Small Scale on Wall", "15 सेमी छोटा स्केल")}</option>
-                </select>
-                <label style="font-size:11px;font-weight:700;display:block;margin-bottom:3px;">${t("2. Height Written on Mark / Wall (cm from floor):", "2. निशान की फ़र्श से ऊँचाई (cm):")}</label>
-                <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">
-                  <input id="inpPhotoMarkCm" type="number" step="0.5" value="${det.markCm || 150}" style="width:76px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);font-weight:800;" />
-                  <button class="lang-btn" data-hpreset="100" style="font-size:10px;padding:3px 6px;">100 cm</button>
-                  <button class="lang-btn" data-hpreset="120" style="font-size:10px;padding:3px 6px;">120 cm</button>
-                  <button class="lang-btn" data-hpreset="140" style="font-size:10px;padding:3px 6px;">140 cm</button>
-                  <button class="lang-btn" data-hpreset="150" style="font-size:10px;padding:3px 6px;">150 cm</button>
-                  <button class="lang-btn" data-hpreset="160" style="font-size:10px;padding:3px 6px;">160 cm</button>
-                </div>
-                <button class="btn primary" id="btnLockRefPhoto" style="margin-top:4px;padding:8px 10px;">✅ ${t("Lock Wall Reference (GREEN)", "दीवार संदर्भ लॉक करें")}</button>
-              </div>
-            </div>
-          `;
-
-          const pCan = document.getElementById("refPhotoCanvas");
-          const pCtx = pCan.getContext("2d");
-
-          function drawPreview() {
-            pCtx.clearRect(0, 0, pCan.width, pCan.height);
-            pCtx.drawImage(imgEl, 0, 0, pCan.width, pCan.height);
-            const sx = pCan.width / W0, sy = pCan.height / H0;
-            pCtx.strokeStyle = "#FFD166";
-            pCtx.lineWidth = 2;
-            pCtx.strokeRect(det.leftX * sx, det.topY * sy, (det.rightX - det.leftX) * sx, (det.botY - det.topY) * sy);
-            pCtx.strokeStyle = "#00E6A8";
-            pCtx.lineWidth = 3;
-            pCtx.beginPath();
-            pCtx.moveTo(0, det.topY * sy);
-            pCtx.lineTo(pCan.width, det.topY * sy);
-            pCtx.stroke();
-            pCtx.fillStyle = "rgba(0,0,0,0.72)";
-            pCtx.fillRect(4, Math.max(4, det.topY * sy - 20), pCan.width - 8, 18);
-            pCtx.fillStyle = "#00E6A8";
-            pCtx.font = "bold 11px -apple-system, sans-serif";
-            const curCm = parseFloat(document.getElementById("inpPhotoMarkCm")?.value) || det.markCm || 150;
-            pCtx.fillText(`📌 ${curCm} cm MARK LINE`, 8, Math.max(16, det.topY * sy - 7));
-          }
-
-          function applyPhotoCalib(closePanel) {
-            const markCm = parseFloat(document.getElementById("inpPhotoMarkCm")?.value) || 150.0;
-            const objSizeCm = parseFloat(document.getElementById("selRefObjType")?.value) || 9.5;
-            state.lastWallMarkCm = markCm;
-            const refLabel = `${markCm} cm (${objSizeCm === 29.7 ? "A4" : objSizeCm === 30 ? "Ruler" : "Wall Note/Mark"})`;
-            const calibObj = {
-              ...det,
-              method: "sticky150",
-              markCm,
-              objSizeCm,
-              refLabel,
-              cmPerPx: objSizeCm / Math.max(15, det.noteH),
-              refCm: markCm,
-              refPx: det.noteH,
-              frameW: W0,
-              frameH: H0,
-              at: Date.now()
-            };
-            _autoStickyCalib = calibObj;
-            if (!state.calib) state.calib = {};
-            state.calib.height = calibObj;
-            persist();
-            refreshCalStatus();
-            drawPreview();
-            if (closePanel) {
-              calPanel.style.display = "none";
-            }
-          }
-
-          drawPreview();
-          applyPhotoCalib(false);
-
-          pCan.addEventListener("pointerdown", (ev) => {
-            const r = pCan.getBoundingClientRect();
-            const ny = Math.max(0.04, Math.min(0.85, (ev.clientY - r.top) / r.height));
-            const nx = Math.max(0.10, Math.min(0.90, (ev.clientX - r.left) / r.width));
-            det.topY = ny * H0;
-            det.botY = Math.min(H0 - 10, det.topY + det.noteH);
-            det.leftX = Math.max(10, nx * W0 - det.noteW / 2);
-            det.rightX = Math.min(W0 - 10, det.leftX + det.noteW);
-            det.cxNorm = nx;
-            det.cyNorm = ny + (det.noteH / H0) * 0.45;
-            applyPhotoCalib(false);
-          });
-
-          calPanel.querySelectorAll("[data-hpreset]").forEach(b => {
-            b.onclick = () => {
-              document.getElementById("inpPhotoMarkCm").value = b.dataset.hpreset;
-              applyPhotoCalib(false);
-            };
-          });
-          document.getElementById("inpPhotoMarkCm").oninput = () => applyPhotoCalib(false);
-          document.getElementById("selRefObjType").onchange = () => applyPhotoCalib(false);
-          document.getElementById("btnLockRefPhoto").onclick = () => applyPhotoCalib(true);
-
-          // Run OCR on the detected mark region in the uploaded photo to auto-read "100", "150", etc.
-          const ocrBox = {
-            leftX: (det.leftX / W0) * imgEl.width,
-            rightX: (det.rightX / W0) * imgEl.width,
-            topY: (det.topY / H0) * imgEl.height,
-            botY: (det.botY / H0) * imgEl.height
-          };
-          const ocrCm = await ocrReadHeightFromPhoto(imgEl, ocrBox, imgEl.width, imgEl.height);
-          const ocrEl = document.getElementById("ocrStatusMsg");
-          if (ocrCm && ocrCm >= 50 && ocrCm <= 220) {
-            const inp = document.getElementById("inpPhotoMarkCm");
-            if (inp) inp.value = String(ocrCm);
-            if (ocrEl) ocrEl.textContent = `✅ ${t("Auto-read from photo:", "फोटो से स्वतः पढ़ा गया:")} ${ocrCm} cm — ${t("Reference locked!", "संदर्भ लॉक हो गया!")}`;
-            applyPhotoCalib(false);
-          } else if (ocrEl) {
-            ocrEl.textContent = `✅ ${t("Reference mark detected! Confirm height (e.g. 150 cm or 100 cm) below.", "संदर्भ निशान मिल गया! नीचे ऊँचाई (जैसे 150 cm या 100 cm) की पुष्टि करें।")}`;
-          }
-        };
-        imgEl.src = url;
+        openRefPhotoEditor(file, calPanel, frameW || 720, frameH || 1280, () => refreshCalStatus());
       }
 
       if (supportsCalib) {
