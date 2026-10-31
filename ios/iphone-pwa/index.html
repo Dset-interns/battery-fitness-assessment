@@ -613,6 +613,7 @@
 
     function calibLabel(c) {
       if (!c) return "";
+      if (c.method === "sticky150") return `Rung 1/2 Wall Reference (${c.refLabel || ((c.markCm || 150) + " cm mark")})`;
       if (c.method === "wall") return `Rung 2 SAI Wall Stadiometer (mark ${c.markCm} cm · lens ${c.camHcm} cm)`;
       if (c.method === "person") return `Rung 1/2 Ref Height (${c.refCm} cm = ${c.refPx.toFixed(0)} px)`;
       if (c.method === "tape") return `Rung 1/2 Tape/Ref (${c.refCm} cm = ${c.refPx.toFixed(0)} px)`;
@@ -712,12 +713,283 @@
     // =========================================================================
 
     // =========================================================================
-    // Automatic 150 cm Wall Sticky-Note Detector (144x256 fast scan)
-    // Detects a yellow sticky note stuck on the wall at 150 cm (surrounded on
-    // left/right/top/bottom by neutral wall, outside the person's segmentation mask).
+    // Universal Wall Reference & Photo Template Detector (144x256 fast scan)
+    // Supports ALL wall reference types:
+    //  1. Uploaded Reference Photo template matching (tracks any uploaded sticky note,
+    //     A4 paper, ruler, OR bare-wall pencil/pen/chalk mark with "100 cm" / "150 cm")
+    //  2. Colored/Yellow Sticky Note or Tape on wall
+    //  3. Bare-wall handwritten pen/marker line & numbers ("100 cm", "150 cm", etc.)
+    //     or white A4 paper sheet surrounded by smooth wall
     // =========================================================================
     let _stickyCanvas = null, _stickyCtx = null;
     let _autoStickyCalib = null;
+    let _tesseractPromise = null;
+
+    function extractPatchTemplate(gray, grad, SW, SH, cx, cy) {
+      const PW = 16, PH = 16;
+      const tpl = new Float32Array(PW * PH);
+      let sum = 0;
+      for (let dy = 0; dy < PH; dy++) {
+        const y = Math.min(SH - 1, Math.max(0, Math.round(cy - PH / 2 + dy)));
+        for (let dx = 0; dx < PW; dx++) {
+          const x = Math.min(SW - 1, Math.max(0, Math.round(cx - PW / 2 + dx)));
+          const v = 0.65 * grad[y * SW + x] + 0.35 * (255 - gray[y * SW + x]);
+          tpl[dy * PW + dx] = v;
+          sum += v;
+        }
+      }
+      const mean = sum / (PW * PH);
+      let norm = 0;
+      for (let i = 0; i < tpl.length; i++) {
+        tpl[i] -= mean;
+        norm += tpl[i] * tpl[i];
+      }
+      norm = Math.sqrt(norm) || 1;
+      for (let i = 0; i < tpl.length; i++) tpl[i] /= norm;
+      return Array.from(tpl);
+    }
+
+    function analyzeWallImageBuffer(img, SW, SH, W, H, mask, uploadedCalib) {
+      const yel = new Float32Array(SW * SH);
+      const gray = new Float32Array(SW * SH);
+      const grad = new Float32Array(SW * SH);
+      const rArr = new Uint8Array(SW * SH);
+      const gArr = new Uint8Array(SW * SH);
+      const bArr = new Uint8Array(SW * SH);
+      for (let i = 0, p = 0; i < SW * SH; i++, p += 4) {
+        const r = img[p], g = img[p + 1], b = img[p + 2];
+        rArr[i] = r; gArr[i] = g; bArr[i] = b;
+        yel[i] = 0.5 * (r + g) - b;
+        gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+      }
+      for (let y = 1; y < SH; y++) {
+        const row = y * SW;
+        for (let x = 1; x < SW; x++) {
+          const idx = row + x;
+          grad[idx] = Math.abs(gray[idx] - gray[idx - 1]) + Math.abs(gray[idx] - gray[idx - SW]);
+        }
+      }
+
+      // 1. If the user uploaded a Reference Photo with a template descriptor, match it live!
+      if (uploadedCalib && uploadedCalib.template && uploadedCalib.template.length === 256) {
+        const tpl = uploadedCalib.template;
+        const expX = Math.round((uploadedCalib.cxNorm ?? 0.5) * SW);
+        const expY = Math.round((uploadedCalib.cyNorm ?? 0.25) * SH);
+        let bestNcc = -1, bestX = expX, bestY = expY;
+        const yMin = Math.max(10, expY - Math.round(0.18 * SH));
+        const yMax = Math.min(SH - 10, expY + Math.round(0.18 * SH));
+        const xMin = Math.max(10, expX - Math.round(0.18 * SW));
+        const xMax = Math.min(SW - 10, expX + Math.round(0.18 * SW));
+        for (let cy = yMin; cy <= yMax; cy += 2) {
+          for (let cx = xMin; cx <= xMax; cx += 2) {
+            if (mask) {
+              const mx = Math.min(mask.w - 1, Math.floor((cx / SW) * mask.w));
+              const my = Math.min(mask.h - 1, Math.floor((cy / SH) * mask.h));
+              if (mask.data[my * mask.w + mx] > mask.thr) continue;
+            }
+            const cand = extractPatchTemplate(gray, grad, SW, SH, cx, cy);
+            let dot = 0;
+            for (let k = 0; k < 256; k++) dot += cand[k] * tpl[k];
+            if (dot > bestNcc) {
+              bestNcc = dot;
+              bestX = cx;
+              bestY = cy;
+            }
+          }
+        }
+        if (bestNcc >= 0.42) {
+          const noteH = (uploadedCalib.noteHNorm || 0.08) * H;
+          const noteW = (uploadedCalib.noteWNorm || 0.08) * W;
+          const topY = Math.max(4, (bestY / SH) * H - noteH * 0.45);
+          const botY = Math.min(H - 4, topY + noteH);
+          const leftX = Math.max(4, (bestX / SW) * W - noteW * 0.5);
+          const rightX = Math.min(W - 4, leftX + noteW);
+          return {
+            topY, botY, leftX, rightX, noteH, noteW,
+            markCm: uploadedCalib.markCm || 150.0,
+            objSizeCm: uploadedCalib.objSizeCm || 9.5,
+            refLabel: uploadedCalib.refLabel || `${uploadedCalib.markCm || 150} cm Ref Photo`,
+            frameW: W, frameH: H
+          };
+        }
+      }
+
+      // 2. Check for Colored/Yellow Sticky Note on the wall
+      const hitsX = [], hitsY = [];
+      const y0 = Math.floor(0.06 * SH), y1 = Math.floor(0.66 * SH);
+      const x0 = Math.floor(0.15 * SW), x1 = Math.floor(0.88 * SW);
+      for (let y = y0; y < y1; y++) {
+        const row = y * SW;
+        for (let x = x0; x < x1; x++) {
+          const idx = row + x;
+          const yv = yel[idx], rv = rArr[idx], gv = gArr[idx];
+          if (yv > 32 && rv > 130 && gv > 120 && Math.abs(rv - gv) < 38) {
+            if (mask) {
+              const mx = Math.min(mask.w - 1, Math.floor((x / SW) * mask.w));
+              const my = Math.min(mask.h - 1, Math.floor((y / SH) * mask.h));
+              if (mask.data[my * mask.w + mx] > mask.thr) continue;
+            }
+            const xl = Math.max(0, x - 16), xr = Math.min(SW - 1, x + 16);
+            const yt = Math.max(0, y - 22), yb = Math.min(SH - 1, y + 22);
+            const iL = row + xl, iR = row + xr, iT = yt * SW + x, iB = yb * SW + x;
+            if (yv - yel[iL] > 15 && yv - yel[iR] > 15 &&
+                (yv - yel[iT] > 15 || yv - yel[iB] > 15) &&
+                bArr[iL] > 105 && bArr[iR] > 105) {
+              hitsX.push(x);
+              hitsY.push(y);
+            }
+          }
+        }
+      }
+      if (hitsX.length >= 10) {
+        const xm = median(hitsX), ym = median(hitsY);
+        const kx = [], ky = [];
+        for (let i = 0; i < hitsX.length; i++) {
+          if (Math.abs(hitsX[i] - xm) <= 14 && Math.abs(hitsY[i] - ym) <= 18) {
+            kx.push(hitsX[i]);
+            ky.push(hitsY[i]);
+          }
+        }
+        if (kx.length >= 8) {
+          const topY = (pct(ky, 0.03) / SH) * H;
+          const botY = (pct(ky, 0.97) / SH) * H;
+          const leftX = (pct(kx, 0.03) / SW) * W;
+          const rightX = (pct(kx, 0.97) / SW) * W;
+          const noteH = botY - topY, noteW = rightX - leftX;
+          if (noteH >= H * 0.025 && noteH <= H * 0.22 && noteW >= W * 0.03 && noteW <= W * 0.30) {
+            const cx = Math.round(xm), cy = Math.round(ym);
+            return {
+              topY, botY, leftX, rightX, noteH, noteW,
+              cxNorm: cx / SW, cyNorm: cy / SH,
+              noteHNorm: noteH / H, noteWNorm: noteW / W,
+              template: extractPatchTemplate(gray, grad, SW, SH, cx, cy),
+              markCm: state.lastWallMarkCm || 150.0,
+              objSizeCm: 9.5,
+              refLabel: `${state.lastWallMarkCm || 150} cm Sticky Note`,
+              frameW: W, frameH: H
+            };
+          }
+        }
+      }
+
+      // 3. Pure Grayscale Wall-Mark / Handwriting / A4 Detector (when someone draws a line
+      //    and writes "100 cm" or "150 cm" directly on the wall without a sticky note!)
+      let bestScore = -1, bestCx = -1, bestCy = -1;
+      for (let cy = Math.floor(0.12 * SH); cy < Math.floor(0.65 * SH); cy += 3) {
+        for (let cx = Math.floor(0.24 * SW); cx < Math.floor(0.84 * SW); cx += 3) {
+          if (mask) {
+            const mx = Math.min(mask.w - 1, Math.floor((cx / SW) * mask.w));
+            const my = Math.min(mask.h - 1, Math.floor((cy / SH) * mask.h));
+            if (mask.data[my * mask.w + mx] > mask.thr) continue;
+          }
+          let inner = 0, cnt = 0;
+          for (let dy = -9; dy <= 9; dy += 2) {
+            for (let dx = -7; dx <= 7; dx += 2) {
+              inner += grad[(cy + dy) * SW + (cx + dx)];
+              cnt++;
+            }
+          }
+          inner /= cnt;
+          if (inner < 3.6) continue;
+          const ringGrad = (ox, oy) => {
+            let s = 0, c = 0;
+            for (let dy = -5; dy <= 5; dy += 3) {
+              for (let dx = -3; dx <= 3; dx += 3) {
+                const yy = Math.min(SH - 1, Math.max(0, cy + oy + dy));
+                const xx = Math.min(SW - 1, Math.max(0, cx + ox + dx));
+                s += grad[yy * SW + xx];
+                c++;
+              }
+            }
+            return s / c;
+          };
+          const s4 = [ringGrad(-20, 0), ringGrad(20, 0), ringGrad(0, -22), ringGrad(0, 22)].sort((a, b) => a - b);
+          const wallSmooth = s4[2]; // At least 3 of 4 surrounding sides are smooth wall
+          const b4 = [
+            gray[cy * SW + Math.max(0, cx - 20)],
+            gray[cy * SW + Math.min(SW - 1, cx + 20)],
+            gray[Math.max(0, cy - 22) * SW + cx],
+            gray[Math.min(SH - 1, cy + 22) * SW + cx]
+          ].sort((a, b) => a - b);
+          if (wallSmooth < 1.8 && b4[1] > 115) {
+            const score = inner / (wallSmooth + 0.4);
+            if (score > bestScore) {
+              bestScore = score;
+              bestCx = cx;
+              bestCy = cy;
+            }
+          }
+        }
+      }
+      if (bestScore >= 6.5 && bestCx > 0) {
+        const gxPts = [], gyPts = [];
+        for (let dy = -14; dy <= 14; dy++) {
+          for (let dx = -12; dx <= 12; dx++) {
+            const yy = Math.min(SH - 1, Math.max(0, bestCy + dy));
+            const xx = Math.min(SW - 1, Math.max(0, bestCx + dx));
+            if (grad[yy * SW + xx] > 3.5) {
+              gxPts.push(xx);
+              gyPts.push(yy);
+            }
+          }
+        }
+        if (gxPts.length >= 6) {
+          const topY = (pct(gyPts, 0.04) / SH) * H;
+          const botY = (pct(gyPts, 0.96) / SH) * H;
+          const leftX = (pct(gxPts, 0.04) / SW) * W;
+          const rightX = (pct(gxPts, 0.96) / SW) * W;
+          const noteH = Math.max(H * 0.03, botY - topY);
+          const noteW = Math.max(W * 0.04, rightX - leftX);
+          return {
+            topY, botY: topY + noteH, leftX, rightX: leftX + noteW, noteH, noteW,
+            cxNorm: bestCx / SW, cyNorm: bestCy / SH,
+            noteHNorm: noteH / H, noteWNorm: noteW / W,
+            template: extractPatchTemplate(gray, grad, SW, SH, bestCx, bestCy),
+            markCm: state.lastWallMarkCm || 150.0,
+            objSizeCm: 9.5,
+            refLabel: `${state.lastWallMarkCm || 150} cm Wall Mark`,
+            frameW: W, frameH: H
+          };
+        }
+      }
+      return null;
+    }
+
+    async function ocrReadHeightFromPhoto(imgEl, box, W, H) {
+      try {
+        if (!_tesseractPromise) {
+          _tesseractPromise = new Promise((resolve, reject) => {
+            if (window.Tesseract) return resolve(window.Tesseract);
+            const s = document.createElement("script");
+            s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+            s.onload = () => resolve(window.Tesseract);
+            s.onerror = reject;
+            document.head.appendChild(s);
+          });
+        }
+        const Tesseract = await Promise.race([
+          _tesseractPromise,
+          new Promise((_, rej) => setTimeout(() => rej(new Error("OCR timeout")), 5500))
+        ]);
+        const c = document.createElement("canvas");
+        const padX = Math.round((box.rightX - box.leftX) * 0.35 + 16);
+        const padY = Math.round((box.botY - box.topY) * 0.35 + 16);
+        const sx = Math.max(0, Math.floor(box.leftX - padX));
+        const sy = Math.max(0, Math.floor(box.topY - padY));
+        const sw = Math.min(W - sx, Math.ceil(box.rightX - box.leftX + 2 * padX));
+        const sh = Math.min(H - sy, Math.ceil(box.botY - box.topY + 2 * padY));
+        c.width = sw * 2;
+        c.height = sh * 2;
+        const cx = c.getContext("2d");
+        cx.filter = "contrast(180%) grayscale(100%)";
+        cx.drawImage(imgEl, sx, sy, sw, sh, 0, 0, c.width, c.height);
+        const res = await Tesseract.recognize(c, "eng");
+        const txt = (res?.data?.text || "").replace(/[oO]/g, "0").replace(/[lI|]/g, "1");
+        const m = txt.match(/\b(1[0-9]{2}|[5-9][0-9]|200|29\.7|30)\b/);
+        if (m) return parseFloat(m[1]);
+      } catch (_) {}
+      return null;
+    }
 
     function detectWallStickyNote(videoEl, mask, W, H) {
       if (!videoEl || !videoEl.videoWidth) return _autoStickyCalib;
@@ -731,75 +1003,21 @@
       try {
         _stickyCtx.drawImage(videoEl, 0, 0, SW, SH);
         const img = _stickyCtx.getImageData(0, 0, SW, SH).data;
-        const yel = new Float32Array(SW * SH);
-        const rArr = new Uint8Array(SW * SH);
-        const gArr = new Uint8Array(SW * SH);
-        const bArr = new Uint8Array(SW * SH);
-        for (let i = 0, p = 0; i < SW * SH; i++, p += 4) {
-          const r = img[p], g = img[p + 1], b = img[p + 2];
-          rArr[i] = r; gArr[i] = g; bArr[i] = b;
-          yel[i] = 0.5 * (r + g) - b;
-        }
-        const hitsX = [], hitsY = [];
-        const y0 = Math.floor(0.06 * SH), y1 = Math.floor(0.65 * SH);
-        const x0 = Math.floor(0.15 * SW), x1 = Math.floor(0.88 * SW);
-        for (let y = y0; y < y1; y++) {
-          const row = y * SW;
-          for (let x = x0; x < x1; x++) {
-            const idx = row + x;
-            const yv = yel[idx], rv = rArr[idx], gv = gArr[idx];
-            if (yv > 32 && rv > 130 && gv > 120 && Math.abs(rv - gv) < 38) {
-              // Exclude pixels that belong to the person's segmentation mask
-              if (mask) {
-                const mx = Math.min(mask.w - 1, Math.floor((x / SW) * mask.w));
-                const my = Math.min(mask.h - 1, Math.floor((y / SH) * mask.h));
-                if (mask.data[my * mask.w + mx] > mask.thr) continue;
-              }
-              const xl = Math.max(0, x - 16), xr = Math.min(SW - 1, x + 16);
-              const yt = Math.max(0, y - 22), yb = Math.min(SH - 1, y + 22);
-              const iL = row + xl, iR = row + xr, iT = yt * SW + x, iB = yb * SW + x;
-              if (yv - yel[iL] > 15 && yv - yel[iR] > 15 &&
-                  (yv - yel[iT] > 15 || yv - yel[iB] > 15) &&
-                  bArr[iL] > 105 && bArr[iR] > 105) {
-                hitsX.push(x);
-                hitsY.push(y);
-              }
-            }
-          }
-        }
-        if (hitsX.length >= 10) {
-          const xm = median(hitsX), ym = median(hitsY);
-          const kx = [], ky = [];
-          for (let i = 0; i < hitsX.length; i++) {
-            if (Math.abs(hitsX[i] - xm) <= 14 && Math.abs(hitsY[i] - ym) <= 18) {
-              kx.push(hitsX[i]);
-              ky.push(hitsY[i]);
-            }
-          }
-          if (kx.length >= 8) {
-            const topY = (pct(ky, 0.03) / SH) * H;
-            const botY = (pct(ky, 0.97) / SH) * H;
-            const leftX = (pct(kx, 0.03) / SW) * W;
-            const rightX = (pct(kx, 0.97) / SW) * W;
-            const noteH = botY - topY, noteW = rightX - leftX;
-            if (noteH >= H * 0.025 && noteH <= H * 0.18 && noteW >= W * 0.03 && noteW <= W * 0.25) {
-              if (!_autoStickyCalib || _autoStickyCalib.frameH !== H) {
-                _autoStickyCalib = { topY, botY, leftX, rightX, noteH, noteW, markCm: 150.0, frameW: W, frameH: H };
-              } else {
-                // Smoothly lock sticky note coordinates on the wall
-                _autoStickyCalib = {
-                  topY: 0.75 * _autoStickyCalib.topY + 0.25 * topY,
-                  botY: 0.75 * _autoStickyCalib.botY + 0.25 * botY,
-                  leftX: 0.75 * _autoStickyCalib.leftX + 0.25 * leftX,
-                  rightX: 0.75 * _autoStickyCalib.rightX + 0.25 * rightX,
-                  noteH: 0.75 * _autoStickyCalib.noteH + 0.25 * noteH,
-                  noteW: 0.75 * _autoStickyCalib.noteW + 0.25 * noteW,
-                  markCm: 150.0,
-                  frameW: W,
-                  frameH: H
-                };
-              }
-            }
+        const uploadedCalib = state.calib?.height?.method === "sticky150" ? state.calib.height : null;
+        const det = analyzeWallImageBuffer(img, SW, SH, W, H, mask, uploadedCalib);
+        if (det) {
+          if (!_autoStickyCalib || _autoStickyCalib.frameH !== H) {
+            _autoStickyCalib = det;
+          } else {
+            _autoStickyCalib = {
+              ...det,
+              topY: 0.75 * _autoStickyCalib.topY + 0.25 * det.topY,
+              botY: 0.75 * _autoStickyCalib.botY + 0.25 * det.botY,
+              leftX: 0.75 * _autoStickyCalib.leftX + 0.25 * det.leftX,
+              rightX: 0.75 * _autoStickyCalib.rightX + 0.25 * det.rightX,
+              noteH: 0.75 * _autoStickyCalib.noteH + 0.25 * det.noteH,
+              noteW: 0.75 * _autoStickyCalib.noteW + 0.25 * det.noteW
+            };
           }
         }
       } catch (_) {}
@@ -808,25 +1026,26 @@
 
     // TEST 1 — STANDING HEIGHT
     // Supports:
-    //  A. Automatic or 1-Tap 150 cm Sticky Note on Wall (anchors directly at 150.0 cm = yMark150,
-    //     so even if a table blocks the floor/feet at the bottom of the wall, height is measured
-    //     directly as 150.0 cm + (yMark150 - vertexY) * cmPerPxWall -> ~154.5 cm, NEVER 109 cm!)
+    //  A. Universal Wall Reference Mode (Uploaded Reference Photo of Sticky Note / A4 / Bare-Wall Mark,
+    //     or Auto-Detected / 1-Tap Wall Mark at ANY height e.g. 100 cm, 120 cm, 150 cm, 160 cm)
     //  B. Full-Body Standing Mode with Table-Occlusion Reconstruction & 2.50 m Floor-Zone Gate
     function evalHeight(lm, mask, W, H, calib, stickyNote) {
       const p = (i) => P(lm, i, W, H);
       const activeCalib = calib || getCalib("height", W, H);
       const hasSticky150 = !!(stickyNote && stickyNote.topY > 0) || (activeCalib && activeCalib.method === "sticky150");
-      const sticky = (activeCalib && activeCalib.method === "sticky150") ? activeCalib : stickyNote;
+      const sticky = (activeCalib && activeCalib.method === "sticky150")
+        ? { ...activeCalib, ...(stickyNote || {}), markCm: activeCalib.markCm || stickyNote?.markCm || 150.0, objSizeCm: activeCalib.objSizeCm || stickyNote?.objSizeCm || 9.5 }
+        : stickyNote;
 
-      // When the 150 cm sticky note is present on the wall, only head + shoulders (0, 11, 12) need to be visible
+      // When a wall reference mark (e.g. 100 cm or 150 cm) is locked on the wall, only head + shoulders (0, 11, 12) need to be visible
       // (because a desk/table at the bottom of the wall may hide the lower legs/feet!).
       const reqIds = hasSticky150 ? [0, 11, 12] : [0, 11, 12, 23, 24, 25, 26, 27, 28];
       for (const i of reqIds) {
         if (!vis(lm, i, 0.40)) {
           return fail(t("Step into view", "कैमरे के सामने आएँ"),
             hasSticky150
-              ? t("Stand next to the 150 cm wall note with your head and shoulders clearly visible.", "150 सेमी निशान के पास खड़े हों ताकि सिर और कंधे साफ़ दिखें।")
-              : t("Whole body — top of head to heels — must be inside the frame (or use a 150 cm yellow sticky note on the wall).", "सिर से एड़ी तक पूरा शरीर फ्रेम में रखें (या दीवार पर 150 सेमी का पीला स्टिकी नोट लगाएँ)।"));
+              ? t("Stand next to your wall reference mark with your head and shoulders clearly visible.", "दीवार के निशान के पास खड़े हों ताकि सिर और कंधे साफ़ दिखें।")
+              : t("Whole body — top of head to heels — must be inside the frame (or upload/mark a wall height reference).", "सिर से एड़ी तक पूरा शरीर फ्रेम में रखें (या दीवार के निशान की फोटो अपलोड करें)।"));
         }
       }
 
@@ -888,19 +1107,20 @@
         : 1.5;
 
       // ---------------------------------------------------------------
-      // MODE A: 150 cm WALL STICKY NOTE MODE (Auto-Detected or 1-Tap Locked)
-      // Anchors directly to the 150.0 cm mark on the wall (`yMark150`), so even when a
-      // table blocks the bottom of the wall (hiding the floor/feet), height is measured
-      // directly from the 150.0 cm mark to the top of the head (`vertexY`)!
+      // MODE A: UNIVERSAL WALL REFERENCE MODE (Uploaded Photo / Sticky Note / A4 / Written Mark)
+      // Anchors directly to the reference height `markCm` (e.g. 100 cm, 120 cm, 150 cm) on the wall,
+      // and uses the reference object's physical size (`objSizeCm`: 9.5 cm note/mark, 29.7 cm A4, 30 cm ruler)
+      // blended with upper-body scale to measure `markCm + (yMark - vertexY) * cmPerPxWall`!
       // ---------------------------------------------------------------
       if (hasSticky150 && sticky) {
         const sy = H / (sticky.frameH || H);
-        const yMark150 = sticky.topY * sy;
-        const markCm = sticky.markCm || 150.0;
+        const yMark = sticky.topY * sy;
+        const markCm = Number(sticky.markCm) || 150.0;
+        const objSizeCm = Number(sticky.objSizeCm) || 9.5;
         const cmPerPxHead = 13.6 / Math.max(H * 0.025, headNeckPx);
-        const cmPerPxNote = sticky.noteH ? (9.5 / Math.max(15, sticky.noteH * sy)) : cmPerPxHead;
+        const cmPerPxNote = sticky.noteH ? (objSizeCm / Math.max(15, sticky.noteH * sy)) : cmPerPxHead;
         const cmPerPxWall = sticky.noteH ? (0.45 * cmPerPxNote + 0.55 * cmPerPxHead) : cmPerPxHead;
-        const deltaAboveMarkPx = yMark150 - vertexY;
+        const deltaAboveMarkPx = yMark - vertexY;
         const deltaCm = deltaAboveMarkPx * cmPerPxWall;
         const cmSticky = markCm + deltaCm;
         const virtualSoleY = Math.min(H - 4, vertexY + cmSticky / cmPerPxWall);
@@ -910,15 +1130,15 @@
           bodyPx: Math.round(cmSticky / cmPerPxWall),
           vertexY,
           soleY: virtualSoleY,
-          stickyTopY: yMark150,
+          stickyTopY: yMark,
           estDistM: (cmPerPxWall * H) / (1.3626 * 100.0),
           vertexSource,
           cm: cmSticky,
           cmPerPx: cmPerPxWall,
           calibMethod: "sticky150",
           headRoll,
-          liveMetric: `📌 ${cmSticky.toFixed(1)} cm (${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm vs 150 cm mark)`,
-          reason: `✅ ${t("150 cm Sticky Note Locked", "150 सेमी स्टिकी नोट लॉक")} · ${t("Head is", "सिर")} ${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm ${t("above 150 cm mark", "150 सेमी निशान से ऊपर")} → ${cmSticky.toFixed(1)} cm`
+          liveMetric: `📌 ${cmSticky.toFixed(1)} cm (${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm vs ${markCm} cm mark)`,
+          reason: `✅ ${t("Wall Reference Locked", "दीवार संदर्भ लॉक")} (${markCm} cm) · ${t("Head is", "सिर")} ${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm ${t("vs mark", "निशान से")} → ${cmSticky.toFixed(1)} cm`
         };
       }
 
@@ -1980,7 +2200,11 @@
               </div>
             ` : ""}
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-              ${test.key === "height" ? `<button class="lang-btn" id="btnCalWall" style="font-size:11px;padding:5px 8px;font-weight:800;">🧱 ${t("Lock SAI Wall Stadiometer (GREEN)", "SAI दीवार स्टेडियोमीटर लॉक करें")}</button>` : ""}
+              ${test.key === "height" ? `
+                <input type="file" id="inpRefPhoto" accept="image/*" style="display:none;" />
+                <button class="lang-btn" id="btnUploadRefPhoto" style="font-size:11px;padding:5px 8px;font-weight:800;background:var(--primary);color:#fff;border:none;">📸 ${t("Upload Reference Photo (Sticky Note / A4 / Wall Mark)", "संदर्भ फोटो अपलोड करें (स्टिकी नोट / A4 / दीवार निशान)")}</button>
+                <button class="lang-btn" id="btnCalWall" style="font-size:11px;padding:5px 8px;font-weight:800;">📌 ${t("1-Tap Wall Mark / Sticky Note", "1-टैप दीवार निशान / स्टिकी नोट")}</button>
+              ` : ""}
               <button class="lang-btn" id="btnCalTap" style="font-size:11px;padding:5px 8px;">📐 ${t("Tap A4 / Tape / Ruler Ends (GREEN)", "A4 / टेप के सिरों पर टैप करें")}</button>
               ${test.key === "height" ? `<button class="lang-btn" id="btnCalPerson" style="font-size:11px;padding:5px 8px;">👤 ${t("Calibrate with Known Height", "ज्ञात ऊँचाई से कैलिब्रेट करें")}</button>` : ""}
             </div>
@@ -2254,13 +2478,187 @@
         };
       }
 
+      function renderRefPhotoPanel(file) {
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        const imgEl = new Image();
+        imgEl.onload = async () => {
+          const SW = 144, SH = 256;
+          const off = document.createElement("canvas");
+          off.width = SW; off.height = SH;
+          const octx = off.getContext("2d", { willReadFrequently: true });
+          octx.drawImage(imgEl, 0, 0, SW, SH);
+          const buf = octx.getImageData(0, 0, SW, SH).data;
+          const W0 = frameW || 720, H0 = frameH || 1280;
+          let det = analyzeWallImageBuffer(buf, SW, SH, W0, H0, null, null);
+          if (!det) {
+            det = {
+              topY: H0 * 0.20,
+              botY: H0 * 0.28,
+              leftX: W0 * 0.42,
+              rightX: W0 * 0.58,
+              noteH: H0 * 0.08,
+              noteW: W0 * 0.16,
+              cxNorm: 0.50,
+              cyNorm: 0.24,
+              noteHNorm: 0.08,
+              noteWNorm: 0.16,
+              markCm: state.lastWallMarkCm || 150.0,
+              objSizeCm: 9.5,
+              frameW: W0,
+              frameH: H0
+            };
+          }
+
+          calPanel.style.display = "block";
+          calPanel.innerHTML = `
+            <div style="font-weight:800;color:var(--primary);margin-bottom:6px;">
+              📸 ${t("Uploaded Reference Photo — Tap photo to adjust mark line if needed:", "अपलोड की गई संदर्भ फोटो — यदि आवश्यक हो तो निशान समायोजित करने के लिए फोटो पर टैप करें:")}
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+              <canvas id="refPhotoCanvas" width="180" height="320" style="width:150px;height:266px;border-radius:8px;border:2px solid var(--primary);cursor:crosshair;touch-action:none;"></canvas>
+              <div style="flex:1;min-width:190px;">
+                <div id="ocrStatusMsg" style="font-size:11px;font-weight:700;color:var(--green-fg,#137333);margin-bottom:6px;">
+                  🔍 ${t("Scanning reference mark & reading written height...", "निशान और लिखी हुई ऊँचाई पढ़ी जा रही है...")}
+                </div>
+                <label style="font-size:11px;font-weight:700;display:block;margin-bottom:3px;">${t("1. Reference Object / Marking Type:", "1. संदर्भ वस्तु / निशान का प्रकार:")}</label>
+                <select id="selRefObjType" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);font-weight:700;margin-bottom:8px;">
+                  <option value="9.5" selected>📌 ${t("Sticky Note / Written Wall Mark (~8–10 cm)", "स्टिकी नोट / दीवार पर लिखा निशान")}</option>
+                  <option value="29.7">📄 ${t("A4 Sheet Portrait on Wall (29.7 cm tall)", "दीवार पर A4 शीट (29.7 सेमी)")}</option>
+                  <option value="21.0">📄 ${t("A4 Sheet Landscape on Wall (21.0 cm tall)", "A4 शीट लैंडस्केप (21.0 सेमी)")}</option>
+                  <option value="30.0">📏 ${t("30 cm Ruler / Scale on Wall", "30 सेमी स्केल / रूलर")}</option>
+                  <option value="15.0">📏 ${t("15 cm Small Scale on Wall", "15 सेमी छोटा स्केल")}</option>
+                </select>
+                <label style="font-size:11px;font-weight:700;display:block;margin-bottom:3px;">${t("2. Height Written on Mark / Wall (cm from floor):", "2. निशान की फ़र्श से ऊँचाई (cm):")}</label>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">
+                  <input id="inpPhotoMarkCm" type="number" step="0.5" value="${det.markCm || 150}" style="width:76px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);font-weight:800;" />
+                  <button class="lang-btn" data-hpreset="100" style="font-size:10px;padding:3px 6px;">100 cm</button>
+                  <button class="lang-btn" data-hpreset="120" style="font-size:10px;padding:3px 6px;">120 cm</button>
+                  <button class="lang-btn" data-hpreset="140" style="font-size:10px;padding:3px 6px;">140 cm</button>
+                  <button class="lang-btn" data-hpreset="150" style="font-size:10px;padding:3px 6px;">150 cm</button>
+                  <button class="lang-btn" data-hpreset="160" style="font-size:10px;padding:3px 6px;">160 cm</button>
+                </div>
+                <button class="btn primary" id="btnLockRefPhoto" style="margin-top:4px;padding:8px 10px;">✅ ${t("Lock Wall Reference (GREEN)", "दीवार संदर्भ लॉक करें")}</button>
+              </div>
+            </div>
+          `;
+
+          const pCan = document.getElementById("refPhotoCanvas");
+          const pCtx = pCan.getContext("2d");
+
+          function drawPreview() {
+            pCtx.clearRect(0, 0, pCan.width, pCan.height);
+            pCtx.drawImage(imgEl, 0, 0, pCan.width, pCan.height);
+            const sx = pCan.width / W0, sy = pCan.height / H0;
+            pCtx.strokeStyle = "#FFD166";
+            pCtx.lineWidth = 2;
+            pCtx.strokeRect(det.leftX * sx, det.topY * sy, (det.rightX - det.leftX) * sx, (det.botY - det.topY) * sy);
+            pCtx.strokeStyle = "#00E6A8";
+            pCtx.lineWidth = 3;
+            pCtx.beginPath();
+            pCtx.moveTo(0, det.topY * sy);
+            pCtx.lineTo(pCan.width, det.topY * sy);
+            pCtx.stroke();
+            pCtx.fillStyle = "rgba(0,0,0,0.72)";
+            pCtx.fillRect(4, Math.max(4, det.topY * sy - 20), pCan.width - 8, 18);
+            pCtx.fillStyle = "#00E6A8";
+            pCtx.font = "bold 11px -apple-system, sans-serif";
+            const curCm = parseFloat(document.getElementById("inpPhotoMarkCm")?.value) || det.markCm || 150;
+            pCtx.fillText(`📌 ${curCm} cm MARK LINE`, 8, Math.max(16, det.topY * sy - 7));
+          }
+
+          function applyPhotoCalib(closePanel) {
+            const markCm = parseFloat(document.getElementById("inpPhotoMarkCm")?.value) || 150.0;
+            const objSizeCm = parseFloat(document.getElementById("selRefObjType")?.value) || 9.5;
+            state.lastWallMarkCm = markCm;
+            const refLabel = `${markCm} cm (${objSizeCm === 29.7 ? "A4" : objSizeCm === 30 ? "Ruler" : "Wall Note/Mark"})`;
+            const calibObj = {
+              ...det,
+              method: "sticky150",
+              markCm,
+              objSizeCm,
+              refLabel,
+              cmPerPx: objSizeCm / Math.max(15, det.noteH),
+              refCm: markCm,
+              refPx: det.noteH,
+              frameW: W0,
+              frameH: H0,
+              at: Date.now()
+            };
+            _autoStickyCalib = calibObj;
+            if (!state.calib) state.calib = {};
+            state.calib.height = calibObj;
+            persist();
+            refreshCalStatus();
+            drawPreview();
+            if (closePanel) {
+              calPanel.style.display = "none";
+            }
+          }
+
+          drawPreview();
+          applyPhotoCalib(false);
+
+          pCan.addEventListener("pointerdown", (ev) => {
+            const r = pCan.getBoundingClientRect();
+            const ny = Math.max(0.04, Math.min(0.85, (ev.clientY - r.top) / r.height));
+            const nx = Math.max(0.10, Math.min(0.90, (ev.clientX - r.left) / r.width));
+            det.topY = ny * H0;
+            det.botY = Math.min(H0 - 10, det.topY + det.noteH);
+            det.leftX = Math.max(10, nx * W0 - det.noteW / 2);
+            det.rightX = Math.min(W0 - 10, det.leftX + det.noteW);
+            det.cxNorm = nx;
+            det.cyNorm = ny + (det.noteH / H0) * 0.45;
+            applyPhotoCalib(false);
+          });
+
+          calPanel.querySelectorAll("[data-hpreset]").forEach(b => {
+            b.onclick = () => {
+              document.getElementById("inpPhotoMarkCm").value = b.dataset.hpreset;
+              applyPhotoCalib(false);
+            };
+          });
+          document.getElementById("inpPhotoMarkCm").oninput = () => applyPhotoCalib(false);
+          document.getElementById("selRefObjType").onchange = () => applyPhotoCalib(false);
+          document.getElementById("btnLockRefPhoto").onclick = () => applyPhotoCalib(true);
+
+          // Run OCR on the detected mark region in the uploaded photo to auto-read "100", "150", etc.
+          const ocrBox = {
+            leftX: (det.leftX / W0) * imgEl.width,
+            rightX: (det.rightX / W0) * imgEl.width,
+            topY: (det.topY / H0) * imgEl.height,
+            botY: (det.botY / H0) * imgEl.height
+          };
+          const ocrCm = await ocrReadHeightFromPhoto(imgEl, ocrBox, imgEl.width, imgEl.height);
+          const ocrEl = document.getElementById("ocrStatusMsg");
+          if (ocrCm && ocrCm >= 50 && ocrCm <= 220) {
+            const inp = document.getElementById("inpPhotoMarkCm");
+            if (inp) inp.value = String(ocrCm);
+            if (ocrEl) ocrEl.textContent = `✅ ${t("Auto-read from photo:", "फोटो से स्वतः पढ़ा गया:")} ${ocrCm} cm — ${t("Reference locked!", "संदर्भ लॉक हो गया!")}`;
+            applyPhotoCalib(false);
+          } else if (ocrEl) {
+            ocrEl.textContent = `✅ ${t("Reference mark detected! Confirm height (e.g. 150 cm or 100 cm) below.", "संदर्भ निशान मिल गया! नीचे ऊँचाई (जैसे 150 cm या 100 cm) की पुष्टि करें।")}`;
+          }
+        };
+        imgEl.src = url;
+      }
+
       if (supportsCalib) {
+        const btnUp = document.getElementById("btnUploadRefPhoto");
+        const inpUp = document.getElementById("inpRefPhoto");
+        if (btnUp && inpUp) {
+          btnUp.onclick = () => inpUp.click();
+          inpUp.onchange = (e) => {
+            const f = e.target.files?.[0];
+            if (f) renderRefPhotoPanel(f);
+          };
+        }
         const rngDist = document.getElementById("rngDist");
         if (rngDist) {
           rngDist.oninput = (e) => {
             state.cameraDistanceM = parseFloat(e.target.value);
             document.getElementById("lblDistVal").textContent = `${state.cameraDistanceM.toFixed(2)} m`;
-            if (state.calib && state.calib.height && state.calib.height.method !== "wall") delete state.calib.height;
+            if (state.calib && state.calib.height && state.calib.height.method !== "wall" && state.calib.height.method !== "sticky150") delete state.calib.height;
             persist();
             refreshCalStatus();
           };
