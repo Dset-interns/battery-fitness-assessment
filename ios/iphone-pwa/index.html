@@ -1564,24 +1564,29 @@
       };
     }
 
-    // TEST 5 — STANDING BROAD JUMP (Horizontal Two-Foot Jump with Take-Off Toe to Nearest Landing Heel Measurement)
+    // TEST 5 — STANDING BROAD JUMP (Side-Profile Horizontal Two-Foot Jump: Take-Off Toe to Nearest Landing Heel)
     function evalBroadJump(lm, mask, W, H, calib, athlete) {
-      for (const i of [11, 12, 23, 24, 25, 26, 27, 28]) {
+      const s = sideChain(lm);
+      for (const i of [s.sh, s.hip, s.kn, s.an]) {
         if (!vis(lm, i, 0.40)) {
-          return fail(t("Full body needed", "पूरा शरीर चाहिए"),
-            t("Stand in side profile so shoulders, hips, knees and ankles stay clearly inside the frame.", "बगल से खड़े हों ताकि कंधे, कूल्हे, घुटने और टखने फ्रेम में रहें।"));
+          return fail(t("Full body side profile needed", "पूरा शरीर बगल से दिखना चाहिए"),
+            t("Stand sideways (90° side profile) so shoulder, hip, knee and ankle stay clearly inside the frame.", "कैमरे के सामने बगल से (90° साइड प्रोफ़ाइल) खड़े हों ताकि कंधा, कूल्हा, घुटना और टखना साफ़ दिखें।"));
         }
       }
       const p = (i) => P(lm, i, W, H);
-      const shMid = mid(p(11), p(12));
-      const hipMid = mid(p(23), p(24));
-      const ankleMidX = 0.5 * (p(27).x + p(28).x);
-      const ankleMidY = 0.5 * (p(27).y + p(28).y);
-      const footY = Math.max(p(27).y, p(28).y);
-      const ankleSpreadX = Math.abs(p(27).x - p(28).x);
+      const bothSh = vis(lm, 11, 0.35) && vis(lm, 12, 0.35);
+      const bothHip = vis(lm, 23, 0.35) && vis(lm, 24, 0.35);
+      const bothAnk = vis(lm, 27, 0.35) && vis(lm, 28, 0.35);
+
+      const shMid = bothSh ? mid(p(11), p(12)) : p(s.sh);
+      const hipMid = bothHip ? mid(p(23), p(24)) : p(s.hip);
+      const ankleMidX = bothAnk ? 0.5 * (p(27).x + p(28).x) : p(s.an).x;
+      const ankleMidY = bothAnk ? 0.5 * (p(27).y + p(28).y) : p(s.an).y;
+      const footY = bothAnk ? Math.max(p(27).y, p(28).y) : p(s.an).y;
+      const ankleSpreadX = bothAnk ? Math.abs(p(27).x - p(28).x) : 0;
       const torsoPx = Math.max(H * 0.08, dist2D(shMid, hipMid));
 
-      // Reject sitting or lying down during Broad Jump:
+      // Gate 1: Reject sitting or lying down during Broad Jump
       if (ankleMidY - hipMid.y < 0.55 * torsoPx) {
         return fail(
           t("🚫 FOUL: Seated/Lying — Stand Upright!", "🚫 फाउल: बैठे/लेटे हैं — सीधे खड़े हों!"),
@@ -1590,19 +1595,33 @@
         );
       }
 
-      const legL = dist2D(p(23), p(25)) + dist2D(p(25), p(27));
-      const legR = dist2D(p(24), p(26)) + dist2D(p(26), p(28));
+      // Gate 2: Side-Profile Gate — Reject facing the camera directly!
+      // Because a 2D camera measures horizontal jump distance across the screen (left <-> right),
+      // facing the camera (where shoulder width and hip width are wide horizontally) MUST be blocked!
+      const shWidthPx = bothSh ? Math.abs(p(11).x - p(12).x) : 0;
+      const hipWidthPx = bothHip ? Math.abs(p(23).x - p(24).x) : 0;
+      if (shWidthPx > 0.46 * torsoPx && hipWidthPx > 0.28 * torsoPx) {
+        return fail(
+          t("🚫 Turn Sideways (Side Profile Required)!", "🚫 बगल की ओर मुड़ें (साइड प्रोफ़ाइल आवश्यक)!"),
+          t("You are facing the camera! Turn 90° sideways so you jump across the screen (left-to-right or right-to-left).",
+            "आप कैमरे की ओर मुँह करके खड़े हैं! 90° बगल की ओर मुड़ें ताकि आप स्क्रीन के एक तरफ़ से दूसरी तरफ़ कूद सकें।")
+        );
+      }
+
+      const nearLegPx = dist2D(p(s.hip), p(s.kn)) + dist2D(p(s.kn), p(s.an));
+      const legL = (vis(lm, 23, 0.35) && vis(lm, 25, 0.35) && vis(lm, 27, 0.35)) ? (dist2D(p(23), p(25)) + dist2D(p(25), p(27))) : nearLegPx;
+      const legR = (vis(lm, 24, 0.35) && vis(lm, 26, 0.35) && vis(lm, 28, 0.35)) ? (dist2D(p(24), p(26)) + dist2D(p(26), p(28))) : nearLegPx;
       const legLengthPx = Math.max(H * 0.14, 0.5 * (legL + legR));
-      const kneeDeg = Math.min(angleDeg(p(23), p(25), p(27)), angleDeg(p(24), p(26), p(28)));
+      const kneeDeg = angleDeg(p(s.hip), p(s.kn), p(s.an));
 
       // Track toe and heel X coordinates for SAI Handbook Test V (take-off toe line to nearest landing heel):
-      const hasToes = vis(lm, 31, 0.35) || vis(lm, 32, 0.35);
-      const toeX = (vis(lm, 31, 0.35) && vis(lm, 32, 0.35))
-        ? 0.5 * (p(31).x + p(32).x)
+      const hasToes = vis(lm, s.ft, 0.35) || vis(lm, 31, 0.35) || vis(lm, 32, 0.35);
+      const toeX = vis(lm, s.ft, 0.35)
+        ? p(s.ft).x
         : (vis(lm, 31, 0.35) ? p(31).x : (vis(lm, 32, 0.35) ? p(32).x : ankleMidX));
-      const hasHeels = vis(lm, 29, 0.35) || vis(lm, 30, 0.35);
-      const heelX = (vis(lm, 29, 0.35) && vis(lm, 30, 0.35))
-        ? 0.5 * (p(29).x + p(30).x)
+      const hasHeels = vis(lm, s.heel, 0.35) || vis(lm, 29, 0.35) || vis(lm, 30, 0.35);
+      const heelX = vis(lm, s.heel, 0.35)
+        ? p(s.heel).x
         : (vis(lm, 29, 0.35) ? p(29).x : (vis(lm, 30, 0.35) ? p(30).x : ankleMidX));
 
       return {
@@ -1622,9 +1641,9 @@
         legLengthPx,
         torsoPx,
         kneeDeg,
-        liveMetric: `${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° · ${t("Two-Foot Ready", "दोनों पैर तैयार")}`,
-        reason: t("Stand still ~1s on both feet, jump forward horizontally as far as possible, and land on both feet.",
-                  "~1 सेकंड दोनों पैरों पर स्थिर खड़े रहें, फिर दोनों पैरों से आगे कूदें और दोनों पैरों पर उतरें।")
+        liveMetric: `✅ ${t("Side Profile OK", "साइड प्रोफ़ाइल सही")} · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}°`,
+        reason: t("Stand sideways ~1s on both feet, jump forward across the screen, and land on both feet.",
+                  "~1 सेकंड दोनों पैरों पर बगल से स्थिर खड़े रहें, फिर स्क्रीन के पार आगे कूदें और दोनों पैरों पर उतरें।")
       };
     }
 
@@ -3500,6 +3519,37 @@
             ctx.fillStyle = ev.isSupineFlat ? "#00E6A8" : (ev.isCurledUp ? "#FFD166" : "#00E5FF");
             ctx.fillText(`Knee ${ev.kneeDeg.toFixed(0)}° ✓`, (ev.knX || 40) + 10, Math.max(28, (ev.knY || 80) - 10));
             ctx.fillText(`Torso ${ev.torsoDeg.toFixed(0)}°`, (ev.shX || 40) + 10, Math.max(28, (ev.shY || 80) - 10));
+          }
+        }
+        if (test.key === "broad_jump") {
+          if (!ev.postureOk) {
+            const bw = Math.min(frameW - 20, 660);
+            const bh = Math.round(fontMain * 3.2);
+            const bx = (frameW - bw) / 2;
+            const by = Math.max(68, frameH * 0.08);
+            ctx.fillStyle = "rgba(210, 25, 35, 0.92)";
+            ctx.fillRect(bx, by, bw, bh);
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(bx, by, bw, bh);
+            ctx.fillStyle = "#FFFFFF";
+            ctx.textAlign = "center";
+            ctx.font = `bold ${Math.round(fontMain * 1.05)}px -apple-system, sans-serif`;
+            ctx.fillText(ev.liveMetric, frameW / 2, by + Math.round(fontMain * 1.35));
+            ctx.font = `bold ${Math.round(fontMain * 0.85)}px -apple-system, sans-serif`;
+            ctx.fillText(t("Turn 90° sideways so you jump across the screen (left ↔ right)!", "90° बगल की ओर मुड़ें ताकि आप स्क्रीन के पार कूद सकें!"), frameW / 2, by + Math.round(fontMain * 2.55));
+            ctx.textAlign = "left";
+          } else if (typeof ev.toeX === "number") {
+            ctx.strokeStyle = "#00E5FF";
+            ctx.fillStyle = "#00E5FF";
+            ctx.lineWidth = 3;
+            ctx.setLineDash([8, 6]);
+            ctx.beginPath();
+            ctx.moveTo(ev.toeX, Math.max(0, ev.hipY - 40));
+            ctx.lineTo(ev.toeX, Math.min(frameH, ev.footY + 25));
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillText("TOE LINE", ev.toeX + 8, Math.min(frameH - 12, ev.footY));
           }
         }
         ctx.restore();
