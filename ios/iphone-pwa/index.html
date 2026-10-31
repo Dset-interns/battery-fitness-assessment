@@ -324,10 +324,10 @@
       {
         number: 5, key: "broad_jump",
         nameEn: "Standing Broad Jump", nameHi: "स्टैंडिंग ब्रॉड जंप",
-        minSec: 15, maxSec: 30, minMB: 3, maxMB: 15,
-        attempts: 3, unit: "cm", mode: "Planned", isPhoto: false,
-        guideEn: "Stand behind take-off line with feet slightly apart. Two-foot take-off and landing; measure perpendicular distance to nearest heel mark.",
-        guideHi: "टेक-ऑफ लाइन के पीछे खड़े होकर दोनों पैरों से आगे कूदें। एड़ी के निकटतम निशान तक दूरी मापें।"
+        minSec: 5, maxSec: 30, minMB: 3, maxMB: 15,
+        attempts: 3, unit: "cm", mode: "AI", isPhoto: false,
+        guideEn: "Side profile view. Stand still behind take-off spot with both feet together, then jump forward horizontally using a two-foot take-off and two-foot landing.",
+        guideHi: "बगल से कैमरा रखें। टेक-ऑफ स्थान के पीछे दोनों पैर मिलाकर स्थिर खड़े हों, फिर दोनों पैरों से आगे की ओर कूदें और दोनों पैरों पर उतरें।"
       },
       {
         number: 6, key: "medicine_ball_throw",
@@ -1463,33 +1463,138 @@
       };
     }
 
-    // TEST 9 — SIT-UPS (Scale-free isotropic joint angles + SAI Handbook Rules 2, 3a, 3b, 3c)
+    // TEST 9 — SIT-UPS (Scale-free isotropic joint angles + SAI Handbook Rules 1, 2, 3a, 3b, 3c)
+    // Enforces:
+    //  - Rule 1: Lying on floor (rejects standing or upright swinging without lying flat on back <= 28°)
+    //  - Rule 2: Knees MUST be bent (60°–120°) with knee apex raised above the hip-ankle floor line (rejects straight legs!)
+    //  - Rule 3a: Hands clasped behind neck/head
+    //  - Rule 3b: Curl torso up (>= 46°) until elbows reach knees
+    //  - Rule 3c: Return shoulder blades flat to floor (torsoDeg <= 28° and hipDeg >= 105°) before next rep counts
     function evalSitUps(lm, mask, W, H) {
       const s = sideChain(lm);
-      for (const i of [s.sh, s.hip, s.kn]) {
-        if (!vis(lm, i, 0.42)) {
-          return fail(t("Side profile needed", "बगल से दृश्य चाहिए"),
-            t("Lie side-on to the camera: shoulder, hip and bent knees visible.", "कैमरे की ओर बगल से लेटें: कंधा, कूल्हा, घुटने दिखें।"));
+      for (const i of [s.sh, s.hip, s.kn, s.an]) {
+        if (!vis(lm, i, 0.38)) {
+          return fail(t("Side profile needed (Show Full Legs)", "बगल से दृश्य चाहिए (पूरे पैर दिखाएँ)"),
+            t("Lie side-on to the camera: shoulder, hip, bent knees, and ankles must all be visible.", "कैमरे की ओर बगल से लेटें: कंधा, कूल्हा, मुड़े घुटने और टखने साफ़ दिखने चाहिए।"));
         }
       }
       const p = (i) => P(lm, i, W, H);
-      const sh = p(s.sh), hip = p(s.hip), kn = p(s.kn);
-      const hipDeg = angleDeg(sh, hip, kn);
-      const torsoDeg = Math.abs(Math.atan2(hip.y - sh.y, Math.abs(sh.x - hip.x) + 1e-6)) * 180 / Math.PI;
+      const sh = p(s.sh), hip = p(s.hip), kn = p(s.kn), an = p(s.an);
       const femur = Math.max(dist2D(hip, kn), 1);
+      const tibia = Math.max(dist2D(kn, an), 1);
       const torso = Math.max(dist2D(sh, hip), 1);
+
+      // Gate 1: Reject standing upright or kneeling (when ankles are vertically far below hips)
+      const legHorizSpan = Math.abs(hip.x - an.x);
+      const legVertDrop = an.y - hip.y;
+      if (legVertDrop > 0.70 * (femur + tibia) || (an.y - sh.y > 1.45 * Math.max(Math.abs(sh.x - an.x), 1) && hip.y < kn.y - 0.35 * femur)) {
+        return fail(
+          t("🚫 FOUL: Standing — Lie on Floor!", "🚫 फाउल: खड़े हैं — ज़मीन पर लेटें!"),
+          t("Sit-Ups must be performed lying on the floor with knees bent (standing/vertical posture is rejected).",
+            "सिट-अप्स ज़मीन पर पीठ के बल लेटकर घुटने मोड़कर करें (खड़े होना अमान्य है)।"),
+          { isWrongExercise: true }
+        );
+      }
+
+      const hipDeg = angleDeg(sh, hip, kn);
+      // True torso angle relative to horizontal floor: 0° = lying flat on back, 90° = sitting straight upright
+      const torsoDeg = Math.atan2(Math.max(0, hip.y - sh.y), Math.abs(sh.x - hip.x) + 1e-6) * 180 / Math.PI;
+      const kneeDeg = angleDeg(hip, kn, an);
+
+      // Knee apex must rise above (smaller Y than) the hip-to-ankle floor baseline AND knee angle must be bent (≤ 120°)
+      const floorLineY = 0.5 * (hip.y + an.y);
+      const kneeApexRiseRatio = (floorLineY - kn.y) / femur;
+      const kneeBentOk = kneeDeg <= 120 && kneeDeg >= 40 && kneeApexRiseRatio >= 0.12;
+
       const elbowKnee = vis(lm, s.el, 0.35) ? dist2D(p(s.el), kn) / femur : null;
-      const wristEar = (vis(lm, s.wr, 0.35) && vis(lm, s.ear, 0.35)) ? dist2D(p(s.wr), p(s.ear)) / torso : null;
-      const kneeDeg = vis(lm, s.an, 0.38) ? angleDeg(hip, kn, p(s.an)) : null;
+      const wristEar = (vis(lm, s.wr, 0.35) && vis(lm, s.ear, 0.35))
+        ? Math.min(dist2D(p(s.wr), p(s.ear)), vis(lm, 0, 0.35) ? dist2D(p(s.wr), p(0)) : 999) / torso
+        : null;
+
+      const isSupineFlat = torsoDeg <= 28 && hipDeg >= 104;
+      const isCurledUp = torsoDeg >= 46 && hipDeg <= 90;
+
+      let stateText;
+      if (!kneeBentOk) {
+        stateText = `🚫 ${t("FOUL: Knees Straight", "फाउल: घुटने सीधे हैं")} (${kneeDeg.toFixed(0)}° > 120°) — ${t("BEND KNEES!", "घुटने मोड़ें!")}`;
+      } else if (isSupineFlat) {
+        stateText = `✅ ${t("FLAT ON BACK", "पीठ के बल लेटे हैं")} (${torsoDeg.toFixed(0)}°) · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° ✓ — ⬆️ ${t("Curl Up!", "ऊपर उठें!")}`;
+      } else if (isCurledUp) {
+        stateText = `⬆️ ${t("TOP CURL", "ऊपर उठे")} (Hip ${hipDeg.toFixed(0)}°) · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° ✓ — ⬇️ ${t("Return Flat!", "वापस सीधा लेटें!")}`;
+      } else {
+        stateText = `${t("Torso", "धड़")} ${torsoDeg.toFixed(0)}° · ${t("Hip", "कूल्हा")} ${hipDeg.toFixed(0)}° · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° ✓`;
+      }
+
       return {
         postureOk: true,
         hipDeg,
         torsoDeg,
+        kneeDeg,
+        kneeBentOk,
+        kneeApexRiseRatio,
+        isSupineFlat,
+        isCurledUp,
         elbowKnee,
         wristEar,
+        shX: sh.x, shY: sh.y,
+        hipX: hip.x, hipY: hip.y,
+        knX: kn.x, knY: kn.y,
+        anX: an.x, anY: an.y,
+        liveMetric: stateText,
+        reason: !kneeBentOk
+          ? t("🚫 FOUL (Rule 2): Your knees are straight! Bend your knees (~90°) with feet flat on the floor.", "🚫 फाउल (नियम 2): आपके घुटने सीधे हैं! घुटनों को ~90° मोड़ें और पैर ज़मीन पर रखें।")
+          : t("Start flat on back (Torso ≤28°) → Curl up to knees (Torso ≥46°, Hip ≤88°) → Return flat to floor (≤28°).",
+              "पीठ के बल सीधा लेटें (धड़ ≤28°) → घुटनों तक उठें (धड़ ≥46°) → वापस सीधा लेटें (≤28°)।")
+      };
+    }
+
+    // TEST 5 — STANDING BROAD JUMP (Horizontal Two-Foot Jump with Automatic Leg-Segment Scale)
+    function evalBroadJump(lm, mask, W, H, calib, athlete) {
+      for (const i of [11, 12, 23, 24, 25, 26, 27, 28]) {
+        if (!vis(lm, i, 0.40)) {
+          return fail(t("Full body needed", "पूरा शरीर चाहिए"),
+            t("Stand in side profile so shoulders, hips, knees and ankles stay clearly inside the frame.", "बगल से खड़े हों ताकि कंधे, कूल्हे, घुटने और टखने फ्रेम में रहें।"));
+        }
+      }
+      const p = (i) => P(lm, i, W, H);
+      const shMid = mid(p(11), p(12));
+      const hipMid = mid(p(23), p(24));
+      const ankleMidX = 0.5 * (p(27).x + p(28).x);
+      const ankleMidY = 0.5 * (p(27).y + p(28).y);
+      const footY = Math.max(p(27).y, p(28).y);
+      const ankleSpreadX = Math.abs(p(27).x - p(28).x);
+      const torsoPx = Math.max(H * 0.08, dist2D(shMid, hipMid));
+
+      // Reject sitting or lying down during Broad Jump:
+      if (ankleMidY - hipMid.y < 0.55 * torsoPx) {
+        return fail(
+          t("🚫 FOUL: Seated/Lying — Stand Upright!", "🚫 फाउल: बैठे/लेटे हैं — सीधे खड़े हों!"),
+          t("Standing Broad Jump starts from an upright two-foot standing posture.", "स्टैंडिंग ब्रॉड जंप सीधे खड़े होकर दोनों पैरों से किया जाता है।"),
+          { isWrongExercise: true }
+        );
+      }
+
+      const legL = dist2D(p(23), p(25)) + dist2D(p(25), p(27));
+      const legR = dist2D(p(24), p(26)) + dist2D(p(26), p(28));
+      const legLengthPx = Math.max(H * 0.14, 0.5 * (legL + legR));
+      const kneeDeg = Math.min(angleDeg(p(23), p(25), p(27)), angleDeg(p(24), p(26), p(28)));
+
+      return {
+        postureOk: true,
+        shX: shMid.x,
+        shY: shMid.y,
+        hipX: hipMid.x,
+        hipY: hipMid.y,
+        ankX: ankleMidX,
+        ankleMidY,
+        footY,
+        ankleSpreadX,
+        legLengthPx,
+        torsoPx,
         kneeDeg,
-        liveMetric: `${t("Hip", "कूल्हा")} ${hipDeg.toFixed(0)}° · ${t("Torso", "धड़")} ${torsoDeg.toFixed(0)}°`,
-        reason: t("Lie flat (>108°) → curl up (<88°) → return flat (>108°).", "लेटें (>108°) → ऊपर उठें (<88°) → वापस लेटें (>108°)।")
+        liveMetric: `${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° · ${t("Two-Foot Ready", "दोनों पैर तैयार")}`,
+        reason: t("Stand still ~1s on both feet, jump forward horizontally as far as possible, and land on both feet.",
+                  "~1 सेकंड दोनों पैरों पर स्थिर खड़े रहें, फिर दोनों पैरों से आगे कूदें और दोनों पैरों पर उतरें।")
       };
     }
 
@@ -1497,6 +1602,7 @@
       if (testKey === "height") return evalHeight(lm, mask, W, H, calib, stickyNote);
       if (testKey === "sit_and_reach") return evalSitReach(lm, mask, W, H, calib, athlete);
       if (testKey === "vertical_jump") return evalJump(lm, mask, W, H);
+      if (testKey === "broad_jump") return evalBroadJump(lm, mask, W, H, calib, athlete);
       if (testKey === "sit_ups") return evalSitUps(lm, mask, W, H);
       return { postureOk: true, liveMetric: "Ready", reason: "" };
     }
@@ -1802,42 +1908,200 @@
         };
       }
 
+      // ---------------- TEST 5: STANDING BROAD JUMP ----------------
+      if (test.key === "broad_jump") {
+        const n = ok.length;
+        const refHeightCm = getAthleteRefHeightCm(athlete);
+        const medLegPx = median(ok.map(f => f.legLengthPx || 220));
+        // Anatomical hip-to-ankle segment (femur + tibia) is 47.5% of total stature (Winter 2009)
+        const cmPerPx = (calib && calib.cmPerPx) ? calib.cmPerPx : ((0.475 * refHeightCm) / Math.max(50, medLegPx));
+
+        const ankXSm = medianFilter(ok.map(f => f.ankX), 3);
+        const hipXSm = medianFilter(ok.map(f => f.hipX), 3);
+        const footYSm = medianFilter(ok.map(f => f.footY), 3);
+        const spreadXSm = medianFilter(ok.map(f => f.ankleSpreadX || 0), 3);
+        const kneeSm = medianFilter(ok.map(f => f.kneeDeg || 170), 3);
+
+        const startWin = Math.max(3, Math.min(10, Math.floor(n * 0.22)));
+        const endWin = Math.max(3, Math.min(10, Math.floor(n * 0.22)));
+
+        const startAnkX = median(ankXSm.slice(0, startWin));
+        const endAnkX = median(ankXSm.slice(n - endWin));
+        const startHipX = median(hipXSm.slice(0, startWin));
+        const endHipX = median(hipXSm.slice(n - endWin));
+
+        const ankTravelCm = Math.abs(endAnkX - startAnkX) * cmPerPx;
+        const hipTravelCm = Math.abs(endHipX - startHipX) * cmPerPx;
+        const maxRangeAnkCm = (pct(ankXSm, 0.95) - pct(ankXSm, 0.05)) * cmPerPx;
+        const horizDispCm = Math.max(ankTravelCm, 0.88 * maxRangeAnkCm);
+
+        // 1. Reject standing in place without jumping horizontally
+        if (horizDispCm < 25.0 || hipTravelCm < 20.0) {
+          return rejected(
+            test,
+            t(`REJECTED — No horizontal jump (${horizDispCm.toFixed(1)} cm < 25 cm)`, "अस्वीकृत — आगे की ओर कूद नहीं मिली"),
+            t("Stand still on both feet, bend your knees, and jump forward horizontally across the frame.", "दोनों पैरों पर स्थिर खड़े हों, घुटने मोड़ें और आगे की ओर कूदें।")
+          );
+        }
+
+        // 2. Check for two-foot takeoff & landing vs walking/stepping foul:
+        // Find the peak horizontal velocity impulse window
+        let peakVelCmPerSec = 0;
+        let impulseIdx = Math.floor(n / 2);
+        for (let i = 1; i < n; i++) {
+          const dtSec = Math.max(0.016, (ok[i].t - ok[i - 1].t) / 1000.0);
+          const v = (Math.abs(ankXSm[i] - ankXSm[i - 1]) * cmPerPx) / dtSec;
+          if (v > peakVelCmPerSec) {
+            peakVelCmPerSec = v;
+            impulseIdx = i;
+          }
+        }
+
+        const minKnee = Math.min(...kneeSm);
+        const startSpreadCm = median(spreadXSm.slice(0, startWin)) * cmPerPx;
+        const endSpreadCm = median(spreadXSm.slice(n - endWin)) * cmPerPx;
+        const maxSpreadCm = pct(spreadXSm, 0.90) * cmPerPx;
+        const baselineFootY = Math.max(median(footYSm.slice(0, startWin)), median(footYSm.slice(n - endWin)));
+        const minFootY = Math.min(...footYSm);
+        const verticalClearanceCm = Math.max(0, (baselineFootY - minFootY) * cmPerPx);
+
+        // Walking foul check: if ankles separate widely (> 38 cm) without simultaneous vertical lift (< 2.0 cm) or knee countermovement
+        if ((maxSpreadCm > 38.0 && verticalClearanceCm < 2.2) || endSpreadCm > 28.0 || peakVelCmPerSec < 55.0) {
+          return rejected(
+            test,
+            t("FOUL — Walking / Single-foot step detected", "फाउल — चलना या एक पैर से कूदना अमान्य है"),
+            t(`SAI Rule Foul: You must take off and land with BOTH feet together (foot separation ${maxSpreadCm.toFixed(0)} cm, vertical lift ${verticalClearanceCm.toFixed(1)} cm).`,
+              `SAI नियम उल्लंघन: दोनों पैरों से एक साथ कूदें और दोनों पैरों पर उतरें।`)
+          );
+        }
+
+        // True horizontal broad jump distance (blending ankle and hip horizontal travel for stability):
+        const jumpCm = Math.max(25.0, Math.min(320.0, 0.65 * horizDispCm + 0.35 * hipTravelCm));
+
+        return {
+          valid: true,
+          value: Number(jumpCm.toFixed(1)),
+          unit: "cm",
+          confidence: calib ? "GREEN" : "AMBER",
+          method: `AI Horizontal Broad Jump · ${jumpCm.toFixed(1)} cm · Two-foot lift +${verticalClearanceCm.toFixed(1)} cm · Knee ${minKnee.toFixed(0)}°`,
+          audit: [{
+            label: "Standing Broad Jump",
+            detail: `✅ Valid Two-Foot Jump: ${jumpCm.toFixed(1)} cm (Ankles ΔX ${horizDispCm.toFixed(1)} cm · Hips ΔX ${hipTravelCm.toFixed(1)} cm · Lift +${verticalClearanceCm.toFixed(1)} cm · Landing spread ${endSpreadCm.toFixed(1)} cm ✓)`,
+            valid: true
+          }]
+        };
+      }
+
       // ---------------- TEST 9: SIT-UPS ----------------
       if (test.key === "sit_ups") {
-        const ang = medianFilter(ok.map(f => f.hipDeg), 3);
-        const lo = pct(ang, 0.05), hi = pct(ang, 0.95), range = hi - lo;
-        if (range < 25) {
+        const hipSm = medianFilter(ok.map(f => f.hipDeg), 3);
+        const torsoSm = medianFilter(ok.map(f => f.torsoDeg ?? 45), 3);
+        const kneeSm = medianFilter(ok.map(f => f.kneeDeg ?? 90), 3);
+
+        const minHip = pct(hipSm, 0.05), maxHip = pct(hipSm, 0.95), hipRange = maxHip - minHip;
+        const minTorso = pct(torsoSm, 0.08), maxTorso = pct(torsoSm, 0.92), torsoRange = maxTorso - minTorso;
+        const medKnee = median(kneeSm);
+        const straightKneeRatio = ok.filter((f, idx) => kneeSm[idx] > 120 || f.kneeBentOk === false).length / ok.length;
+
+        // 1. Check Rule 2: Straight knees across the attempt
+        if (medKnee > 120 || straightKneeRatio > 0.65) {
           return {
-            valid: false, value: 0, unit: "reps", confidence: "RED",
-            method: t("No sit-up motion (<25° hip flexion)", "सिट-अप गति नहीं मिली"),
-            audit: [{ label: "No reps", detail: `Hip angle moved only ${range.toFixed(0)}° (needs ≥25° curl cycle).`, valid: false }]
+            valid: false, value: null, unit: "reps", confidence: "RED",
+            method: t(`FOUL (Rule 2) — Knees straight (${medKnee.toFixed(0)}° > 120°)`, `फाउल (नियम 2) — घुटने सीधे हैं (${medKnee.toFixed(0)}° > 120°)`),
+            audit: [{
+              label: "Rule 2 Foul (Knees Straight)",
+              detail: `Attempt rejected: Knees remained straight (${medKnee.toFixed(0)}° > 120° max allowed). You must bend your knees (~90°) with feet flat on the floor.`,
+              valid: false
+            }]
           };
         }
-        const upThr = Math.min(92, lo + 0.35 * range);
-        const downThr = Math.max(105, hi - 0.32 * range);
-        let phase = "DOWN";
+
+        // 2. Check Rule 1 & 3c: Swinging/rocking in an upright seated position without ever lying flat on back (torso <= 28°)
+        if (minTorso > 28 || maxHip < 102) {
+          return {
+            valid: false, value: null, unit: "reps", confidence: "RED",
+            method: t(`FOUL (Rule 1/3c) — Swinging upright without lying flat (min torso ${minTorso.toFixed(0)}° > 28°)`,
+                      `फाउल — पीठ के बल सीधा लेटे बिना ऊपर ही झूलना (न्यूनतम धड़ ${minTorso.toFixed(0)}° > 28°)`),
+            audit: [{
+              label: "Upright Swinging Rejected",
+              detail: `Attempt rejected: Athlete stayed upright (min torso angle ${minTorso.toFixed(0)}° above floor; must lie flat ≤28° with hip ≥104° between every rep).`,
+              valid: false
+            }]
+          };
+        }
+
+        // 3. Check minimum range of motion (both hip flexion and torso elevation off floor)
+        if (hipRange < 25 || torsoRange < 24) {
+          return {
+            valid: false, value: null, unit: "reps", confidence: "RED",
+            method: t(`No sit-up curl cycle (Torso Δ${torsoRange.toFixed(0)}°, Hip Δ${hipRange.toFixed(0)}°)`, "सिट-अप गति नहीं मिली"),
+            audit: [{
+              label: "Insufficient Range of Motion",
+              detail: `Torso lifted only ${torsoRange.toFixed(0)}° and hip flexed ${hipRange.toFixed(0)}° (requires ≥25° full curl from flat supine to knees and back).`,
+              valid: false
+            }]
+          };
+        }
+
+        // State machine:
+        // WAIT_SUPINE -> must first lie genuinely flat on back (torsoSm <= 28° AND hipSm >= 104°) to enter DOWN
+        // DOWN        -> must curl torso up off the floor (torsoSm >= 46° AND hipSm <= 90°) to enter UP
+        // UP          -> must return shoulder blades flat to the floor (torsoSm <= 28° AND hipSm >= 104°) to complete rep
+        let phase = "WAIT_SUPINE";
         let down = [], up = [];
         const audit = [];
         let validReps = 0;
 
         for (let i = 0; i < ok.length; i++) {
-          const a = ang[i], f = ok[i];
-          if (phase === "DOWN") {
+          const hAng = hipSm[i], tAng = torsoSm[i], kAng = kneeSm[i];
+          const f = { ...ok[i], hipSm: hAng, torsoSm: tAng, kneeSm: kAng };
+
+          if (phase === "WAIT_SUPINE") {
+            if (tAng <= 28 && hAng >= 104) {
+              phase = "DOWN";
+              down = [f];
+            }
+          } else if (phase === "DOWN") {
             down.push(f);
-            if (a < upThr) { phase = "UP"; up = [f]; }
-          } else {
+            if (tAng >= 46 && hAng <= 90) {
+              phase = "UP";
+              up = [f];
+            }
+          } else if (phase === "UP") {
             up.push(f);
-            if (a > downThr) {
+            // Complete rep only when returning flat on back (Rule 3c: torso <= 28° and hip >= 104°)
+            if (tAng <= 28 && hAng >= 104) {
+              const repFrames = [...down, ...up];
               const ek = up.map(x => x.elbowKnee).filter(v => v !== null);
-              const we = [...down, ...up].map(x => x.wristEar).filter(v => v !== null);
+              const we = repFrames.map(x => x.wristEar).filter(v => v !== null);
+              const repKnees = repFrames.map(x => x.kneeSm);
+              const maxKneeInRep = pct(repKnees, 0.85);
+              const straightFramesInRep = repFrames.filter(x => x.kneeSm > 120 || x.kneeBentOk === false).length;
+              const minHipInUp = Math.min(...up.map(x => x.hipSm));
+              const maxTorsoInUp = Math.max(...up.map(x => x.torsoSm));
+              const minTorsoInDown = Math.min(...down.map(x => x.torsoSm));
+
               const fouls = [];
-              if (ek.length && Math.min(...ek) > 0.72) fouls.push("Rule 3b: elbows did not reach knees");
-              if (we.length && median(we) > 0.85) fouls.push("Rule 3a: hands unclasped from neck");
+              if (maxKneeInRep > 120 || straightFramesInRep > repFrames.length * 0.30) {
+                fouls.push(`Rule 2: knees straight (${maxKneeInRep.toFixed(0)}° > 120°)`);
+              }
+              if (maxTorsoInUp < 46 || (maxTorsoInUp - minTorsoInDown) < 24) {
+                fouls.push(`Rule 3b: partial curl (torso ${maxTorsoInUp.toFixed(0)}° < 46°)`);
+              }
+              if (ek.length && Math.min(...ek) > 0.68) {
+                fouls.push("Rule 3b: elbows did not reach knees");
+              }
+              if (we.length && median(we) > 0.85) {
+                fouls.push("Rule 3a: hands unclasped from neck/head");
+              }
+
               const repOk = fouls.length === 0;
               if (repOk) validReps++;
               audit.push({
                 label: `Rep #${audit.length + 1}`,
-                detail: repOk ? `Valid rep (curl ${Math.min(...up.map(x => x.hipDeg)).toFixed(0)}° → flat ${a.toFixed(0)}°)` : fouls.join(" · "),
+                detail: repOk
+                  ? `✅ Valid rep · Flat ${minTorsoInDown.toFixed(0)}° → Curl ${maxTorsoInUp.toFixed(0)}° (Hip ${minHipInUp.toFixed(0)}°, Knee ${median(repKnees).toFixed(0)}° ✓) → Flat ${tAng.toFixed(0)}°`
+                  : `🚫 FOUL — ${fouls.join(" · ")}`,
                 valid: repOk
               });
               phase = "DOWN";
@@ -1846,11 +2110,27 @@
           }
         }
 
-        if (!audit.length) {
+        // If athlete curled up at the end and oscillated upright without returning flat to floor (Rule 3c violation):
+        if (phase === "UP" && up.length >= 4) {
+          const endTorso = up[up.length - 1].torsoSm;
+          audit.push({
+            label: `Rep #${audit.length + 1}`,
+            detail: `🚫 FOUL — Rule 3c: Did not return flat to floor after curl (ended upright at torso ${endTorso.toFixed(0)}° > 28°)`,
+            valid: false
+          });
+        }
+
+        if (!audit.length || validReps === 0) {
+          const firstFoul = audit.find(a => !a.valid)?.detail || "Complete a full supine (≤28°) → curl up to knees (≥46°) → supine (≤28°) cycle with knees bent (≤120°).";
           return {
-            valid: false, value: 0, unit: "reps", confidence: "RED",
-            method: t("0 complete sit-up cycles", "0 पूर्ण सिट-अप"),
-            audit: [{ label: "No reps", detail: "Complete a full supine → curl up → supine cycle.", valid: false }]
+            valid: false,
+            value: null,
+            unit: "reps",
+            confidence: "RED",
+            method: audit.length
+              ? t(`REJECTED — 0/${audit.length} valid reps (Rule Foul)`, `अस्वीकृत — 0/${audit.length} मान्य सिट-अप (नियम उल्लंघन)`)
+              : t("REJECTED — 0 complete sit-up cycles", "अस्वीकृत — 0 पूर्ण सिट-अप"),
+            audit: audit.length ? audit : [{ label: "No valid reps", detail: firstFoul, valid: false }]
           };
         }
 
@@ -1859,7 +2139,7 @@
           value: validReps,
           unit: "reps",
           confidence: "GREEN",
-          method: `AI State Machine · ${validReps}/${audit.length} valid reps`,
+          method: `AI State Machine · ${validReps}/${audit.length} valid reps (Knee ${medKnee.toFixed(0)}° ✓)`,
           audit
         };
       }
@@ -3025,6 +3305,30 @@
           ctx.fillText("TOES (23 cm)", ev.toeX + 10, ev.toeY + 20);
           ctx.fillText(`REACH (${ev.scoreCm.toFixed(1)} cm)`, ev.tipX + 10, ev.tipY - 10);
         }
+        if (test.key === "sit_ups" && ev.postureOk) {
+          if (ev.kneeBentOk === false) {
+            const bw = Math.min(frameW - 20, 660);
+            const bh = Math.round(fontMain * 3.2);
+            const bx = (frameW - bw) / 2;
+            const by = Math.max(68, frameH * 0.08);
+            ctx.fillStyle = "rgba(210, 25, 35, 0.92)";
+            ctx.fillRect(bx, by, bw, bh);
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(bx, by, bw, bh);
+            ctx.fillStyle = "#FFFFFF";
+            ctx.textAlign = "center";
+            ctx.font = `bold ${Math.round(fontMain * 1.05)}px -apple-system, sans-serif`;
+            ctx.fillText(`🚫 FOUL (Rule 2): KNEES STRAIGHT (${ev.kneeDeg.toFixed(0)}° > 120°)`, frameW / 2, by + Math.round(fontMain * 1.35));
+            ctx.font = `bold ${Math.round(fontMain * 0.85)}px -apple-system, sans-serif`;
+            ctx.fillText(t("Bend your knees (~90°) with feet flat on the floor!", "घुटनों को (~90°) मोड़ें और पैर ज़मीन पर रखें!"), frameW / 2, by + Math.round(fontMain * 2.55));
+            ctx.textAlign = "left";
+          } else {
+            ctx.fillStyle = ev.isSupineFlat ? "#00E6A8" : (ev.isCurledUp ? "#FFD166" : "#00E5FF");
+            ctx.fillText(`Knee ${ev.kneeDeg.toFixed(0)}° ✓`, (ev.knX || 40) + 10, Math.max(28, (ev.knY || 80) - 10));
+            ctx.fillText(`Torso ${ev.torsoDeg.toFixed(0)}°`, (ev.shX || 40) + 10, Math.max(28, (ev.shY || 80) - 10));
+          }
+        }
         ctx.restore();
       }
 
@@ -3110,9 +3414,10 @@
       }
 
       function showEval(ev) {
-        hudFps.textContent = `${Math.round(fps)} fps · ${ev.postureOk ? t("POSE VALID", "पोज़ मान्य") : t("GATE BLOCKED", "गेट अवरुद्ध")}`;
-        hudMetric.className = `hud-live-metric ${ev.postureOk ? "" : "bad"}`;
-        hudMetricTitle.textContent = ev.postureOk ? t("LIVE AI READOUT:", "लाइव AI रीडआउट:") : t("🚫 BLOCKED — ADJUST POSITION:", "🚫 अवरुद्ध — स्थिति सुधारें:");
+        const isFoul = !ev.postureOk || ev.kneeBentOk === false || ev.kneeOk === false;
+        hudFps.textContent = `${Math.round(fps)} fps · ${!isFoul ? t("POSE VALID", "पोज़ मान्य") : t("FOUL / GATE BLOCKED", "फाउल / गेट अवरुद्ध")}`;
+        hudMetric.className = `hud-live-metric ${!isFoul ? "" : "bad"}`;
+        hudMetricTitle.textContent = !isFoul ? t("LIVE AI READOUT:", "लाइव AI रीडआउट:") : t("🚫 FOUL / ADJUST POSITION:", "🚫 फाउल / स्थिति सुधारें:");
         hudMetricVal.textContent = ev.liveMetric;
         hudLive.textContent = ev.reason;
       }
@@ -3173,7 +3478,8 @@
                 const lm = people[0];
                 ev = evaluateLiveFrame(test.key, lm, mask, W, H, currentCalib(), athlete, stickyNote);
                 if (ev.postureOk) latestValidEv = ev;
-                drawSkeleton(lm, ev.postureOk ? "#00E6A8" : "#FF4D4F");
+                const skelOk = ev.postureOk && ev.kneeBentOk !== false && ev.kneeOk !== false;
+                drawSkeleton(lm, skelOk ? "#00E6A8" : "#FF4D4F");
                 drawMeasureOverlay(ev);
               }
               latestLiveEv = ev;
