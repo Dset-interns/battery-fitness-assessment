@@ -722,12 +722,11 @@
     //     or white A4 paper sheet surrounded by smooth wall
     // =========================================================================
     let _stickyCanvas = null, _stickyCtx = null;
+    let _prevHeightVertexY = null, _prevHeightShX = null;
     if (state.calib && state.calib.height && state.calib.height.method === "sticky150" && !state.calib.height.lockedFromLiveTap) {
       state.calib.height.lockedFromPhoto = true;
-      const H0 = state.calib.height.frameH || 1280;
-      state.calib.height.cmPerPx = (((state.cameraDistanceM || 2.50) * 100.0) * (34.61 / 25.4)) / H0;
     }
-    let _autoStickyCalib = (state.calib && state.calib.height && state.calib.height.method === "sticky150" && state.calib.height.lockedFromLiveTap)
+    let _autoStickyCalib = (state.calib && state.calib.height && state.calib.height.method === "sticky150" && state.calib.height.topY > 0)
       ? { ...state.calib.height, liveDetected: true }
       : null;
     let _tesseractPromise = null;
@@ -796,10 +795,11 @@
       }
 
       // 2. Check for Colored/Yellow Sticky Note on the wall in the LIVE video frame
-      //    (works both at close-up photo distance AND at 2.5 m full-body distance where the note is ~5x5 px in 144x256!)
+      //    Requires ALL 4 surrounding sides (left, right, top, AND bottom) to be non-yellow wall
+      //    so vertical yellow doorframes/strips are completely ignored and only the square sticky note matches!
       const hitsX = [], hitsY = [];
       const y0 = Math.floor(0.06 * SH), y1 = Math.floor(0.66 * SH);
-      const x0 = Math.floor(0.15 * SW), x1 = Math.floor(0.88 * SW);
+      const x0 = Math.floor(0.18 * SW), x1 = Math.floor(0.88 * SW);
       for (let y = y0; y < y1; y++) {
         const row = y * SW;
         for (let x = x0; x < x1; x++) {
@@ -811,12 +811,17 @@
               const my = Math.min(mask.h - 1, Math.floor((y / SH) * mask.h));
               if (mask.data[my * mask.w + mx] > mask.thr) continue;
             }
-            const xl = Math.max(0, x - 12), xr = Math.min(SW - 1, x + 12);
-            const yt = Math.max(0, y - 16), yb = Math.min(SH - 1, y + 16);
-            const iL = row + xl, iR = row + xr, iT = yt * SW + x, iB = yb * SW + x;
-            if (yv - yel[iL] > 12 && yv - yel[iR] > 12 &&
-                (yv - yel[iT] > 12 || yv - yel[iB] > 12) &&
-                bArr[iL] > 95 && bArr[iR] > 95) {
+            const check4Sides = (rx, ry) => {
+              const xl = Math.max(0, x - rx), xr = Math.min(SW - 1, x + rx);
+              const yt = Math.max(0, y - ry), yb = Math.min(SH - 1, y + ry);
+              const iL = row + xl, iR = row + xr, iT = yt * SW + x, iB = yb * SW + x;
+              return (
+                yv - yel[iL] > 14 && yv - yel[iR] > 14 &&
+                yv - yel[iT] > 14 && yv - yel[iB] > 14 &&
+                bArr[iL] > 95 && bArr[iR] > 95
+              );
+            };
+            if (check4Sides(10, 14) || check4Sides(16, 22)) {
               hitsX.push(x);
               hitsY.push(y);
             }
@@ -848,7 +853,7 @@
               noteHNorm: noteH / H, noteWNorm: noteW / W,
               template: (uploadedCalib && uploadedCalib.template) || extractPatchTemplate(gray, grad, SW, SH, cx, cy),
               markCm: uploadedCalib?.markCm || state.lastWallMarkCm || 150.0,
-              objSizeCm: uploadedCalib?.objSizeCm || 9.5,
+              objSizeCm: uploadedCalib?.objSizeCm || 7.62,
               refLabel: uploadedCalib?.refLabel || `${state.lastWallMarkCm || 150} cm Sticky Note`,
               frameW: W, frameH: H
             };
@@ -856,12 +861,23 @@
         }
       }
 
-      // IMPORTANT: If `uploadedCalib` came from a close-up Reference Photo (`lockedFromPhoto: true`),
-      // do NOT copy its close-up `topY` or `noteH` into the live video when no live note is matched!
-      // Instead return null here so `_autoStickyCalib` either keeps the last LIVE-detected wall position
-      // or lets `evalHeight` use the 2.50 m wall optics + table-occlusion reconstruction.
-      if (uploadedCalib && uploadedCalib.lockedFromPhoto) {
-        return null;
+      // If the athlete's head/hair temporarily covers the sticky note while standing at the wall,
+      // keep using the saved Reference Photo's wall coordinates scaled to (W, H):
+      if (uploadedCalib && uploadedCalib.topY > 0) {
+        const sy = H / (uploadedCalib.frameH || H);
+        const sx = W / (uploadedCalib.frameW || W);
+        return {
+          ...uploadedCalib,
+          liveDetected: true,
+          topY: uploadedCalib.topY * sy,
+          botY: (uploadedCalib.botY || (uploadedCalib.topY + (uploadedCalib.noteH || H * 0.08))) * sy,
+          leftX: (uploadedCalib.leftX || W * 0.44) * sx,
+          rightX: (uploadedCalib.rightX || W * 0.56) * sx,
+          noteH: (uploadedCalib.noteH || H * 0.08) * sy,
+          noteW: (uploadedCalib.noteW || W * 0.12) * sx,
+          frameW: W,
+          frameH: H
+        };
       }
 
       // 3. Pure Grayscale Wall-Mark / Handwriting / A4 Detector (when someone draws a line
@@ -938,7 +954,7 @@
             noteHNorm: noteH / H, noteWNorm: noteW / W,
             template: extractPatchTemplate(gray, grad, SW, SH, bestCx, bestCy),
             markCm: state.lastWallMarkCm || 150.0,
-            objSizeCm: 9.5,
+            objSizeCm: 7.62,
             refLabel: `${state.lastWallMarkCm || 150} cm Wall Mark`,
             frameW: W, frameH: H
           };
@@ -1020,13 +1036,18 @@
     // Supports:
     //  A. Universal Wall Reference Mode (Uploaded Reference Photo of Sticky Note / A4 / Bare-Wall Mark,
     //     or Auto-Detected / 1-Tap Wall Mark at ANY height e.g. 100 cm, 120 cm, 150 cm, 160 cm)
-    //  B. Full-Body Standing Mode with Table-Occlusion Reconstruction & 2.50 m Floor-Zone Gate
+    //  B. Full-Body Standing Mode with 2.50 m Floor-Zone Gate
     function evalHeight(lm, mask, W, H, calib, stickyNote) {
       const p = (i) => P(lm, i, W, H);
       const activeCalib = calib || getCalib("height", W, H);
       const hasSticky150 = !!(stickyNote && stickyNote.topY > 0) || (activeCalib && activeCalib.method === "sticky150");
       const sticky = (activeCalib && activeCalib.method === "sticky150")
-        ? { ...activeCalib, ...(stickyNote || {}), markCm: activeCalib.markCm || stickyNote?.markCm || 150.0, objSizeCm: activeCalib.objSizeCm || stickyNote?.objSizeCm || 9.5 }
+        ? {
+            ...activeCalib,
+            ...(stickyNote || {}),
+            markCm: activeCalib.markCm || stickyNote?.markCm || 150.0,
+            objSizeCm: activeCalib.objSizeCm || stickyNote?.objSizeCm || 7.62
+          }
         : stickyNote;
 
       // When a wall reference mark (e.g. 100 cm or 150 cm) is locked on the wall, only head + shoulders (0, 11, 12) need to be visible
@@ -1065,8 +1086,6 @@
       const eyeY = (vis(lm, 2, 0.35) && vis(lm, 5, 0.35)) ? (p(2).y + p(5).y) / 2 : p(0).y;
       const headNeckPx = Math.max(H * 0.025, shMid.y - eyeY);
       const rawLegTorsoPx = hasAnkles ? (anMid.y - shMid.y) : (torsoPx * 2.48);
-      // Protect against lower-leg occlusion (e.g. wooden table blocking shins/feet):
-      // In any upright human, shoulder-to-ankle is ~7.5x headNeckPx and ~2.48x torsoPx.
       const anatomicalLegTorsoPx = Math.max(rawLegTorsoPx, headNeckPx * 7.35, torsoPx * 2.42);
 
       // Skull crown offset above eye midpoint:
@@ -1098,57 +1117,77 @@
         ? Math.abs(Math.atan2(p(8).y - p(7).y, Math.abs(p(8).x - p(7).x) + 1e-6) * 180 / Math.PI)
         : 1.5;
 
+      // ---------------------------------------------------------------
+      // MOTION & TABLE-LEAN GATE (Pauses recording while tapping Start/Stop or walking!)
+      // ---------------------------------------------------------------
+      const dVy = _prevHeightVertexY !== null ? Math.abs(vertexY - _prevHeightVertexY) : 0;
+      const dSx = _prevHeightShX !== null ? Math.abs(shMid.x - _prevHeightShX) : 0;
+      _prevHeightVertexY = vertexY;
+      _prevHeightShX = shMid.x;
+
+      if (dVy > H * 0.012 || dSx > W * 0.015) {
+        return fail(
+          t("⏸ Hold Still at Wall...", "⏸ दीवार पर स्थिर खड़े हों..."),
+          t("⏸ Timer paused while you walk — stand completely still against the wall.", "⏸ चलते समय टाइमर रुका है — दीवार से सटकर बिल्कुल स्थिर खड़े हों।"),
+          { vertexY }
+        );
+      }
+
       const vfovFactor = H >= W ? (34.61 / 25.4) : (25.96 / 25.4);
       const fPx = H / vfovFactor;
       const stationDistM = state.cameraDistanceM || 2.50;
       const cmPerPxOptics = (stationDistM * 100.0 * vfovFactor) / H;
 
       // ---------------------------------------------------------------
-      // STANDING-AT-WALL DISTANCE GATE (Applies to ALL modes!)
-      // Prevents recording frames while the athlete is standing close to the phone (~1.0-1.7 m)
-      // pressing Start/Stop or walking back toward the wall!
+      // MODE A: UNIVERSAL WALL REFERENCE MODE (150 cm Sticky Note / Wall Mark)
+      // Computes height directly relative to the wall mark (yMark) using the sticky note's
+      // physical scale on the wall (~7.62 cm / noteH) blended with upper-body wall scale,
+      // and automatically blocks frames where the athlete leans down to tap the phone on the table!
       // ---------------------------------------------------------------
-      const upperBodyPx = hipMid.y - vertexY;
-      const liveDistM = Math.max(0.85, Math.min(3.80, (fPx * 0.725) / Math.max(40, upperBodyPx)));
-      if (headNeckPx > H * 0.066 || (hasHips && upperBodyPx > H * 0.32)) {
-        return fail(
-          `${t("📏 TOO CLOSE", "📏 बहुत पास")} (~${liveDistM.toFixed(2)} m) — ${t("Step BACK to the wall!", "दीवार तक पीछे हटें!")}`,
-          t("🚫 BLOCKED: You are too close to the phone! Step BACK against the wall — timer is paused until you reach the wall.",
-            "🚫 अवरुद्ध: आप फ़ोन के बहुत पास हैं! दीवार से सटकर खड़े हों — तब तक टाइमर रुका रहेगा।"),
-          { vertexY, estDistM: liveDistM, distanceError: "TOO_CLOSE" }
-        );
-      }
+      if (hasSticky150 && sticky && sticky.topY > 0) {
+        const sy = H / (sticky.frameH || H);
+        const yMark = sticky.topY * sy;
+        const noteH = Math.max(H * 0.025, (sticky.noteH || H * 0.085) * sy);
+        const markCm = Number(sticky.markCm) || 150.0;
+        const rawObjCm = Number(sticky.objSizeCm) || 7.62;
+        // Standard 3x3 inch sticky note is 7.62 cm tall; if user selected A4 (29.7 cm), use that
+        const notePhysicalCm = (rawObjCm >= 12.0) ? rawObjCm : 7.62;
 
-      // ---------------------------------------------------------------
-      // MODE A: LIVE WALL MARK LOCKED IN CURRENT CAMERA VIEW
-      // Only uses `yMark` directly when the sticky note / mark was detected or tapped
-      // in the LIVE camera view near the athlete's head/shoulders (never from a close-up photo's `topY`!).
-      // ---------------------------------------------------------------
-      const liveMarkValid = !!(
-        stickyNote &&
-        stickyNote.liveDetected &&
-        stickyNote.topY >= vertexY - H * 0.16 &&
-        stickyNote.topY <= shMid.y + H * 0.16
-      );
-      if (liveMarkValid) {
-        const sy = H / (stickyNote.frameH || H);
-        const yMark = stickyNote.topY * sy;
-        const markCm = Number(activeCalib?.markCm || stickyNote.markCm) || 150.0;
+        // If the athlete is leaning down toward the table to press Start/Stop on the phone
+        // (head drops far below the 150 cm sticky note or looms huge in front of the lens), pause timer!
+        if (headNeckPx > H * 0.095 || (markCm >= 135 && vertexY > yMark + 0.35 * noteH)) {
+          return fail(
+            t("⏸ Stand Tall Against Wall Mark", "⏸ दीवार के निशान के पास सीधे खड़े हों"),
+            t("⏸ Timer paused while reaching for the phone — stand tall with your back against the wall next to the 150 cm mark!",
+              "⏸ फ़ोन छूते समय टाइमर रुका है — 150 सेमी निशान के पास दीवार से पीठ सटाकर सीधे खड़े हों!"),
+            { vertexY, stickyTopY: yMark }
+          );
+        }
+
+        // Local cm/px right at the wall plane where both the sticky note and the athlete's head sit:
+        const cmPerPxNote = notePhysicalCm / noteH;
+        const headToShoulderPx = Math.max(H * 0.06, shMid.y - vertexY);
+        const cmPerPxUpper = 27.5 / headToShoulderPx;
+        const cmPerPxWall = (noteH >= H * 0.045)
+          ? (0.65 * cmPerPxNote + 0.35 * cmPerPxUpper)
+          : cmPerPxOptics;
+
         const deltaAboveMarkPx = yMark - vertexY;
-        const deltaCm = deltaAboveMarkPx * cmPerPxOptics;
+        const deltaCm = deltaAboveMarkPx * cmPerPxWall;
         const cmSticky = markCm + deltaCm;
-        const virtualSoleY = Math.min(H - 4, vertexY + cmSticky / cmPerPxOptics);
+        const estWallDistM = Math.max(0.95, Math.min(3.50, (fPx * cmPerPxWall) / 100.0));
+        const virtualSoleY = Math.min(H - 4, vertexY + cmSticky / cmPerPxWall);
 
         return {
           postureOk: true,
-          bodyPx: Math.round(cmSticky / cmPerPxOptics),
+          bodyPx: Math.round(cmSticky / cmPerPxWall),
           vertexY,
           soleY: virtualSoleY,
           stickyTopY: yMark,
-          estDistM: stationDistM,
+          estDistM: estWallDistM,
           vertexSource,
           cm: cmSticky,
-          cmPerPx: cmPerPxOptics,
+          cmPerPx: cmPerPxWall,
           calibMethod: "sticky150",
           headRoll,
           liveMetric: `📌 ${cmSticky.toFixed(1)} cm (${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm vs ${markCm} cm mark)`,
@@ -1157,9 +1196,7 @@
       }
 
       // ---------------------------------------------------------------
-      // MODE B: STANDING AT WALL (With Table-Occlusion Reconstruction & Saved Reference Photo Support)
-      // When a wooden table/desk at the bottom of the wall hides the lower legs/ankles,
-      // reconstruct the true floor sole row behind the table from the unoccluded upper body + hips!
+      // MODE B: FULL-BODY 2.50 m FLOOR-ZONE MODE (When NO wall reference photo/mark is active)
       // ---------------------------------------------------------------
       let rawSoleY;
       if (vis(lm, 29, 0.35) && vis(lm, 30, 0.35)) {
@@ -1172,15 +1209,23 @@
       }
 
       // Check if lower legs/feet are occluded by a table/desk at the bottom of the frame:
-      // In any standing human, vertex-to-hip is 47.0% of total height and visible leg length (anMid.y - hipMid.y) is ~1.48x torsoPx.
       const visibleLegPx = anMid.y - hipMid.y;
       const soleFromHips = vertexY + (hipMid.y - vertexY) / 0.470;
       const soleFromTorso = shMid.y + anatomicalLegTorsoPx + 0.08 * headNeckPx;
       const anatomicalSoleY = hasHips ? (0.55 * soleFromHips + 0.45 * soleFromTorso) : soleFromTorso;
-      const isLowerLegOccluded = hasSticky150 || visibleLegPx < 1.28 * torsoPx || (anatomicalSoleY - rawSoleY) > 0.30 * torsoPx;
-      const soleY = isLowerLegOccluded ? Math.max(rawSoleY, anatomicalSoleY) : rawSoleY;
+      const isLowerLegOccluded = visibleLegPx < 1.28 * torsoPx || (anatomicalSoleY - rawSoleY) > 0.30 * torsoPx;
 
-      if (!isLowerLegOccluded && rawSoleY >= H * 0.992) {
+      if (isLowerLegOccluded && activeCalib.method !== "wall") {
+        return fail(
+          t("Feet Blocked by Table — Upload Wall Mark or Step Back", "मेज़ से पैर ढके हैं — दीवार का निशान अपलोड करें या पीछे हटें"),
+          t("🚫 A table/object is hiding your feet! Either keep a 150 cm sticky note on the wall, or place the phone where your heels are visible.",
+            "🚫 मेज़ आपके पैरों को ढक रही है! या तो दीवार पर 150 सेमी का स्टिकी नोट लगाएँ, या फ़ोन ऐसी जगह रखें जहाँ एड़ी साफ़ दिखे।"),
+          { soleY: rawSoleY, vertexY }
+        );
+      }
+
+      const soleY = rawSoleY;
+      if (rawSoleY >= H * 0.992) {
         return fail(t("Feet cut off — Step BACK!", "पैर कट रहे हैं — पीछे हटें!"),
           t("🚫 Feet touch the bottom edge — step back until heels are inside the Green Zone.", "🚫 पैर नीचे किनारे पर हैं — पीछे हटें जब तक एड़ी हरे ज़ोन में न आ जाए।"),
           { soleY: rawSoleY, vertexY });
@@ -1203,7 +1248,6 @@
 
       // ---------------------------------------------------------------
       // SAI 2-POINT WALL STADIOMETER MODE (Rung 2, GREEN)
-      // Anchors directly to the 150 cm mark (yM) and floor (yF) so occluded feet never shrink height!
       // ---------------------------------------------------------------
       if (activeCalib.method === "wall") {
         const sy = H / (activeCalib.frameH || H);
@@ -1234,7 +1278,7 @@
       // ---------------------------------------------------------------
       // GUIDED 2.50 m FLOOR-ZONE MODE (Default Rung 4 Mode)
       // ---------------------------------------------------------------
-      if (activeCalib.method === "distance" && !isLowerLegOccluded) {
+      if (activeCalib.method === "distance") {
         if (rawSoleY > H * 0.855 || headNeckPx > H * 0.076) {
           return fail(t("📏 TOO CLOSE — Step BACK!", "📏 बहुत पास — पीछे हटें!"),
             t("🚫 BLOCKED: Athlete is TOO CLOSE! Step BACK until heels are inside the GREEN Floor Zone.",
@@ -1253,8 +1297,6 @@
         ? activeCalib.cmPerPx
         : cmPerPxOptics;
       const cm = bodyPx * effCmPerPx;
-      const markCm = Number(activeCalib?.markCm) || 150.0;
-      const deltaVsMark = cm - markCm;
 
       return {
         postureOk: true,
@@ -1265,14 +1307,10 @@
         vertexSource,
         cm,
         cmPerPx: effCmPerPx,
-        calibMethod: hasSticky150 ? "sticky150" : activeCalib.method,
+        calibMethod: activeCalib.method,
         headRoll,
-        liveMetric: hasSticky150
-          ? `📌 ${cm.toFixed(1)} cm (${deltaVsMark >= 0 ? "+" : ""}${deltaVsMark.toFixed(1)} cm vs ${markCm} cm mark)`
-          : `✅ ${t("DISTANCE OK", "दूरी सही")} · ${cm.toFixed(1)} cm (±1.5 cm)`,
-        reason: hasSticky150
-          ? `✅ ${t("Wall Reference Active", "दीवार संदर्भ सक्रिय")} (${markCm} cm) · ${t("Hold still at wall!", "दीवार के पास स्थिर रहें!")} → ${cm.toFixed(1)} cm`
-          : `✅ ${t("Distance is CORRECT — Hold still!", "दूरी सही है — स्थिर खड़े रहें!")} · ${bodyPx.toFixed(0)} px × ${effCmPerPx.toFixed(4)} cm/px`
+        liveMetric: `✅ ${t("DISTANCE OK", "दूरी सही")} · ${cm.toFixed(1)} cm (±1.5 cm)`,
+        reason: `✅ ${t("Distance is CORRECT — Hold still!", "दूरी सही है — स्थिर खड़े रहें!")} · ${bodyPx.toFixed(0)} px × ${effCmPerPx.toFixed(4)} cm/px`
       };
     }
 
