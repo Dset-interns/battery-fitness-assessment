@@ -1400,6 +1400,14 @@
       const kneeOk = kneeDeg >= 165 && !kneeUp;
       const isReaching = handLegRatio >= 0.68 && trunkDeg <= 78 && reachCm >= -18.0;
 
+      // SAI Handbook Test III Two-Hand Symmetry Check (hands must be on top of each other or side-by-side, not a one-arm reach):
+      let handAsymmetryCm = 0;
+      if (vis(lm, 15, 0.55) && vis(lm, 16, 0.55)) {
+        const wL = p(15), wR = p(16);
+        const diffProjPx = Math.abs((wL.x - wR.x) * u.x + (wL.y - wR.y) * u.y);
+        handAsymmetryCm = diffProjPx * cmPerPx;
+      }
+
       return {
         postureOk: true,
         kneeOk,
@@ -1408,6 +1416,7 @@
         maxKneeLiftRatio,
         trunkDeg,
         handLegRatio,
+        handAsymmetryCm,
         isReaching,
         reachPx,
         reachCm,
@@ -1447,12 +1456,15 @@
       // because toe visibility flickering across frames causes a false ~7 cm vertical jump when standing still!
       // Using Math.max(p(27).y, p(28).y) ensures BOTH ankles must leave the ground for footY to rise.
       const footY = Math.max(p(27).y, p(28).y);
+      const ankleMidX = 0.5 * (p(27).x + p(28).x);
       const ankleMidY = 0.5 * (p(27).y + p(28).y);
       const kneeDeg = Math.min(angleDeg(p(23), p(25), p(27)), angleDeg(p(24), p(26), p(28)));
       return {
         postureOk: true,
         shY: shMid.y,
+        hipX: hipMid.x,
         hipY: hipMid.y,
+        ankX: ankleMidX,
         footY,
         ankleMidY,
         kneeDeg,
@@ -1466,10 +1478,10 @@
     // TEST 9 — SIT-UPS (Scale-free isotropic joint angles + SAI Handbook Rules 1, 2, 3a, 3b, 3c)
     // Enforces:
     //  - Rule 1: Lying on floor (rejects standing or upright swinging without lying flat on back <= 28°)
-    //  - Rule 2: Knees MUST be bent (60°–120°) with knee apex raised above the hip-ankle floor line (rejects straight legs!)
+    //  - Rule 2: Knees MUST be bent (60°–120°) with knee apex raised above the hip-ankle floor line + No resting > 3.0s between reps
     //  - Rule 3a: Hands clasped behind neck/head
-    //  - Rule 3b: Curl torso up (>= 46°) until elbows reach knees
-    //  - Rule 3c: Return shoulder blades flat to floor (torsoDeg <= 28° and hipDeg >= 105°) before next rep counts
+    //  - Rule 3b: Curl torso up (>= 46°) until elbows reach knees WITHOUT pushing off the floor with the elbow
+    //  - Rule 3c: Return shoulder blades & elbows flat to floor (torsoDeg <= 28° and hipDeg >= 104°) before next rep counts
     function evalSitUps(lm, mask, W, H) {
       const s = sideChain(lm);
       for (const i of [s.sh, s.hip, s.kn, s.an]) {
@@ -1485,7 +1497,6 @@
       const torso = Math.max(dist2D(sh, hip), 1);
 
       // Gate 1: Reject standing upright or kneeling (when ankles are vertically far below hips)
-      const legHorizSpan = Math.abs(hip.x - an.x);
       const legVertDrop = an.y - hip.y;
       if (legVertDrop > 0.70 * (femur + tibia) || (an.y - sh.y > 1.45 * Math.max(Math.abs(sh.x - an.x), 1) && hip.y < kn.y - 0.35 * femur)) {
         return fail(
@@ -1506,7 +1517,10 @@
       const kneeApexRiseRatio = (floorLineY - kn.y) / femur;
       const kneeBentOk = kneeDeg <= 120 && kneeDeg >= 40 && kneeApexRiseRatio >= 0.12;
 
-      const elbowKnee = vis(lm, s.el, 0.35) ? dist2D(p(s.el), kn) / femur : null;
+      const hasEl = vis(lm, s.el, 0.35);
+      const elPt = hasEl ? p(s.el) : null;
+      const elbowKnee = hasEl ? dist2D(elPt, kn) / femur : null;
+      const elbowY = hasEl ? elPt.y : sh.y;
       const wristEar = (vis(lm, s.wr, 0.35) && vis(lm, s.ear, 0.35))
         ? Math.min(dist2D(p(s.wr), p(s.ear)), vis(lm, 0, 0.35) ? dist2D(p(s.wr), p(0)) : 999) / torso
         : null;
@@ -1535,6 +1549,8 @@
         isSupineFlat,
         isCurledUp,
         elbowKnee,
+        elbowY,
+        torsoPx: torso,
         wristEar,
         shX: sh.x, shY: sh.y,
         hipX: hip.x, hipY: hip.y,
@@ -1548,7 +1564,7 @@
       };
     }
 
-    // TEST 5 — STANDING BROAD JUMP (Horizontal Two-Foot Jump with Automatic Leg-Segment Scale)
+    // TEST 5 — STANDING BROAD JUMP (Horizontal Two-Foot Jump with Take-Off Toe to Nearest Landing Heel Measurement)
     function evalBroadJump(lm, mask, W, H, calib, athlete) {
       for (const i of [11, 12, 23, 24, 25, 26, 27, 28]) {
         if (!vis(lm, i, 0.40)) {
@@ -1579,6 +1595,16 @@
       const legLengthPx = Math.max(H * 0.14, 0.5 * (legL + legR));
       const kneeDeg = Math.min(angleDeg(p(23), p(25), p(27)), angleDeg(p(24), p(26), p(28)));
 
+      // Track toe and heel X coordinates for SAI Handbook Test V (take-off toe line to nearest landing heel):
+      const hasToes = vis(lm, 31, 0.35) || vis(lm, 32, 0.35);
+      const toeX = (vis(lm, 31, 0.35) && vis(lm, 32, 0.35))
+        ? 0.5 * (p(31).x + p(32).x)
+        : (vis(lm, 31, 0.35) ? p(31).x : (vis(lm, 32, 0.35) ? p(32).x : ankleMidX));
+      const hasHeels = vis(lm, 29, 0.35) || vis(lm, 30, 0.35);
+      const heelX = (vis(lm, 29, 0.35) && vis(lm, 30, 0.35))
+        ? 0.5 * (p(29).x + p(30).x)
+        : (vis(lm, 29, 0.35) ? p(29).x : (vis(lm, 30, 0.35) ? p(30).x : ankleMidX));
+
       return {
         postureOk: true,
         shX: shMid.x,
@@ -1586,6 +1612,10 @@
         hipX: hipMid.x,
         hipY: hipMid.y,
         ankX: ankleMidX,
+        toeX,
+        heelX,
+        hasToes,
+        hasHeels,
         ankleMidY,
         footY,
         ankleSpreadX,
@@ -1730,8 +1760,27 @@
               `फाउल: पहुँचते समय घुटने मुड़ गए या ज़मीन से उठ गए (${worstKnee.toFixed(0)}°, ≥165° आवश्यक)।`));
         }
 
+        // SAI Handbook Test III Two-Hand Symmetry Check (both hands must reach together, not a one-arm reach):
+        const asymVals = auditIndices.map(i => ok[i].handAsymmetryCm || 0).filter(v => v > 0);
+        if (asymVals.length >= 3 && median(asymVals) > 15.0) {
+          return rejected(test, t("FOUL — One-handed / uneven reach", "फाउल — एक हाथ आगे / असमान पहुँच"),
+            t(`SAI Rule Foul: Both hands must be placed on top of each other or side-by-side (hand offset ${median(asymVals).toFixed(1)} cm > 15 cm).`,
+              `SAI नियम उल्लंघन: दोनों हाथ एक-दूसरे के ऊपर या बराबर में होने चाहिए।`));
+        }
+
         const reachingFrames = reachingIndices.map(i => ok[i]);
         const r = reachingIndices.map(i => rAll[i]);
+        // SAI Handbook Test III Hold Check ("hold for about two seconds — no jerky bouncing"):
+        const nearPeakFrames = reachingIndices.filter(i => rAll[i] >= peakReachAll - 4.5).map(i => ok[i]);
+        const nearPeakHoldMs = nearPeakFrames.length >= 2
+          ? (nearPeakFrames[nearPeakFrames.length - 1].t - nearPeakFrames[0].t)
+          : 0;
+        if (nearPeakFrames.length < 3 || nearPeakHoldMs < 220) {
+          return rejected(test, t("FOUL — Jerky bounce (reach not held)", "फाउल — झटके से छूना (रोका नहीं गया)"),
+            t("SAI Rule Foul: Do not bounce! Reach forward smoothly and hold your maximum reach steady for 1–2 seconds.",
+              "SAI नियम उल्लंघन: झटका न दें! आगे झुककर अधिकतम पहुँच को 1–2 सेकंड तक स्थिर रखें।"));
+        }
+
         // Prefer a held plateau window (≥450 ms with spread ≤2.5 cm), fallback to 85th percentile valid reach
         let heldReach = pct(r, 0.85);
         for (let i = 0; i < reachingFrames.length; i++) {
@@ -1761,7 +1810,7 @@
           method: `${reachingFrames[0].scaleMode} · Held reach ${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes)`,
           audit: [{
             label: "Peak Held Reach",
-            detail: `${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes) · Excursion ${excursion.toFixed(1)} cm · Trunk ${minTrunkAtPeak.toFixed(0)}° · Knee ≥${minKnee.toFixed(0)}° PASS`,
+            detail: `${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes) · Excursion ${excursion.toFixed(1)} cm · Hold ${(nearPeakHoldMs / 1000).toFixed(2)}s · Knee ≥${minKnee.toFixed(0)}° PASS`,
             valid: true
           }]
         };
@@ -1774,6 +1823,7 @@
       if (test.key === "vertical_jump") {
         const footSm = medianFilter(ok.map(f => f.footY), 3);
         const hipSm = medianFilter(ok.map(f => f.hipY), 3);
+        const hipXSm = medianFilter(ok.map(f => f.hipX ?? 0), 3);
         const shSm = medianFilter(ok.map(f => f.shY), 3);
         const shFoot = median(ok.map(f => f.shToFootPx));
 
@@ -1793,6 +1843,7 @@
 
         // Find contiguous airborne intervals [sIdx .. eIdx] bounded by ground contact before AND after
         const candidates = [];
+        let horizontalRunupFoul = false;
         let sIdx = -1;
         for (let i = 0; i < n; i++) {
           const isAir = footSm[i] < (localFloor[i] - liftThrPx);
@@ -1813,24 +1864,27 @@
               // Grounded frames before takeoff and after landing:
               // Taking the 20th percentile of Y (highest upright position while grounded) automatically ignores
               // any pre-jump crouch or post-landing squat (which have larger Y) AND prevents step-back drift!
-              const preGroundHips = [], preGroundShs = [];
+              const preGroundHips = [], preGroundShs = [], preGroundHipXs = [];
               for (let k = Math.max(0, sIdx - 25); k < sIdx; k++) {
                 if (Math.abs(footSm[k] - preFloor) <= liftThrPx * 1.1) {
                   preGroundHips.push(hipSm[k]);
                   preGroundShs.push(shSm[k]);
+                  preGroundHipXs.push(hipXSm[k]);
                 }
               }
-              const postGroundHips = [], postGroundShs = [];
+              const postGroundHips = [], postGroundShs = [], postGroundHipXs = [];
               for (let k = eIdx + 1; k <= Math.min(n - 1, eIdx + 25); k++) {
                 if (Math.abs(footSm[k] - postFloor) <= liftThrPx * 1.1) {
                   postGroundHips.push(hipSm[k]);
                   postGroundShs.push(shSm[k]);
+                  postGroundHipXs.push(hipXSm[k]);
                 }
               }
 
               if (floorDiffCm <= 6.0 && preGroundHips.length >= 2 && postGroundHips.length >= 2) {
                 const standingHipY = Math.min(pct(preGroundHips, 0.25), pct(postGroundHips, 0.25));
                 const standingShY = Math.min(pct(preGroundShs, 0.25), pct(postGroundShs, 0.25));
+                const horizDriftCm = Math.abs(median(postGroundHipXs) - median(preGroundHipXs)) * cmPerPx;
 
                 // Sub-frame linear interpolation for takeoff and landing timestamps
                 const thrY = meanFloorY - liftThrPx;
@@ -1867,19 +1921,24 @@
                   const minBodyPartRiseCm = Math.min(footClearanceCm, hipRiseCm, shRiseCm);
 
                   if (minBodyPartRiseCm >= 3.5 && coMRiseCm >= 3.8 && footClearanceCm >= 3.8) {
-                    const kinematicCm = Math.min(footClearanceCm * 1.08, coMRiseCm);
-                    const boundedFlightCm = Math.min(rawFlightCm, kinematicCm * 1.12);
-                    const jumpCm = 0.65 * kinematicCm + 0.35 * boundedFlightCm;
+                    // SAI Handbook Test IV: Standing Vertical Jump must be vertical on the spot (no horizontal run-up / broad jump > 45 cm)
+                    if (horizDriftCm > 45.0) {
+                      horizontalRunupFoul = true;
+                    } else {
+                      const kinematicCm = Math.min(footClearanceCm * 1.08, coMRiseCm);
+                      const boundedFlightCm = Math.min(rawFlightCm, kinematicCm * 1.12);
+                      const jumpCm = 0.65 * kinematicCm + 0.35 * boundedFlightCm;
 
-                    candidates.push({
-                      jumpCm,
-                      kinematicCm,
-                      footClearanceCm,
-                      hipRiseCm,
-                      shRiseCm,
-                      flightSec,
-                      flightCm: rawFlightCm
-                    });
+                      candidates.push({
+                        jumpCm,
+                        kinematicCm,
+                        footClearanceCm,
+                        hipRiseCm,
+                        shRiseCm,
+                        flightSec,
+                        flightCm: rawFlightCm
+                      });
+                    }
                   }
                 }
               }
@@ -1889,6 +1948,11 @@
         }
 
         if (!candidates.length) {
+          if (horizontalRunupFoul) {
+            return rejected(test, t("FOUL — Horizontal run-up / broad jump", "फाउल — दौड़कर या आगे कूदना अमान्य है"),
+              t("SAI Rule Foul: Standing Vertical Jump must be performed straight up from a stationary two-foot stance (no horizontal run-up or broad jump).",
+                "SAI नियम उल्लंघन: एक स्थान पर स्थिर खड़े होकर सीधा ऊपर कूदें (आगे की ओर कूदना अमान्य है)।"));
+          }
           return rejected(test, t("No vertical jump detected", "कोई वर्टिकल जंप नहीं मिली"),
             t("Stand still on your spot for 1s, jump straight up with both feet, and land on the same spot.", "एक स्थान पर 1 सेकंड स्थिर खड़े रहें, दोनों पैरों से सीधा ऊपर कूदें और उसी स्थान पर उतरें।"));
         }
@@ -1909,6 +1973,11 @@
       }
 
       // ---------------- TEST 5: STANDING BROAD JUMP ----------------
+      // SAI Handbook Test V:
+      //  1. Stationary two-foot stance behind take-off line (no preliminary walk-up or run-up).
+      //  2. Two-foot takeoff and two-foot landing simultaneously.
+      //  3. Perpendicular distance measured from take-off line (toes) to nearest landing contact (rear heel).
+      //  4. Stepping or falling backward after landing reduces score to rear contact / flags foul.
       if (test.key === "broad_jump") {
         const n = ok.length;
         const refHeightCm = getAthleteRefHeightCm(athlete);
@@ -1917,23 +1986,47 @@
         const cmPerPx = (calib && calib.cmPerPx) ? calib.cmPerPx : ((0.475 * refHeightCm) / Math.max(50, medLegPx));
 
         const ankXSm = medianFilter(ok.map(f => f.ankX), 3);
+        const toeXSm = medianFilter(ok.map(f => f.toeX ?? f.ankX), 3);
+        const heelXSm = medianFilter(ok.map(f => f.heelX ?? f.ankX), 3);
         const hipXSm = medianFilter(ok.map(f => f.hipX), 3);
         const footYSm = medianFilter(ok.map(f => f.footY), 3);
         const spreadXSm = medianFilter(ok.map(f => f.ankleSpreadX || 0), 3);
         const kneeSm = medianFilter(ok.map(f => f.kneeDeg || 170), 3);
 
-        const startWin = Math.max(3, Math.min(10, Math.floor(n * 0.22)));
-        const endWin = Math.max(3, Math.min(10, Math.floor(n * 0.22)));
+        // Locate peak horizontal jump impulse [takeIdx .. landIdx]
+        let peakVelCmPerSec = 0;
+        let impulseIdx = Math.floor(n / 2);
+        const velArr = new Float32Array(n);
+        for (let i = 1; i < n; i++) {
+          const dtSec = Math.max(0.016, (ok[i].t - ok[i - 1].t) / 1000.0);
+          const v = (Math.abs(hipXSm[i] - hipXSm[i - 1]) * cmPerPx) / dtSec;
+          velArr[i] = v;
+          if (v > peakVelCmPerSec) {
+            peakVelCmPerSec = v;
+            impulseIdx = i;
+          }
+        }
 
-        const startAnkX = median(ankXSm.slice(0, startWin));
-        const endAnkX = median(ankXSm.slice(n - endWin));
-        const startHipX = median(hipXSm.slice(0, startWin));
-        const endHipX = median(hipXSm.slice(n - endWin));
+        const velThr = Math.max(35.0, peakVelCmPerSec * 0.25);
+        let takeIdx = impulseIdx;
+        while (takeIdx > 1 && velArr[takeIdx - 1] >= velThr) takeIdx--;
+        let landIdx = impulseIdx;
+        while (landIdx < n - 2 && velArr[landIdx + 1] >= velThr) landIdx++;
+
+        const preStart = Math.max(0, takeIdx - 12);
+        const preEnd = Math.max(preStart + 2, takeIdx);
+        const postStart = Math.min(n - 2, landIdx);
+        const postEnd = Math.min(n, landIdx + 12);
+
+        const startAnkX = median(ankXSm.slice(preStart, preEnd));
+        const endAnkX = median(ankXSm.slice(postStart, postEnd));
+        const startHipX = median(hipXSm.slice(preStart, preEnd));
+        const endHipX = median(hipXSm.slice(postStart, postEnd));
+        const dir = (endHipX - startHipX) >= 0 ? 1 : -1;
 
         const ankTravelCm = Math.abs(endAnkX - startAnkX) * cmPerPx;
         const hipTravelCm = Math.abs(endHipX - startHipX) * cmPerPx;
-        const maxRangeAnkCm = (pct(ankXSm, 0.95) - pct(ankXSm, 0.05)) * cmPerPx;
-        const horizDispCm = Math.max(ankTravelCm, 0.88 * maxRangeAnkCm);
+        const horizDispCm = Math.max(ankTravelCm, hipTravelCm);
 
         // 1. Reject standing in place without jumping horizontally
         if (horizDispCm < 25.0 || hipTravelCm < 20.0) {
@@ -1944,66 +2037,105 @@
           );
         }
 
-        // 2. Check for two-foot takeoff & landing vs walking/stepping foul:
-        // Find the peak horizontal velocity impulse window
-        let peakVelCmPerSec = 0;
-        let impulseIdx = Math.floor(n / 2);
-        for (let i = 1; i < n; i++) {
-          const dtSec = Math.max(0.016, (ok[i].t - ok[i - 1].t) / 1000.0);
-          const v = (Math.abs(ankXSm[i] - ankXSm[i - 1]) * cmPerPx) / dtSec;
-          if (v > peakVelCmPerSec) {
-            peakVelCmPerSec = v;
-            impulseIdx = i;
+        // 2. Check for preliminary walk-up / run-up before takeoff (SAI Handbook Rule: must start stationary behind take-off line)
+        if (preStart >= 4) {
+          const initialAnkX = median(ankXSm.slice(0, Math.min(5, preStart)));
+          const preWalkCm = (startAnkX - initialAnkX) * dir * cmPerPx;
+          if (preWalkCm > 25.0) {
+            return rejected(
+              test,
+              t(`FOUL — Preliminary walk-up before takeoff (${preWalkCm.toFixed(0)} cm)`, "फाउल — कूदने से पहले आगे चलना अमान्य है"),
+              t("SAI Rule Foul: Stand stationary behind the take-off line before jumping (no walk-up or run-up permitted).",
+                "SAI नियम उल्लंघन: कूदने से पहले टेक-ऑफ लाइन के पीछे स्थिर खड़े रहें (चलकर या दौड़कर कूदना अमान्य है)।")
+            );
           }
         }
 
+        // 3. Check for two-foot takeoff & two-foot landing vs walking/stepping foul
         const minKnee = Math.min(...kneeSm);
-        const startSpreadCm = median(spreadXSm.slice(0, startWin)) * cmPerPx;
-        const endSpreadCm = median(spreadXSm.slice(n - endWin)) * cmPerPx;
-        const maxSpreadCm = pct(spreadXSm, 0.90) * cmPerPx;
-        const baselineFootY = Math.max(median(footYSm.slice(0, startWin)), median(footYSm.slice(n - endWin)));
-        const minFootY = Math.min(...footYSm);
+        const startSpreadCm = median(spreadXSm.slice(preStart, preEnd)) * cmPerPx;
+        const endSpreadCm = median(spreadXSm.slice(postStart, postEnd)) * cmPerPx;
+        const maxSpreadCm = pct(spreadXSm.slice(takeIdx, landIdx + 1), 0.90) * cmPerPx;
+        const baselineFootY = Math.max(median(footYSm.slice(preStart, preEnd)), median(footYSm.slice(postStart, postEnd)));
+        const minFootY = Math.min(...footYSm.slice(Math.max(0, takeIdx - 2), Math.min(n, landIdx + 3)));
         const verticalClearanceCm = Math.max(0, (baselineFootY - minFootY) * cmPerPx);
 
-        // Walking foul check: if ankles separate widely (> 38 cm) without simultaneous vertical lift (< 2.0 cm) or knee countermovement
-        if ((maxSpreadCm > 38.0 && verticalClearanceCm < 2.2) || endSpreadCm > 28.0 || peakVelCmPerSec < 55.0) {
+        if ((maxSpreadCm > 38.0 && verticalClearanceCm < 2.2) || startSpreadCm > 26.0 || endSpreadCm > 28.0 || peakVelCmPerSec < 55.0) {
           return rejected(
             test,
             t("FOUL — Walking / Single-foot step detected", "फाउल — चलना या एक पैर से कूदना अमान्य है"),
-            t(`SAI Rule Foul: You must take off and land with BOTH feet together (foot separation ${maxSpreadCm.toFixed(0)} cm, vertical lift ${verticalClearanceCm.toFixed(1)} cm).`,
+            t(`SAI Rule Foul: You must take off and land with BOTH feet together (foot separation ${Math.max(startSpreadCm, endSpreadCm, maxSpreadCm).toFixed(0)} cm, vertical lift ${verticalClearanceCm.toFixed(1)} cm).`,
               `SAI नियम उल्लंघन: दोनों पैरों से एक साथ कूदें और दोनों पैरों पर उतरें।`)
           );
         }
 
-        // True horizontal broad jump distance (blending ankle and hip horizontal travel for stability):
-        const jumpCm = Math.max(25.0, Math.min(320.0, 0.65 * horizDispCm + 0.35 * hipTravelCm));
+        // 4. Check for stepping or falling backward after landing (SAI Handbook Rule)
+        if (postEnd < n - 2) {
+          const afterLandRearX = dir > 0
+            ? Math.min(...ankXSm.slice(postStart))
+            : Math.max(...ankXSm.slice(postStart));
+          const stepBackCm = (endAnkX - afterLandRearX) * dir * cmPerPx;
+          if (stepBackCm > 15.0) {
+            return rejected(
+              test,
+              t(`FOUL — Stepped/fell backward after landing (-${stepBackCm.toFixed(0)} cm)`, "फाउल — उतरने के बाद पीछे कदम रखना/गिरना"),
+              t("SAI Rule Foul: Do not fall or step backward after landing! Hold your two-foot landing steady.",
+                "SAI नियम उल्लंघन: उतरने के बाद पीछे न हटें! दोनों पैरों पर संतुलन बनाए रखें।")
+            );
+          }
+        }
+
+        // 5. SAI Handbook Test V Distance: Take-off Toe Line to Nearest Landing Heel
+        const startToeX = median(toeXSm.slice(preStart, preEnd));
+        const landHeelX = median(heelXSm.slice(postStart, postEnd));
+        const rawToeToHeelCm = Math.max(0, (landHeelX - startToeX) * dir * cmPerPx);
+        const centerTravelCm = 0.60 * ankTravelCm + 0.40 * hipTravelCm;
+        // Blend direct toe-to-heel measurement with center-of-mass travel (accounting for ~10 cm ankle-to-toe offset when toe landmarks jitter)
+        const jumpCm = (rawToeToHeelCm >= 0.65 * centerTravelCm && rawToeToHeelCm <= 1.05 * centerTravelCm)
+          ? (0.55 * rawToeToHeelCm + 0.45 * centerTravelCm)
+          : centerTravelCm;
 
         return {
           valid: true,
           value: Number(jumpCm.toFixed(1)),
           unit: "cm",
           confidence: calib ? "GREEN" : "AMBER",
-          method: `AI Horizontal Broad Jump · ${jumpCm.toFixed(1)} cm · Two-foot lift +${verticalClearanceCm.toFixed(1)} cm · Knee ${minKnee.toFixed(0)}°`,
+          method: `AI Broad Jump (Toe-to-Heel) · ${jumpCm.toFixed(1)} cm · Two-foot lift +${verticalClearanceCm.toFixed(1)} cm · Knee ${minKnee.toFixed(0)}°`,
           audit: [{
             label: "Standing Broad Jump",
-            detail: `✅ Valid Two-Foot Jump: ${jumpCm.toFixed(1)} cm (Ankles ΔX ${horizDispCm.toFixed(1)} cm · Hips ΔX ${hipTravelCm.toFixed(1)} cm · Lift +${verticalClearanceCm.toFixed(1)} cm · Landing spread ${endSpreadCm.toFixed(1)} cm ✓)`,
+            detail: `✅ Valid Two-Foot Jump: ${jumpCm.toFixed(1)} cm (Toe→Heel ${rawToeToHeelCm.toFixed(1)} cm · CoM ΔX ${centerTravelCm.toFixed(1)} cm · Lift +${verticalClearanceCm.toFixed(1)} cm · Landing spread ${endSpreadCm.toFixed(1)} cm ✓)`,
             valid: true
           }]
         };
       }
 
       // ---------------- TEST 9: SIT-UPS ----------------
+      // Enforces ALL SAI Handbook Test IX Rules:
+      //  - Window cutoff: 30s for Under-12 (age < 12), 45s for 12+ (age >= 12)
+      //  - Rule 1: Supine on floor with knees bent (<= 120°), rejects standing or upright swinging
+      //  - Rule 2: No resting between sit-ups (> 3.0s gap at bottom flags Rule 2 foul)
+      //  - Rule 3a: Fingers clasped behind the neck (wristEar <= 0.85)
+      //  - Rule 3b: Elbows brought forward to touch knees WITHOUT pushing off the floor with the elbow during rise
+      //  - Rule 3c: Return to starting position with back & elbows flat on the surface before next rep
       if (test.key === "sit_ups") {
+        const athleteAge = Number(athlete?.age) || 16;
+        const windowSec = athleteAge < 12 ? 30 : 45;
+        const t0 = ok[0].t;
+        const windowCutMs = t0 + windowSec * 1000.0;
+
         const hipSm = medianFilter(ok.map(f => f.hipDeg), 3);
         const torsoSm = medianFilter(ok.map(f => f.torsoDeg ?? 45), 3);
         const kneeSm = medianFilter(ok.map(f => f.kneeDeg ?? 90), 3);
+        const elYSm = medianFilter(ok.map(f => f.elbowY ?? f.shY ?? 0), 3);
+        const medTorsoPx = Math.max(40, median(ok.map(f => f.torsoPx || 120)));
+        const floorElbowY = pct(elYSm, 0.88);
 
         const minHip = pct(hipSm, 0.05), maxHip = pct(hipSm, 0.95), hipRange = maxHip - minHip;
         const minTorso = pct(torsoSm, 0.08), maxTorso = pct(torsoSm, 0.92), torsoRange = maxTorso - minTorso;
         const medKnee = median(kneeSm);
         const straightKneeRatio = ok.filter((f, idx) => kneeSm[idx] > 120 || f.kneeBentOk === false).length / ok.length;
 
-        // 1. Check Rule 2: Straight knees across the attempt
+        // 1. Check Bent Knees across the attempt
         if (medKnee > 120 || straightKneeRatio > 0.65) {
           return {
             valid: false, value: null, unit: "reps", confidence: "RED",
@@ -2045,25 +2177,46 @@
 
         // State machine:
         // WAIT_SUPINE -> must first lie genuinely flat on back (torsoSm <= 28° AND hipSm >= 104°) to enter DOWN
-        // DOWN        -> must curl torso up off the floor (torsoSm >= 46° AND hipSm <= 90°) to enter UP
-        // UP          -> must return shoulder blades flat to the floor (torsoSm <= 28° AND hipSm >= 104°) to complete rep
+        // DOWN        -> begins rising when torsoSm > 32° or hipSm < 100°; reaches UP when torsoSm >= 46° AND hipSm <= 90°
+        // UP          -> completes rep when returning shoulder blades & elbows flat to floor (torsoSm <= 28° AND hipSm >= 104°)
         let phase = "WAIT_SUPINE";
         let down = [], up = [];
+        let prevRepEndTimeMs = null;
+        let riseStartTimeMs = null;
+        let riseMinElbowY = Infinity;
+        let elbowPushoffDetected = false;
         const audit = [];
         let validReps = 0;
 
         for (let i = 0; i < ok.length; i++) {
-          const hAng = hipSm[i], tAng = torsoSm[i], kAng = kneeSm[i];
-          const f = { ...ok[i], hipSm: hAng, torsoSm: tAng, kneeSm: kAng };
+          if (ok[i].t > windowCutMs) break; // Handbook rule: count stops at whistle (30s U-12 / 45s 12+)
+
+          const hAng = hipSm[i], tAng = torsoSm[i], kAng = kneeSm[i], eY = elYSm[i];
+          const f = { ...ok[i], hipSm: hAng, torsoSm: tAng, kneeSm: kAng, elYSm: eY };
 
           if (phase === "WAIT_SUPINE") {
             if (tAng <= 28 && hAng >= 104) {
               phase = "DOWN";
               down = [f];
+              riseStartTimeMs = null;
+              riseMinElbowY = eY;
+              elbowPushoffDetected = false;
             }
           } else if (phase === "DOWN") {
             down.push(f);
+            if (tAng > 32 && riseStartTimeMs === null) {
+              riseStartTimeMs = f.t;
+              riseMinElbowY = eY;
+            }
+            if (riseStartTimeMs !== null) {
+              riseMinElbowY = Math.min(riseMinElbowY, eY);
+              // Rule 3b: elbow driving downward toward floor (Y increasing) while torso rises
+              if ((eY - riseMinElbowY) > 0.25 * medTorsoPx) {
+                elbowPushoffDetected = true;
+              }
+            }
             if (tAng >= 46 && hAng <= 90) {
+              if (riseStartTimeMs === null) riseStartTimeMs = f.t;
               phase = "UP";
               up = [f];
             }
@@ -2080,10 +2233,25 @@
               const minHipInUp = Math.min(...up.map(x => x.hipSm));
               const maxTorsoInUp = Math.max(...up.map(x => x.torsoSm));
               const minTorsoInDown = Math.min(...down.map(x => x.torsoSm));
+              const restSec = (prevRepEndTimeMs !== null && riseStartTimeMs !== null)
+                ? Math.max(0, (riseStartTimeMs - prevRepEndTimeMs) / 1000.0)
+                : 0;
 
               const fouls = [];
+              // Rule 2: No resting between sit-ups (> 3.0s) & knees must stay bent (<= 120°)
+              if (restSec > 3.0) {
+                fouls.push(`Rule 2: rested ${restSec.toFixed(1)}s between sit-ups (>3.0s max)`);
+              }
               if (maxKneeInRep > 120 || straightFramesInRep > repFrames.length * 0.30) {
                 fouls.push(`Rule 2: knees straight (${maxKneeInRep.toFixed(0)}° > 120°)`);
+              }
+              // Rule 3a: Fingers clasped behind neck
+              if (we.length && median(we) > 0.85) {
+                fouls.push("Rule 3a: hands unclasped from neck/head");
+              }
+              // Rule 3b: Elbows forward to touch knees WITHOUT pushing off floor with elbow
+              if (elbowPushoffDetected) {
+                fouls.push("Rule 3b: pushed off the floor with elbow during rise");
               }
               if (maxTorsoInUp < 46 || (maxTorsoInUp - minTorsoInDown) < 24) {
                 fouls.push(`Rule 3b: partial curl (torso ${maxTorsoInUp.toFixed(0)}° < 46°)`);
@@ -2091,8 +2259,9 @@
               if (ek.length && Math.min(...ek) > 0.68) {
                 fouls.push("Rule 3b: elbows did not reach knees");
               }
-              if (we.length && median(we) > 0.85) {
-                fouls.push("Rule 3a: hands unclasped from neck/head");
+              // Rule 3c: Return elbows & back flat to surface
+              if (eY < floorElbowY - 0.55 * medTorsoPx) {
+                fouls.push("Rule 3c: elbows did not return flat to the floor");
               }
 
               const repOk = fouls.length === 0;
@@ -2104,8 +2273,12 @@
                   : `🚫 FOUL — ${fouls.join(" · ")}`,
                 valid: repOk
               });
+              prevRepEndTimeMs = f.t;
               phase = "DOWN";
               down = [f];
+              riseStartTimeMs = null;
+              riseMinElbowY = eY;
+              elbowPushoffDetected = false;
             }
           }
         }
@@ -2139,7 +2312,7 @@
           value: validReps,
           unit: "reps",
           confidence: "GREEN",
-          method: `AI State Machine · ${validReps}/${audit.length} valid reps (Knee ${medKnee.toFixed(0)}° ✓)`,
+          method: `AI State Machine (${windowSec}s window) · ${validReps}/${audit.length} valid reps · Knee ${medKnee.toFixed(0)}° ✓`,
           audit
         };
       }
