@@ -5,7 +5,7 @@ import Foundation
 public enum Measurement: String, Codable, CaseIterable, Sendable {
     /// Built, working, verified on device (4 tests: Height, Sit & Reach, Vertical Jump, Sit-Ups).
     case ai = "AI"
-    /// Method designed and documented; planned for next phase (3 tests: Broad Jump, 30m Sprint, 6x10m Shuttle).
+    /// Method designed and documented; planned for next phase (3 tests: Broad Jump, 30m Sprint, 4x10m Shuttle).
     case aiPlanned = "AI_PLANNED"
     /// Reads a device display rather than measuring the quantity.
     case ocrAssist = "OCR_ASSIST"
@@ -68,7 +68,7 @@ public enum BatteryTest: String, Codable, CaseIterable, Identifiable, Sendable {
         case .broadJump: return "Standing Broad Jump"
         case .medicineBallThrow: return "Medicine Ball Throw"
         case .sprint30m: return "30m Standing Start"
-        case .shuttleRun: return "6 × 10m Shuttle Run"
+        case .shuttleRun: return "4 × 10m Shuttle Run"
         case .sitUps: return "Sit-Ups"
         case .enduranceRun: return "800m / 1.6km Run"
         }
@@ -83,7 +83,7 @@ public enum BatteryTest: String, Codable, CaseIterable, Identifiable, Sendable {
         case .broadJump: return "स्टैंडिंग ब्रॉड जंप"
         case .medicineBallThrow: return "मेडिसिन बॉल थ्रो"
         case .sprint30m: return "30 मीटर स्प्रिंट"
-        case .shuttleRun: return "6 × 10 मीटर शटल रन"
+        case .shuttleRun: return "4 × 10 मीटर शटल रन"
         case .sitUps: return "सिट-अप्स (Sit-Ups)"
         case .enduranceRun: return "800 मी / 1.6 किमी दौड़"
         }
@@ -173,9 +173,9 @@ public enum BatteryTest: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var measurement: Measurement {
         switch self {
-        case .height, .sitAndReach, .verticalJump, .sitUps:
+        case .height, .sitAndReach, .verticalJump, .broadJump, .sitUps:
             return .ai
-        case .broadJump, .sprint30m, .shuttleRun:
+        case .sprint30m, .shuttleRun:
             return .aiPlanned
         case .weight, .medicineBallThrow, .enduranceRun:
             return .manual
@@ -198,12 +198,12 @@ public enum BatteryTest: String, Codable, CaseIterable, Identifiable, Sendable {
         return age < 12 ? 800 : 1600
     }
 
-    /// Tests measured with on-device AI in this build (4 tests).
+    /// Tests measured with on-device AI in this build (5 tests).
     public static var aiMeasured: [BatteryTest] {
         allCases.filter { $0.measurement == .ai }
     }
 
-    /// Tests whose AI method is designed and planned (3 tests).
+    /// Tests whose AI method is designed and planned (2 tests).
     public static var aiPlanned: [BatteryTest] {
         allCases.filter { $0.measurement == .aiPlanned }
     }
