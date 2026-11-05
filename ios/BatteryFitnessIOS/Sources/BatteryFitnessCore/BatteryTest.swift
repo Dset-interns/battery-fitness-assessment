@@ -156,8 +156,8 @@ public enum BatteryTest: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var attempts: Int {
         switch self {
-        case .height, .weight, .sitUps, .enduranceRun: return 1
-        case .medicineBallThrow, .sprint30m, .shuttleRun: return 2
+        case .height, .weight, .sitUps, .enduranceRun, .shuttleRun: return 1 // Shuttle: one attempt (SAI ruling C22)
+        case .medicineBallThrow, .sprint30m: return 2
         case .sitAndReach, .verticalJump, .broadJump: return 3
         }
     }

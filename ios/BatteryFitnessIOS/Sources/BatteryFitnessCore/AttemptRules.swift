@@ -1,7 +1,7 @@
 import Foundation
 
 // SAI Handbook attempt rules, shared by every test. Mirrors the browser app (ATTEMPT_RULES in index.html):
-//   - Height 1, Weight 1, Sit-Ups 1, Endurance Run 1; Medicine Ball 2, 30 m 2, Shuttle 2; Sit & Reach, Jumps 3.
+//   - Height 1, Weight 1, Sit-Ups 1, Endurance Run 1, Shuttle 1 (C22); Medicine Ball 2, 30 m 2; Sit & Reach, Jumps 3.
 //   - A rule foul uses up an attempt. A capture failure ("not in frame", "no jump seen") is a free retake.
 //   - The score of record is the best attempt (highest for cm / reps, lowest for seconds); Height keeps the last valid one.
 //   - The assessor may grant ONE extra attempt where the Handbook allows it (Medicine Ball, Sit-Ups).
