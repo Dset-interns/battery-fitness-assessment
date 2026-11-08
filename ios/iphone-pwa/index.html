@@ -509,10 +509,10 @@ body.cam .rotate{display:none!important}
       {
         number: 6, key: "medicine_ball_throw",
         nameEn: "Medicine Ball Throw", nameHi: "मेडिसिन बॉल थ्रो",
-        minSec: 15, maxSec: 30, minMB: 3, maxMB: 15,
-        attempts: 3, unit: "cm", mode: "Manual", isPhoto: false,
-        guideEn: "Backward overhead throw. Stand with your back to the throw and heels at the line. Swing the ball down between the legs, then throw back over the head with a backward arch. Ball: 2 kg for males, 1 kg for females. Distance is measured from the line to where the ball first lands, in metres and centimetres. Three attempts, best counts.",
-        guideHi: "पीछे की ओर सिर के ऊपर से थ्रो। पीठ थ्रो की दिशा में, एड़ियाँ रेखा पर। गेंद को पैरों के बीच से झुलाकर पीछे की ओर फेंकें। गेंद: पुरुष 2 kg, महिला 1 kg। दूरी रेखा से गेंद के पहली बार गिरने तक, मीटर और सेंटीमीटर में। तीन प्रयास, सर्वश्रेष्ठ गिना जाएगा।"
+        minSec: 5, maxSec: 30, minMB: 3, maxMB: 15,
+        attempts: 3, unit: "cm", mode: "AI", isPhoto: false,
+        guideEn: "Backward overhead throw. Mount the phone on a tripod to the side of the throwing lane, in landscape and far enough back to see the line, the whole flight and the landing. Lay the tape along the lane from the throw line and put a marker on it at a known distance. Tap the throw line and the marker on the ground in the video, and choose the marker distance. The athlete stands with the heels at the line and the back to the throw. Ball: 2 kg for males, 1 kg for females. The distance is read from the line to where the ball first lands, in metres and centimetres. Three attempts, best counts. The ball should land along the tape.",
+        guideHi: "पीछे की ओर सिर के ऊपर से थ्रो। फ़ोन को थ्रो लेन के किनारे ट्राइपॉड पर लैंडस्केप में लगाएँ, इतनी दूर कि रेखा, पूरी उड़ान और गिरने की जगह दिखे। थ्रो रेखा से लेन में टेप बिछाएँ और उस पर किसी ज्ञात दूरी पर मार्कर रखें। वीडियो में ज़मीन पर थ्रो रेखा और मार्कर पर टैप करें और मार्कर की दूरी चुनें। एथलीट की एड़ियाँ रेखा पर, पीठ थ्रो की दिशा में। गेंद: पुरुष 2 kg, महिला 1 kg। दूरी रेखा से गेंद के पहली बार गिरने की जगह तक, मीटर और सेंटीमीटर में। तीन प्रयास, सर्वश्रेष्ठ गिना जाएगा। गेंद टेप के साथ-साथ गिरनी चाहिए।"
       },
       {
         number: 7, key: "sprint_30m",
@@ -2082,6 +2082,26 @@ body.cam .rotate{display:none!important}
         };
       }
 
+      // ---------------- TEST 6: MEDICINE BALL THROW (landing point from video) ----------------
+      if (test.key === "medicine_ball_throw") {
+        const an = ballAnalyze(ok, calib && calib.trackLines);
+        const R = (m, d) => rejected(test, m, d);
+        if (an.err === "lines") return R(t("Throw line and marker not set", "थ्रो रेखा और मार्कर तय नहीं"), t("Tap the throw line and the marker on the ground in the video, and choose the marker distance, before recording.", "रिकॉर्डिंग से पहले वीडियो में ज़मीन पर थ्रो रेखा और मार्कर पर टैप करें और मार्कर की दूरी चुनें।"));
+        if (an.err === "short") return R(t("Recording too short", "रिकॉर्डिंग बहुत छोटी"), t("Keep recording until the ball has landed.", "गेंद के गिरने तक रिकॉर्डिंग जारी रखें।"));
+        if (an.err === "shake") return R(t("Phone or lighting changed", "फ़ोन या रोशनी बदली"), t("The scene changed before the throw. Fix the phone on a tripod, keep the lane clear and record again.", "थ्रो से पहले दृश्य बदल गया। फ़ोन ट्राइपॉड पर लगाएँ, लेन खाली रखें और फिर रिकॉर्ड करें।"));
+        if (an.err === "noball") return R(t("Ball not seen in flight", "उड़ान में गेंद नहीं दिखी"), t("The ball was not tracked beyond 1.2 m from the line. Make sure the camera sees the whole flight and landing, the ball stands out from the ground and sky, and nobody else moves in the lane.", "गेंद रेखा से 1.2 मी के आगे ट्रैक नहीं हुई। कैमरे को पूरी उड़ान और गिरने की जगह दिखे, गेंद ज़मीन और आसमान से अलग दिखे, और लेन में कोई और न हिले।"));
+        if (an.err === "noland") return R(t("Landing not seen", "गिरने की जगह नहीं दिखी"), t("The ball was followed in the air but its first contact with the ground was not seen. Keep the landing area in view and make sure the marker and line are tapped on the ground.", "गेंद हवा में दिखी पर ज़मीन से पहला संपर्क नहीं दिखा। गिरने की जगह फ्रेम में रखें और रेखा तथा मार्कर ज़मीन पर टैप किए हों।"));
+        if (an.err === "range") return R(t("Distance not realistic", "दूरी यथार्थ नहीं"), t(`The distance read was ${an.m.toFixed(2)} m. Check the marker distance and that both taps are on the ground along the lane.`, `पढ़ी गई दूरी ${an.m.toFixed(2)} m थी। मार्कर की दूरी जाँचें और कि दोनों टैप लेन में ज़मीन पर हैं।`));
+        return {
+          valid: true,
+          value: Math.round(an.m * 100),
+          unit: "cm",
+          confidence: an.amber ? "AMBER" : "GREEN",
+          method: `AI ball tracking · first ground contact ${an.m.toFixed(2)} m from the line · scale from the marker at ${(calib.trackLines.refM)} m`,
+          audit: [{ label: "Landing", detail: `${an.m.toFixed(2)} m · ${an.airPoints} tracked points in flight${an.beyond ? " · beyond the marker, scale extended" : ""}${an.sparse ? " · sparse tracking near the landing" : ""}`, valid: true }]
+        };
+      }
+
       // ---------------- TEST 10: 800 M ENDURANCE RUN (video lap timing) ----------------
       if (test.key === "endurance_run") {
         const an = enduranceAnalyze(ok, calib && calib.trackLines);
@@ -2715,6 +2735,10 @@ body.cam .rotate{display:none!important}
       sprintM: ["Timed from video: first movement to the torso at the finish line", "वीडियो से समय: पहली हरकत से धड़ के फ़िनिश रेखा तक"],
       sprintA: ["Timed from video with reduced confidence (frame rate or tracking)", "वीडियो से समय, कम विश्वसनीयता (फ़्रेम रेट या ट्रैकिंग)"],
       limSprint: ["Resolution is one video frame (about 33 ms at 30 fps). The start is the first visible movement and can be picked up one or two frames late, so a time can read slightly short.", "रिज़ॉल्यूशन एक वीडियो फ़्रेम (30 fps पर लगभग 33 ms) है। शुरुआत पहली दिखने वाली हरकत है और एक-दो फ़्रेम देर से पकड़ी जा सकती है, इसलिए समय थोड़ा कम दिख सकता है।"],
+      ballM: ["Distance read from video: where the ball first landed, against a marker of known distance", "वीडियो से दूरी: गेंद पहली बार जहाँ गिरी, ज्ञात दूरी के मार्कर के सापेक्ष"],
+      ballA: ["Distance read from video with reduced confidence (landing beyond the marker or sparse tracking)", "वीडियो से दूरी, कम विश्वसनीयता (मार्कर से आगे गिरना या कम ट्रैकिंग)"],
+      limBall: ["The distance is read in the image plane, so it is right only if the ball lands along the tape, level with the marker. A landing beyond the marker uses an extended scale.", "दूरी चित्र के तल में पढ़ी जाती है, इसलिए तभी सही है जब गेंद टेप के साथ, मार्कर के बराबर गिरे। मार्कर से आगे गिरने पर बढ़ाया हुआ स्केल उपयोग होता है।"],
+      retBall: ["Place the marker near or beyond the landing point, keep the landing in clear view, and throw again", "मार्कर को गिरने के स्थान के पास या आगे रखें, गिरने की जगह साफ़ दिखे, और फिर फेंकें"],
       runM: ["Timed from video: first movement to the torso crossing the line after the last lap", "वीडियो से समय: पहली हरकत से अंतिम चक्कर के बाद धड़ के रेखा पार करने तक"],
       runA: ["Timed from video with reduced confidence (uneven laps, frame rate or tracking)", "वीडियो से समय, कम विश्वसनीयता (असमान चक्कर, फ़्रेम रेट या ट्रैकिंग)"],
       limRun: ["Laps are counted from crossings of the line, so the distance is right only if the lap length was set correctly and the course was measured. Resolution is one video frame.", "चक्कर रेखा पार करने से गिने जाते हैं, इसलिए दूरी तभी सही है जब चक्कर की लंबाई सही रखी गई और कोर्स नापा गया। रिज़ॉल्यूशन एक वीडियो फ़्रेम है।"],
@@ -2755,6 +2779,7 @@ body.cam .rotate{display:none!important}
       else if (te.id === "sprint") reason = band === "G" ? X("sprintM") : X("sprintA");
       else if (te.id === "shuttle") reason = X("shuttleA");
       else if (te.id === "run") reason = band === "G" ? X("runM") : X("runA");
+      else if (te.id === "mball") reason = band === "G" ? X("ballM") : X("ballA");
       else if (te.id === "situps") reason = X("reps");
       else reason = band === "G" ? X("measured") : X("estimate");
       if (te.id === "height" && !manual) limit = X("limHair");
@@ -2762,7 +2787,9 @@ body.cam .rotate{display:none!important}
       if (te.id === "sprint") limit = X("limSprint");
       if (te.id === "shuttle") limit = X("limShuttle");
       if (te.id === "run" && !manual) limit = X("limRun");
+      if (te.id === "mball" && !manual) limit = X("limBall");
       if (te.id === "sprint" && band === "A") retest = X("retSprint");
+      else if (te.id === "mball" && band === "A" && !manual) retest = X("retBall");
       else if (band === "A" && te.m === "ai" && !manual && te.id !== "vjump" && te.id !== "situps" && te.id !== "shuttle" && te.id !== "run") {
         retest = te.id === "height" ? t("Lock a wall reference photo, then re-measure for a measured result", "दीवार संदर्भ फोटो लॉक करें, फिर मापें")
           : t("Place a physical reference (floor tape or box scale) in frame, then re-test for a measured result", "फ़्रेम में भौतिक संदर्भ (फ़र्श टेप / बॉक्स स्केल) रखकर दोबारा टेस्ट करें");
@@ -2816,8 +2843,8 @@ body.cam .rotate{display:none!important}
     // depend on a scale: the two lines the coach taps define the course.
     const SPR_W = 256;
     let _sprCv = null;
-    function sprGray(video) {
-      const W = video.videoWidth, H = video.videoHeight, w = SPR_W, h = Math.max(8, Math.round(w * H / W));
+    function sprGray(video, wd) {
+      const W = video.videoWidth || video.width, H = video.videoHeight || video.height, w = wd || SPR_W, h = Math.max(8, Math.round(w * H / W));
       if (!_sprCv || _sprCv.width !== w || _sprCv.height !== h) { _sprCv = document.createElement("canvas"); _sprCv.width = w; _sprCv.height = h; _sprCv._c = _sprCv.getContext("2d", { willReadFrequently: true }); }
       _sprCv._c.drawImage(video, 0, 0, w, h);
       const d = _sprCv._c.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h);
@@ -2934,6 +2961,99 @@ body.cam .rotate{display:none!important}
       const uneven = Math.max(...lapTimes) > 1.8 * Math.min(...lapTimes) || (laps > 1 && Math.min(...lapTimes.slice(1)) < 20);
       let peak = 0; for (let i = i0; i < Math.min(fr.length, i0 + 30); i++) peak = Math.max(peak, fr[i].e);
       return { startT, finishT, time: (finishT - startT) / 1000, frameMs, shake, ratio: peak / hi, splits: marks, lapTimes, uneven, seen: laps, laps, lapM };
+    }
+    // ---- Medicine ball throw: where the ball first lands, read against a marker of known distance -----------------
+    // A fixed phone sees the throw line and the lane. The coach taps the throw line and a marker on the ground; the
+    // distance between them gives the scale along the lane. A background model (frozen when recording starts) makes the
+    // flying ball the only small moving object beyond the thrower's zone; its path ends where it first reaches the
+    // ground, and that point's distance from the line is the throw. All coordinates are fractions of the frame width.
+    function ballGeom(L, w) {
+      const dir = Math.sign(L.refX - L.lineX) || 1, pxm = Math.abs(L.refX - L.lineX) * w / L.refM;   // analysis pixels per metre
+      const A = Math.PI / 4 * (0.22 * pxm) ** 2, zone = L.lineX + dir * 1.2 * pxm / w;                 // thrower's zone: 1.2 m past the line
+      return { dir, x0: Math.max(0, Math.min(w, Math.round(zone * w))), aMin: Math.max(4, 0.2 * A), aMax: Math.max(40, 4 * A), thr: 28 };
+    }
+    function ballBlobs(cur, bg, geo) {
+      const { g, w, h } = cur, xs = geo.dir > 0 ? geo.x0 : 0, xe = geo.dir > 0 ? w : geo.x0, rw = xe - xs;
+      if (rw < 8) return { blobs: [], fg: 0 };
+      const lab = new Int32Array(rw * h), par = [0]; let next = 1, fgN = 0;
+      const find = a => { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };
+      for (let y = 0; y < h; y++) {
+        const row = y * w + xs, lr = y * rw;
+        for (let x = 0; x < rw; x++) {
+          const d = g[row + x] - bg[row + x];
+          if (d <= geo.thr && -d <= geo.thr) continue;
+          fgN++;
+          const left = x ? lab[lr + x - 1] : 0, up = y ? lab[lr - rw + x] : 0;
+          let id;
+          if (!left && !up) { id = next; par.push(next); next++; }
+          else if (left && up) { id = left < up ? left : up; const a = find(left), b = find(up); if (a !== b) par[a > b ? a : b] = a < b ? a : b; }
+          else id = left || up;
+          lab[lr + x] = id;
+        }
+      }
+      const fg = fgN / (rw * h);
+      if (fg > 0.3) return { blobs: [], fg };
+      const st = new Map();
+      for (let y = 0; y < h; y++) for (let x = 0; x < rw; x++) {
+        const l = lab[y * rw + x]; if (!l) continue;
+        const r = find(l); let q = st.get(r);
+        if (!q) { q = { a: 0, sx: 0, sy: 0, x0: x, x1: x, y0: y, y1: y }; st.set(r, q); }
+        q.a++; q.sx += x; q.sy += y; if (x < q.x0) q.x0 = x; if (x > q.x1) q.x1 = x; if (y < q.y0) q.y0 = y; if (y > q.y1) q.y1 = y;
+      }
+      const blobs = [];
+      st.forEach(q => {
+        const bw = q.x1 - q.x0 + 1, bh = q.y1 - q.y0 + 1;
+        if (q.a < geo.aMin || q.a > geo.aMax) return;
+        const asp = bw / bh; if (asp < 0.35 || asp > 2.8 || q.a / (bw * bh) < 0.35) return;
+        blobs.push({ x: (xs + q.sx / q.a) / w, y: (q.sy / q.a) / w, a: q.a, x0: (xs + q.x0) / w, x1: (xs + q.x1 + 1) / w, y0: q.y0 / w, y1: (q.y1 + 1) / w });
+      });
+      blobs.sort((p, q2) => q2.a - p.a);
+      return { blobs: blobs.slice(0, 6), fg };
+    }
+    // fr: [{t (ms), blobs, fg}], L: {lineX, lineY, refX, refY, refM}
+    function ballAnalyze(fr, L) {
+      if (!L || L.lineX == null || L.refX == null || !(L.refM > 0)) return { err: "lines" };
+      const span = L.refX - L.lineX, dir = Math.sign(span);
+      if (!dir || Math.abs(span) < 0.15) return { err: "lines" };
+      if (fr.length < 10) return { err: "short" };
+      const dts = []; for (let i = 1; i < fr.length; i++) if (fr[i].t > fr[i - 1].t) dts.push(fr[i].t - fr[i - 1].t);
+      const frameMs = median(dts) || 33.3;
+      if (median(fr.slice(0, 8).map(f => f.fg || 0)) > 0.15) return { err: "shake", frameMs };
+      const pxm = Math.abs(span) / L.refM, diam = 0.22 * pxm;                       // frame widths per metre, ball diameter
+      const gate = 20 * (frameMs / 1000) * pxm + 2 * diam;
+      const tracks = [];
+      fr.forEach((f, i) => {
+        for (const b of (f.blobs || [])) {
+          let best = null, bd = 1e9;
+          for (const tr of tracks) {
+            const last = tr[tr.length - 1]; if (i - last.i > 4 || last.i === i) continue;
+            const gap = i - last.i, p2 = tr.length > 1 ? tr[tr.length - 2] : null;
+            const vx = p2 ? (last.x - p2.x) / (last.i - p2.i) : 0, vy = p2 ? (last.y - p2.y) / (last.i - p2.i) : 0;
+            const d = Math.hypot(b.x - (last.x + vx * gap), b.y - (last.y + vy * gap));
+            if (d < gate && d < bd && (b.x - last.x) * dir > -0.5 * diam) { best = tr; bd = d; }
+          }
+          const pt = { i, t: f.t, x: b.x, y: b.y, y0: b.y0, y1: b.y1 };
+          if (best) best.push(pt); else tracks.push([pt]);
+        }
+      });
+      let tr = null, bs = 0;
+      for (const k of tracks) {
+        if (k.length < 4) continue;
+        const prog = (k[k.length - 1].x - k[0].x) * dir / pxm;
+        if (prog < 0.8) continue;
+        if (k.length * prog > bs) { bs = k.length * prog; tr = k; }
+      }
+      if (!tr) return { err: "noball", frameMs };
+      const G = x => L.lineY + (L.refY - L.lineY) * (x - L.lineX) / span, tol = 0.3 * diam;
+      let k = -1;
+      for (let j = 1; j < tr.length; j++) if (tr[j].y1 >= G(tr[j].x) - tol && tr[j].y >= tr[j - 1].y - 0.2 * diam) { k = j; break; }
+      if (k < 0) return { err: "noland", frameMs, points: tr.length };
+      const a = tr[k - 1], b = tr[k], ba = a.y1 - G(a.x), bb = b.y1 - G(b.x);
+      const f = Math.min(1, Math.max(0, (0 - ba) / ((bb - ba) || 1e-9)));
+      const xLand = a.x + f * (b.x - a.x), landT = a.t + f * (b.t - a.t), m = (xLand - L.lineX) * dir / pxm;
+      if (m < 1.2 || m > 25) return { err: "range", m, frameMs };
+      const beyond = m > 1.6 * L.refM, sparse = k < 4 || (b.i - a.i) > 2;
+      return { m, landT, xLand, frameMs, airPoints: k, beyond, sparse, amber: beyond || sparse || frameMs > 45 };
     }
     const fmtMB = b => (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + " MB";
     const safeName = v => String(v).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -3477,10 +3597,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       let isRecording = false;
       let recorder = null;
       const supportsCalib = test.key === "height" || test.key === "sit_and_reach" || test.key === "vertical_jump";
-      const isSprint = test.key === "sprint_30m" || test.key === "shuttle_run" || test.key === "endurance_run", isShuttle = test.key === "shuttle_run", isEndurance = test.key === "endurance_run";
+      const isSprint = test.key === "sprint_30m" || test.key === "shuttle_run" || test.key === "endurance_run" || test.key === "medicine_ball_throw", isShuttle = test.key === "shuttle_run", isEndurance = test.key === "endurance_run", isBall = test.key === "medicine_ball_throw";
       const trackL = () => (state.trackLines || {})[test.key];
       const setTrackL = v => { state.trackLines = { ...(state.trackLines || {}), [test.key]: v }; persist(); };
-      let sprintSet = null, sprintPrev = null, sprintLastHud = 0, enduranceLive = null;
+      let sprintSet = null, sprintPrev = null, sprintLastHud = 0, enduranceLive = null, ballBg = null, lastBlobs = [];
       const cal = { mode: null, pts: [], active: 0 };
       let frameW = 0, frameH = 0;
       let latestValidEv = null;
@@ -3492,9 +3612,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
 
         ${isSprint ? `
           <details class="card stack" style="gap:8px" ${(trackL() && trackL().startX != null && trackL().finishX != null) ? "" : "open"}>
-            <summary>${isEndurance ? t("Set up the line", "रेखा सेट करें") : isShuttle ? t("Set up the course", "कोर्स सेट करें") : t("Set up the track", "ट्रैक सेट करें")}</summary>
-            <span class="small">${isEndurance ? t("Phone on a tripod beside the start and finish line, in landscape, one athlete at a time. Tap the button, then tap the line on the video, and choose the lap length of the course.", "फ़ोन शुरुआती और फ़िनिश रेखा के पास ट्राइपॉड पर, लैंडस्केप में, एक समय में एक एथलीट। बटन दबाएँ, फिर वीडियो पर रेखा पर टैप करें, और कोर्स के चक्कर की लंबाई चुनें।") : isShuttle ? t("Phone on a tripod, in landscape, both lines in view, one athlete at a time. Tap a button, then tap that line on the video. The lines must be 10 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें, एक समय में एक एथलीट। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 10 मीटर दूर हों।") : t("Phone on a tripod, in landscape, both lines in view. Tap a button, then tap that line on the video. The lines must be 30 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 30 मीटर दूर हों।")}</span>
-            <div class="row" style="gap:8px"><button class="btn s" id="btnSetStart" style="min-height:48px">${isEndurance ? t("Set start / finish line", "शुरू / फ़िनिश रेखा") : t("Set start line", "शुरुआती रेखा")}</button><button class="btn s" id="btnSetFinish" style="min-height:48px;${isEndurance ? "display:none" : ""}">${isShuttle ? t("Set far line", "दूर की रेखा") : t("Set finish line", "फ़िनिश रेखा")}</button></div>
+            <summary>${isBall ? t("Set up the throw", "थ्रो सेट करें") : isEndurance ? t("Set up the line", "रेखा सेट करें") : isShuttle ? t("Set up the course", "कोर्स सेट करें") : t("Set up the track", "ट्रैक सेट करें")}</summary>
+            <span class="small">${isBall ? t("Phone on a tripod to the side of the throwing lane, in landscape, seeing the line, the whole flight and the landing. Tap the throw line, then a marker of known distance on the tape, both on the ground in the video.", "फ़ोन थ्रो लेन के किनारे ट्राइपॉड पर, लैंडस्केप में, रेखा, पूरी उड़ान और गिरने की जगह दिखे। वीडियो में ज़मीन पर थ्रो रेखा पर, फिर टेप पर ज्ञात दूरी के मार्कर पर टैप करें।") : isEndurance ? t("Phone on a tripod beside the start and finish line, in landscape, one athlete at a time. Tap the button, then tap the line on the video, and choose the lap length of the course.", "फ़ोन शुरुआती और फ़िनिश रेखा के पास ट्राइपॉड पर, लैंडस्केप में, एक समय में एक एथलीट। बटन दबाएँ, फिर वीडियो पर रेखा पर टैप करें, और कोर्स के चक्कर की लंबाई चुनें।") : isShuttle ? t("Phone on a tripod, in landscape, both lines in view, one athlete at a time. Tap a button, then tap that line on the video. The lines must be 10 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें, एक समय में एक एथलीट। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 10 मीटर दूर हों।") : t("Phone on a tripod, in landscape, both lines in view. Tap a button, then tap that line on the video. The lines must be 30 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 30 मीटर दूर हों।")}</span>
+            <div class="row" style="gap:8px"><button class="btn s" id="btnSetStart" style="min-height:48px">${isBall ? t("Set throw line", "थ्रो रेखा") : isEndurance ? t("Set start / finish line", "शुरू / फ़िनिश रेखा") : t("Set start line", "शुरुआती रेखा")}</button><button class="btn s" id="btnSetFinish" style="min-height:48px;${isEndurance ? "display:none" : ""}">${isBall ? t("Set marker", "मार्कर") : isShuttle ? t("Set far line", "दूर की रेखा") : t("Set finish line", "फ़िनिश रेखा")}</button></div>
+            ${isBall ? `<div class="field"><label for="markSel">${t("Distance from the throw line to the marker", "थ्रो रेखा से मार्कर की दूरी")}</label><select id="markSel" style="min-height:48px;border:0;border-radius:12px;padding:0 12px;box-shadow:inset 0 0 0 1.5px var(--line-strong);background:var(--surface);color:var(--ink);font-size:1rem">${[3, 4, 5, 6, 8, 10, 12, 15].map(m => `<option value="${m}" ${((trackL() || {}).refM || 5) === m ? "selected" : ""}>${m} m</option>`).join("")}</select></div>` : ""}
             ${isEndurance ? `<div class="seg" id="lapSeg">${[[400, t("400 m laps · 2 laps", "400 मी चक्कर · 2 चक्कर")], [200, t("200 m laps · 4 laps", "200 मी चक्कर · 4 चक्कर")]].map(([m, l]) => `<button data-lap="${m}" aria-pressed="${((trackL() || {}).lapM || 400) === m}">${l}</button>`).join("")}</div>` : ""}
             <div class="row" style="justify-content:space-between"><span class="small" id="sprintStatus" style="font-weight:700"></span><button class="lang-btn" id="btnSprintReset" style="margin:0">${t("Reset lines", "रेखाएँ रीसेट")}</button></div>
           </details>
@@ -3607,13 +3728,13 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       const declAth = document.getElementById("declAth"), declCoach = document.getElementById("declCoach");
       declAth.checked = dst.ath; declCoach.checked = dst.coach;
       const declOk = () => dst.ath && dst.coach && !!state.assessor.trim();
-      const linesOk = () => { const L = trackL(); if (isEndurance) return !!L && L.lineX != null; return !!L && L.startX != null && L.finishX != null && Math.abs(L.finishX - L.startX) >= 0.2; };
+      const linesOk = () => { const L = trackL(); if (isBall) return !!L && L.lineX != null && L.refX != null && Math.abs(L.refX - L.lineX) >= 0.15; if (isEndurance) return !!L && L.lineX != null; return !!L && L.startX != null && L.finishX != null && Math.abs(L.finishX - L.startX) >= 0.2; };
       const readyOk = () => declOk() && (!isSprint || linesOk());
       const syncDecl = () => {
         if (isRecording) return;
         btnRec.disabled = !readyOk();
         const h = document.getElementById("declHint");
-        if (h) h.textContent = readyOk() ? "" : (isSprint && !linesOk() ? (isEndurance ? t("Set the start and finish line first.", "पहले शुरुआती और फ़िनिश रेखा तय करें।") : isShuttle ? t("Set the start line and the far line first, 10 m apart.", "पहले शुरुआती रेखा और दूर की रेखा तय करें, 10 मीटर दूर।") : t("Set the start and finish lines first, about 30 m apart.", "पहले शुरुआती और फ़िनिश रेखा तय करें, लगभग 30 मीटर दूर।")) : t("Both confirmations and the coach name are needed to record.", "रिकॉर्ड करने के लिए दोनों पुष्टि और कोच का नाम ज़रूरी है।"));
+        if (h) h.textContent = readyOk() ? "" : (isSprint && !linesOk() ? (isBall ? t("Set the throw line and the marker first.", "पहले थ्रो रेखा और मार्कर तय करें।") : isEndurance ? t("Set the start and finish line first.", "पहले शुरुआती और फ़िनिश रेखा तय करें।") : isShuttle ? t("Set the start line and the far line first, 10 m apart.", "पहले शुरुआती रेखा और दूर की रेखा तय करें, 10 मीटर दूर।") : t("Set the start and finish lines first, about 30 m apart.", "पहले शुरुआती और फ़िनिश रेखा तय करें, लगभग 30 मीटर दूर।")) : t("Both confirmations and the coach name are needed to record.", "रिकॉर्ड करने के लिए दोनों पुष्टि और कोच का नाम ज़रूरी है।"));
       };
       declAth.onchange = () => { dst.ath = declAth.checked; syncDecl(); };
       declCoach.onchange = () => { dst.coach = declCoach.checked; syncDecl(); };
@@ -3830,14 +3951,16 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       function refreshSprintStatus() {
         const el = document.getElementById("sprintStatus"); if (!el) return;
         const L = trackL() || {};
-        el.textContent = sprintSet ? (sprintSet === "start" ? (isEndurance ? t("Tap the START / FINISH line on the video", "वीडियो पर शुरू / फ़िनिश रेखा पर टैप करें") : t("Tap the START line on the video", "वीडियो पर शुरुआती रेखा पर टैप करें")) : (isShuttle ? t("Tap the FAR line on the video", "वीडियो पर दूर की रेखा पर टैप करें") : t("Tap the FINISH line on the video", "वीडियो पर फ़िनिश रेखा पर टैप करें")))
+        el.textContent = sprintSet ? (sprintSet === "start" ? (isBall ? t("Tap the THROW LINE on the ground in the video", "वीडियो में ज़मीन पर थ्रो रेखा पर टैप करें") : isEndurance ? t("Tap the START / FINISH line on the video", "वीडियो पर शुरू / फ़िनिश रेखा पर टैप करें") : t("Tap the START line on the video", "वीडियो पर शुरुआती रेखा पर टैप करें")) : (isBall ? t("Tap the MARKER on the ground in the video", "वीडियो में ज़मीन पर मार्कर पर टैप करें") : isShuttle ? t("Tap the FAR line on the video", "वीडियो पर दूर की रेखा पर टैप करें") : t("Tap the FINISH line on the video", "वीडियो पर फ़िनिश रेखा पर टैप करें")))
           : `${L.startX != null ? "✅" : "○"} ${t("Start", "शुरू")}   ${L.finishX != null ? "✅" : "○"} ${isShuttle ? t("Far line", "दूर की रेखा") : t("Finish", "फ़िनिश")}`;
         if (isEndurance && !sprintSet) el.textContent = `${L.lineX != null ? "✅" : "○"} ${t("Start / finish line", "शुरू / फ़िनिश रेखा")} · ${L.lapM || 400} m ${t("laps", "चक्कर")}`;
+        if (isBall && !sprintSet) el.textContent = `${L.lineX != null ? "✅" : "○"} ${t("Throw line", "थ्रो रेखा")}   ${L.refX != null ? "✅" : "○"} ${t("Marker", "मार्कर")} · ${L.refM || 5} m`;
         el.style.color = sprintSet ? "var(--amber)" : "var(--ink)";
       }
       if (isSprint) {
         const armSet = k => { sprintSet = k; canvasEl.style.pointerEvents = "auto"; refreshSprintStatus(); };
         document.getElementById("btnSetStart").onclick = () => armSet("start");
+        const markSel = document.getElementById("markSel"); if (markSel) markSel.onchange = () => { setTrackL({ ...(trackL() || {}), refM: +markSel.value }); refreshSprintStatus(); syncDecl(); };
         document.querySelectorAll("[data-lap]").forEach(b => b.onclick = () => { setTrackL({ lapM: 400, ...(trackL() || {}), lapM: +b.dataset.lap }); document.querySelectorAll("[data-lap]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); refreshSprintStatus(); });
         document.getElementById("btnSetFinish").onclick = () => armSet("finish");
         document.getElementById("btnSprintReset").onclick = () => { if (state.trackLines) delete state.trackLines[test.key]; sprintSet = null; canvasEl.style.pointerEvents = "none"; persist(); refreshSprintStatus(); syncDecl(); };
@@ -3845,9 +3968,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           if (!sprintSet || !frameW) return;
           const rect = canvasEl.getBoundingClientRect();
           const sc = Math.min(rect.width / frameW, rect.height / frameH), ox = (rect.width - frameW * sc) / 2;
-          const x = (e.clientX - rect.left - ox) / sc / frameW;
+          const x = (e.clientX - rect.left - ox) / sc / frameW, oy = (rect.height - frameH * sc) / 2, yw = (e.clientY - rect.top - oy) / sc / frameW;
           if (x < 0 || x > 1) return;
-          setTrackL({ ...(isEndurance ? { lapM: 400 } : {}), ...(trackL() || {}), [isEndurance ? "lineX" : (sprintSet === "start" ? "startX" : "finishX")]: x });
+          if (isBall) setTrackL({ refM: 5, ...(trackL() || {}), ...(sprintSet === "start" ? { lineX: x, lineY: yw } : { refX: x, refY: yw }) });
+          else setTrackL({ ...(isEndurance ? { lapM: 400 } : {}), ...(trackL() || {}), [isEndurance ? "lineX" : (sprintSet === "start" ? "startX" : "finishX")]: x });
           sprintSet = null; canvasEl.style.pointerEvents = "none"; refreshSprintStatus(); syncDecl();
         });
         refreshSprintStatus();
@@ -4002,7 +4126,12 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         const L = trackL() || {}, fs = Math.max(14, Math.round(W / 40));
         ctx.lineWidth = Math.max(2, W / 320); ctx.font = `700 ${fs}px sans-serif`;
         const line = (x, color, label) => { ctx.strokeStyle = color; ctx.fillStyle = color; ctx.setLineDash([12, 8]); ctx.beginPath(); ctx.moveTo(x * W, 0); ctx.lineTo(x * W, H); ctx.stroke(); ctx.setLineDash([]); ctx.fillText(label, Math.min(W - fs * 6, x * W + 6), fs * 1.6); };
-        if (isEndurance) { if (L.lineX != null) line(L.lineX, "#3BE08A", t("START / FINISH", "शुरू / फ़िनिश")); }
+        if (isBall) {
+          if (L.lineX != null) line(L.lineX, "#3BE08A", t("LINE", "रेखा"));
+          if (L.refX != null) line(L.refX, "#FFD166", `${L.refM || 5} m`);
+          if (L.lineX != null && L.refX != null) { ctx.strokeStyle = "#7CDFFF"; ctx.beginPath(); ctx.moveTo(L.lineX * W, L.lineY * W); ctx.lineTo(L.refX * W, L.refY * W); ctx.stroke(); }
+          ctx.strokeStyle = "#FFD166"; for (const b of lastBlobs) ctx.strokeRect(b.x0 * W - 2, b.y0 * W - 2, (b.x1 - b.x0) * W + 4, (b.y1 - b.y0) * W + 4);
+        } else if (isEndurance) { if (L.lineX != null) line(L.lineX, "#3BE08A", t("START / FINISH", "शुरू / फ़िनिश")); }
         else if (L.startX != null) line(L.startX, "#3BE08A", t("START", "शुरू"));
         if (!isEndurance && L.finishX != null) line(L.finishX, "#FF5A4E", isShuttle ? t("FAR LINE", "दूर की रेखा") : t("FINISH", "फ़िनिश"));
         if (cx != null) { ctx.fillStyle = "#FFD166"; ctx.beginPath(); ctx.arc(cx * W, H * 0.5, fs * 0.45, 0, 6.3); ctx.fill(); }
@@ -4285,15 +4414,26 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
 
           if (isSprint) {
             const wrap = document.querySelector(".cam-wrap"); if (wrap && wrap.dataset.ar !== `${W}x${H}`) { wrap.dataset.ar = `${W}x${H}`; wrap.style.aspectRatio = `${W} / ${H}`; wrap.style.maxHeight = "none"; }
-            const cur = sprGray(videoEl), ft = meta && meta.mediaTime ? meta.mediaTime * 1000 : now;
-            const f = sprMotion(sprintPrev, cur); sprintPrev = cur;
-            if (f && isRecording) recordedFrames.push({ postureOk: true, t: ft, ...f });
-            drawSprintLines(W, H, f && f.cx);
+            const cur = sprGray(videoEl, isBall ? 512 : 0), ft = meta && meta.mediaTime ? meta.mediaTime * 1000 : now;
+            if (isBall) {
+              // The background is learned while idle and frozen when recording starts, so the thrown ball is the new small object.
+              if (!ballBg || ballBg.length !== cur.g.length) ballBg = Float32Array.from(cur.g);
+              let blobs = [], fg = 0;
+              if (linesOk()) { const r = ballBlobs(cur, ballBg, ballGeom(trackL(), cur.w)); blobs = r.blobs; fg = r.fg; }
+              if (!isRecording) { const gg = cur.g; for (let i = 0; i < ballBg.length; i++) ballBg[i] += (gg[i] - ballBg[i]) * 0.05; }
+              else recordedFrames.push({ postureOk: true, t: ft, blobs, fg });
+              lastBlobs = blobs;
+              drawSprintLines(W, H, null);
+            } else {
+              const f = sprMotion(sprintPrev, cur); sprintPrev = cur;
+              if (f && isRecording) recordedFrames.push({ postureOk: true, t: ft, ...f });
+              drawSprintLines(W, H, f && f.cx);
+            }
             if (now - sprintLastHud > 400) {
               sprintLastHud = now;
               hudFps.textContent = `${Math.round(fps)} fps · ${t("MOTION TIMING", "मोशन टाइमिंग")}`;
               hudMetric.style.display = "none"; // keep the track clear so the lines can be tapped and the athlete seen
-              hudLive.textContent = `${linesOk() ? (isRecording ? (isEndurance && enduranceLive ? `${t("Laps seen", "देखे गए चक्कर")}: ${enduranceLive.seen != null ? enduranceLive.seen : 0} / ${(trackL() || {}).lapM === 200 ? 4 : 2}. ${t("Recording stops 17 minutes after the start.", "रिकॉर्डिंग शुरू होने के 17 मिनट बाद रुकती है।")}` : t("Recording. The athlete runs on “go”.", "रिकॉर्डिंग। “गो” पर एथलीट दौड़े।")) : isShuttle ? t("Course ready. The athlete stands still behind the start line.", "कोर्स तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।") : t("Track ready. The athlete stands still behind the start line.", "ट्रैक तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।")) : isShuttle ? t("Set the start line and the far line.", "शुरुआती रेखा और दूर की रेखा तय करें।") : t("Set the start and finish lines.", "शुरुआती और फ़िनिश रेखा तय करें।")} ${t("Only the athlete should move.", "केवल एथलीट हिले।")}`;
+              hudLive.textContent = `${linesOk() ? (isRecording ? (isEndurance && enduranceLive ? `${t("Laps seen", "देखे गए चक्कर")}: ${enduranceLive.seen != null ? enduranceLive.seen : 0} / ${(trackL() || {}).lapM === 200 ? 4 : 2}. ${t("Recording stops 17 minutes after the start.", "रिकॉर्डिंग शुरू होने के 17 मिनट बाद रुकती है।")}` : t("Recording. The athlete runs on “go”.", "रिकॉर्डिंग। “गो” पर एथलीट दौड़े।")) : isBall ? t("Ready. The athlete stands with the heels at the throw line, back to the throw.", "तैयार। एथलीट की एड़ियाँ थ्रो रेखा पर, पीठ थ्रो की दिशा में।") : isShuttle ? t("Course ready. The athlete stands still behind the start line.", "कोर्स तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।") : t("Track ready. The athlete stands still behind the start line.", "ट्रैक तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।")) : isBall ? t("Set the throw line and the marker.", "थ्रो रेखा और मार्कर तय करें।") : isShuttle ? t("Set the start line and the far line.", "शुरुआती रेखा और दूर की रेखा तय करें।") : t("Set the start and finish lines.", "शुरुआती और फ़िनिश रेखा तय करें।")} ${isBall ? t("Yellow boxes show what the camera tracks as the ball.", "पीले बॉक्स वह दिखाते हैं जिसे कैमरा गेंद मान रहा है।") : t("Only the athlete should move.", "केवल एथलीट हिले।")}`;
             }
             schedule(); return;
           }
@@ -4436,9 +4576,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           captureTimer = setInterval(() => {
             captureElapsed++;
             if (isSprint && recordedFrames.length > 20 && (!isEndurance || captureElapsed % 3 === 0)) {
-              const an = (isEndurance ? enduranceAnalyze : isShuttle ? shuttleAnalyze : sprintAnalyze)(recordedFrames, trackL());
+              const an = (isBall ? ballAnalyze : isEndurance ? enduranceAnalyze : isShuttle ? shuttleAnalyze : sprintAnalyze)(recordedFrames, trackL());
               if (isEndurance) enduranceLive = an;
-              if (an && an.finishT && recordedFrames[recordedFrames.length - 1].t - an.finishT > (isEndurance ? 2500 : 1500)) { finishRecording(); return; }
+              const doneT = an && (an.finishT || an.landT);
+              if (doneT && recordedFrames[recordedFrames.length - 1].t - doneT > (isEndurance ? 2500 : isBall ? 3000 : 1500)) { finishRecording(); return; }
             }
             const validCount = recordedFrames.filter(f => f.postureOk).length;
             if (test.key === "height") {
