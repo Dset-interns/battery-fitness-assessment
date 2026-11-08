@@ -38,6 +38,18 @@ Two things to know:
 - The optional wall-photo auto-read of a written height (OCR) still downloads its engine from the internet. Without a
   connection the coach types the number instead.
 
+## Syncing to the server
+
+The Login screen and the report-cards screen have a **Server sync** card. Enter the address of the sync service
+([`backend/`](../backend/README.md)) and the device key, tap **Test connection**, then **Sync now**.
+
+- What is sent: athletes with a signed consent (and the signature image), their attempts and the rule audit. An athlete
+  without a signed consent is never sent. Repeating a sync is safe.
+- Videos and the scale photo are sent only if **Also upload attempt videos and the scale photo** is ticked. It is off by
+  default because the consent text says videos stay on the phone; turn it on only for a server run by SAI or NeGD, and update
+  the consent wording if uploads are meant to happen.
+- A page served over `https://` cannot send to an `http://` server, so put the service behind HTTPS.
+
 ## How to Test on Your Apple iPhone Right Now
 
 From the repository root (on branch `sai`):

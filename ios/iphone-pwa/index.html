@@ -2705,6 +2705,8 @@ body.cam .rotate{display:none!important}
     if (!state.theme) state.theme = "auto";
     if (state.assessor === undefined) state.assessor = "";
     if (state.centre === undefined) state.centre = "";
+    if (!state.deviceId) state.deviceId = (crypto.randomUUID ? crypto.randomUUID() : "dev-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+    if (!state.sync) state.sync = { url: "", key: "", media: false, last: null, uids: {} };
     if (state.sprintLines) { state.trackLines = { ...(state.trackLines || {}), sprint_30m: state.sprintLines }; delete state.sprintLines; }
     if (!["home", "login", "register", "consent", "setup", "session", "cell", "manual", "saved", "reports", "report", "roster"].includes(state.route)) state.route = "home";
     if (state.session && !state.session.date) state.session.date = todayISO();
@@ -2834,6 +2836,72 @@ body.cam .rotate{display:none!important}
       });
     }
     const dT = id => TESTS.find(x => x.id === id);
+
+    // ---- Sync to the programme server (rulings C10, C29, C42) ------------------------------------------------------
+    // Results, signed consent and attempts go after the video has been processed on this phone. Videos and the scale photo go
+    // only when the assessor turns that on, because the consent wording says they stay on the phone.
+    const syncUrl = () => { let u = (state.sync.url || "").trim().replace(/\/+$/, ""); if (u && !/^https?:\/\//i.test(u)) u = "https://" + u; return u; };
+    function setSyncMsg(txt, bad) { VW.syncMsg = txt; VW.syncBad = !!bad; const el = document.getElementById("syncMsg"); if (el) { el.textContent = txt; el.style.color = bad ? "var(--red)" : "var(--ink-2)"; } }
+    function syncCardH() {
+      const L = state.sync.last, when = L ? new Date(L.at).toLocaleString(state.lang === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+      return `<div class="card stack" style="gap:10px"><span class="eyebrow">${t("Server sync", "सर्वर सिंक")}</span>
+ <div class="field"><label for="sy-url">${t("Server address", "सर्वर का पता")}</label><input id="sy-url" data-f5="url" value="${esc(state.sync.url)}" placeholder="https://" inputmode="url" autocapitalize="off" autocomplete="off"></div>
+ <div class="field"><label for="sy-key">${t("Device key", "डिवाइस की")}</label><input id="sy-key" data-f5="key" type="password" value="${esc(state.sync.key)}" autocapitalize="off" autocomplete="off"></div>
+ <label class="chk"><input type="checkbox" data-f5b="media" ${state.sync.media ? "checked" : ""}><span>${t("Also upload attempt videos and the scale photo. Only if the server is run by SAI or NeGD; the consent says videos stay on this phone.", "प्रयास वीडियो और मशीन की फोटो भी अपलोड करें। केवल तब जब सर्वर SAI या NeGD चलाता हो; सहमति में लिखा है कि वीडियो इसी फ़ोन पर रहते हैं।")}</span></label>
+ <div class="row" style="gap:8px"><button class="btn s" data-act="synctest" style="min-height:48px">${t("Test connection", "कनेक्शन जाँचें")}</button><button class="btn p" data-act="syncnow" style="min-height:48px">${IC.share}${t("Sync now", "अभी सिंक करें")}</button></div>
+ <span class="small" id="syncMsg" style="${VW.syncBad ? "color:var(--red)" : ""}">${esc(VW.syncMsg || (L ? `${t("Last sync", "पिछला सिंक")} ${when}: ${L.athletes} ${t("athletes", "एथलीट")}, ${L.attempts} ${t("attempts", "प्रयास")}${L.media ? `, ${L.media} ${t("files", "फ़ाइलें")}` : ""}${L.rejected && L.rejected.length ? `. ${L.rejected.length} ${t("not accepted", "स्वीकार नहीं")}: ${L.rejected.map(r => r.reason).join("; ")}` : ""}` : t("Nothing sent yet.", "अभी कुछ नहीं भेजा।")))}</span></div>`;
+    }
+    const idTypeOut = x => x === "Aadhaar" ? "AADHAAR" : (["APAAR", "AADHAAR", "NSRS"].includes(x) ? x : "LOCAL");
+    const b64 = blob => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(blob); });
+    async function buildSyncBatch(list) {
+      const athletes = [], results = [];
+      for (const a of list) {
+        const c = a.consent; let sig = null;
+        try { const rec = await VDB.get(c.sigKey); if (rec && rec.blob) sig = await b64(rec.blob); } catch (e) { }
+        athletes.push({
+          local_id: String(a.id), name: a.name, age_years: a.age, gender: a.gender, school: a.school || "", id_type: idTypeOut(a.idType), id_number: a.externalId || "",
+          assessment_date: a.date || todayISO(), mother_cm: a.motherCm || null, mother_source: a.motherCm ? (a.motherSrc || "self") : "", father_cm: a.fatherCm || null, father_source: a.fatherCm ? (a.fatherSrc || "self") : "",
+          consent: { version: c.v || 1, signed_at: new Date(c.at).toISOString(), signer_name: c.signer, relationship: c.rel, minor: !!c.minor,
+            items: { assess: !!c.items.assess, video: !!c.items.video, data: !!c.items.data, parent_height: !!c.items.parentHeight }, assessor: c.assessor || "", signature_png_base64: sig }
+        });
+        for (const te of BATTERY_TESTS) {
+          const r = state.results[cellKey(a.id, te.key)]; if (!r) continue;
+          const hist = (r.attemptsHistory && r.attemptsHistory.length ? r.attemptsHistory : [r]).slice(-12);
+          results.push({ athlete_local_id: String(a.id), test_key: te.key, attempts: hist.map((h, i) => ({
+            attempt_id: h.video ? h.video.key : `${a.id}:${te.key}:${i + 1}`, attempt_no: i + 1, valid: !!(h.valid && h.value != null), value: h.valid && h.value != null ? +h.value : null,
+            unit: h.unit || "", confidence: ["GREEN", "AMBER", "RED"].includes(h.confidence) ? h.confidence : "RED", method: String(h.method || ""),
+            audit: (h.audit || []).map(x => ({ label: String(x.label || ""), detail: String(x.detail || ""), valid: x.valid == null ? null : !!x.valid })),
+            video: h.video ? { key: h.video.key, duration_s: h.video.durationSec || null, size_bytes: h.video.sizeBytes || null, declaration: h.video.decl || null } : null })) });
+        }
+      }
+      return { device_id: state.deviceId, assessor: state.assessor || "", app_version: "web-1", sent_at: new Date().toISOString(), athletes, results };
+    }
+    async function uploadMedia(url, headers, list) {
+      let done = 0, total = 0; const jobs = [];
+      for (const a of list) {
+        const uid = state.sync.uids[a.id]; if (!uid) continue;
+        for (const te of BATTERY_TESTS) {
+          const r = state.results[cellKey(a.id, te.key)]; if (!r) continue;
+          (r.attemptsHistory || []).forEach(h => { if (h.video && h.video.sizeBytes && !h.video.uploaded) jobs.push({ uid, te, kind: "video", key: h.video.key, attempt: h.video.key, mark: () => { h.video.uploaded = true; } }); });
+          if (r.photo && r.photo.sizeBytes && !r.photo.uploaded) jobs.push({ uid, te, kind: "photo", key: r.photo.key, attempt: null, mark: () => { r.photo.uploaded = true; } });
+        }
+      }
+      total = jobs.length;
+      for (const j of jobs) {
+        setSyncMsg(`${t("Uploading", "अपलोड हो रहा है")} ${done + 1} / ${total}…`);
+        const rec = await VDB.get(j.key); if (!rec || !rec.blob) continue;
+        const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await rec.blob.arrayBuffer()))).map(x => x.toString(16).padStart(2, "0")).join("");
+        const fd = new FormData();
+        fd.append("athlete_uid", j.uid); fd.append("test_key", j.te.key); fd.append("kind", j.kind); fd.append("key", j.key); fd.append("sha256", hash);
+        if (j.attempt) fd.append("attempt_id", j.attempt);
+        fd.append("file", rec.blob, j.key.replace(/[^A-Za-z0-9._-]/g, "_"));
+        const res = await fetch(url + "/v1/media", { method: "POST", headers, body: fd });
+        if (!res.ok) throw new Error(`${t("Upload failed", "अपलोड विफल")} (${res.status})`);
+        j.mark(); persist(); done++;
+      }
+      return done;
+    }
+
 
     // ---- On-device media store ------------------------------------------------------------
     // One video per attempt and one photo (the scale display) per athlete, kept as Blobs in IndexedDB so they never leave
@@ -3241,6 +3309,7 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
  <div class="field"><label for="f-an">${t("Assessor name", "मूल्यांकनकर्ता का नाम")}</label><input id="f-an" data-f3="assessor" value="${esc(state.assessor)}" autocomplete="name" placeholder="${t("Printed on every report", "हर रिपोर्ट पर छपेगा")}"></div>
  <div class="field"><label for="f-ac">${t("School or centre", "स्कूल या केंद्र")}</label><input id="f-ac" data-f3="centre" value="${esc(state.centre)}"><span class="hint">${t("Optional", "वैकल्पिक")}</span></div>
  <div class="note">${IC.shield}<span>${t("Saved on this phone only. There is no account or password, and no internet is needed. Your name is printed on the signature line of each report.", "केवल इसी फ़ोन पर सहेजा जाता है। कोई खाता या पासवर्ड नहीं, इंटरनेट की ज़रूरत नहीं। आपका नाम हर रिपोर्ट की हस्ताक्षर रेखा पर छपता है।")}</span></div>
+ ${syncCardH()}
  ${signed ? `<button class="btn q" data-act="logout" style="color:var(--red)">${t("Sign out", "साइन आउट")}</button>` : ""}
 </main>
 <div class="bb"><button class="btn p" id="btnLogin" data-act="dologin" ${signed ? "" : "disabled"}>${t("Login", "लॉगिन")}</button></div></div>`;
@@ -3418,6 +3487,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
 <main class="main" style="gap:16px">
  <div class="note gr" style="align-items:center"><span class="okdot" style="flex:none;animation:none">${IC.tick}</span><span><b>${ATH.length} ${t("report cards and a roster summary", "रिपोर्ट कार्ड और एक सूची सारांश")}</b> ${t("are ready. Open one to see it, or download them all as a PDF.", "तैयार हैं। एक खोलकर देखें, या सभी PDF में डाउनलोड करें।")}</span></div>
  <div class="list">${ATH.map(a => { const sm = athSummary(a); return `<button class="li" data-act="go" data-s="report" data-a="${a.id}" style="align-items:flex-start;padding-top:14px;padding-bottom:14px">${icoH(`<b class="num" style="font-size:.9375rem">${esc(a.name.split(" ").map(x => x[0]).join("").slice(0, 2))}</b>`)}<span class="grow"><span class="t">${esc(a.name)}</span><span class="d">${sm.rec} ${t("of 10 recorded", "/10 दर्ज")} · ${sm.ai} ${t("by AI", "AI से")}${sm.rt.length ? ` · ${sm.rt.length} ${t("re-test", "दोबारा टेस्ट")}` : ""}</span><span style="display:flex;gap:4px;margin-top:8px">${TESTS.map(te => shape(bandOf(a, te.id), 14)).join("")}</span></span><span class="chev">${IC.chev}</span></button>`; }).join("")}</div>
+ ${syncCardH()}
  <div class="list"><button class="li" data-act="go" data-s="roster">${icoH(IC.grid)}<span class="grow"><span class="t">${t("Roster summary", "सूची सारांश")}</span><span class="d">${ATH.length} ${t("athletes × 10 tests · one page", "एथलीट × 10 टेस्ट · एक पृष्ठ")}</span></span><span class="chev">${IC.chev}</span></button></div>
 </main>
 <div class="bb"><button class="btn p" data-act="modal" data-v="shareall">${IC.dl}${t("Download all as PDF", "सभी PDF डाउनलोड करें")} · ${ATH.length + 1} ${t("pages", "पृष्ठ")}</button></div></div>`;
@@ -4964,6 +5034,39 @@ const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attemp
         document.getElementById("print-root").innerHTML = consentPage(a, url);
         setTimeout(() => window.print(), 80);
       },
+      synctest: async () => {
+        const url = syncUrl(); if (!url) return setSyncMsg(t("Enter the server address first", "पहले सर्वर का पता लिखें"), true);
+        setSyncMsg(t("Connecting…", "जुड़ रहा है…"));
+        try {
+          const h = await fetch(url + "/healthz"); if (!h.ok) throw new Error(`HTTP ${h.status}`);
+          const c = await (await fetch(url + "/v1/config")).json();
+          setSyncMsg(`${t("Connected", "जुड़ गया")} · ${t("server", "सर्वर")} ${c.version}`);
+        } catch (e) { setSyncMsg(`${t("Could not reach the server", "सर्वर तक नहीं पहुँचा")}: ${e.message}. ${t("An http:// address cannot be used from an https:// page.", "https:// पेज से http:// पता उपयोग नहीं हो सकता।")}`, true); }
+      },
+      syncnow: async () => {
+        if (VW.syncing) return;
+        const url = syncUrl(); if (!url || !state.sync.key.trim()) return setSyncMsg(t("Enter the server address and the device key first", "पहले सर्वर का पता और डिवाइस की लिखें"), true);
+        const list = state.athletes.filter(a => a.consent);
+        if (!list.length) return setSyncMsg(t("No athlete with a signed consent to send", "भेजने के लिए सहमति वाला कोई एथलीट नहीं"), true);
+        VW.syncing = true; const headers = { "X-API-Key": state.sync.key.trim() };
+        try {
+          let attempts = 0, accepted = 0; const rejected = [];
+          for (let i = 0; i < list.length; i += 50) {
+            setSyncMsg(`${t("Sending", "भेज रहे हैं")} ${Math.min(i + 50, list.length)} / ${list.length}…`);
+            const body = await buildSyncBatch(list.slice(i, i + 50));
+            const res = await fetch(url + "/v1/sync", { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+            if (res.status === 401 || res.status === 403) throw new Error(t("The server refused the key", "सर्वर ने की स्वीकार नहीं की"));
+            if (!res.ok) throw new Error(`${t("Server error", "सर्वर त्रुटि")} ${res.status}`);
+            const out = await res.json();
+            accepted += out.accepted_athletes; attempts += out.attempts_upserted; rejected.push(...out.rejected);
+            Object.assign(state.sync.uids, out.athlete_uids);
+          }
+          let media = 0; if (state.sync.media) media = await uploadMedia(url, headers, list);
+          state.sync.last = { at: new Date().toISOString(), athletes: accepted, attempts, media, rejected: rejected.map(r => ({ local_id: r.local_id, reason: r.reason })) };
+          VW.syncMsg = null; VW.syncBad = false; persist(); render();
+        } catch (e) { setSyncMsg(`${t("Not sent", "नहीं भेजा गया")}: ${e instanceof TypeError ? t("could not reach the server. Check the address and the connection.", "सर्वर तक नहीं पहुँचा। पता और कनेक्शन जाँचें।") : e.message}`, true); }
+        finally { VW.syncing = false; }
+      },
       dlmedia: el => downloadMedia(el.dataset.k, el.dataset.n),
       manualfromcell: () => { if (canManual(dT(TKEY[state.selectedTestKey]))) openManual(state.selectedAthleteId, state.selectedTestKey, "cell"); },
       savemanual: saveManual,
@@ -4993,9 +5096,11 @@ const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attemp
         const b = document.getElementById("btnSaveAth"); if (b) b.disabled = !regOK();
       }
       if (d.f2) VW.entry[d.f2] = d.f2 === "val" ? e.target.value.replace(/[^0-9.,]/g, "") : e.target.value.replace(/\D/g, "");
+      if (d.f5) { state.sync[d.f5] = e.target.value; persist(); }
       if (d.f3) { state[d.f3] = e.target.value; persist(); if (d.f3 === "assessor") { const lb = document.getElementById("btnLogin"); if (lb) lb.disabled = !e.target.value.trim(); } }
     });
     document.addEventListener("change", async e => {
+      if (e.target.dataset && e.target.dataset.f5b) { state.sync[e.target.dataset.f5b] = e.target.checked; persist(); return; }
       if (e.target.id !== "inp-photo" || !e.target.files || !e.target.files[0]) return;
       try {
         const blob = await shrinkPhoto(e.target.files[0]);
