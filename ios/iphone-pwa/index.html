@@ -340,6 +340,8 @@ button.rec-r:active{background:var(--surface-2)}
 .rec-box ul{list-style:none;display:flex;flex-direction:column;gap:6px;font-size:.875rem}
 .rec-box li b{font-weight:700}.rec-box li .rp{font-family:var(--font-num);color:var(--red);font-weight:700;margin-right:6px}
 .rec .nb{font-size:.8125rem;color:var(--ink-2);line-height:1.45}
+.chk{display:flex;gap:12px;align-items:flex-start;min-height:48px;padding:6px 0;cursor:pointer;font-size:.9375rem;line-height:1.4}
+.chk input{width:24px;height:24px;flex:none;margin-top:1px;accent-color:var(--primary)}
 /* A4 layout of the same record markup */
 .page{--green:#13704A;--amber:#8C4F00;--amber-bg:#FBEED8;--red:#B0261E;--ink:#0B0F14;--ink-2:#3D4A59;--muted:#5E6471;--line:#BFC6CE;--line-strong:#8B909A;--primary:#1D3FA6;--primary-soft:#E7ECF8;--surface:#fff;--surface-2:#EEEDE8}
 .page .rec{gap:2.2mm;font-size:8.8pt}
@@ -3338,6 +3340,15 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           <div class="cam-hud-bottom" id="hudLive">${t("Initializing MediaPipe Pose + Segmentation...", "MediaPipe पोज़ शुरू हो रहा है...")}</div>
         </div>
 
+        <div class="card stack" id="declCard" style="gap:8px">
+          <span class="eyebrow">${t("Authenticity declaration", "प्रामाणिकता घोषणा")}</span>
+          <span class="small">${t("This recording is attached to the athlete's record together with the declaration below.", "यह रिकॉर्डिंग नीचे दी गई घोषणा के साथ एथलीट के रिकॉर्ड से जुड़ेगी।")}</span>
+          <label class="chk"><input type="checkbox" id="declAth"><span>${athlete.age < 18 ? t(`I, the parent or guardian of ${esc(athlete.name)}, confirm that the recordings of this test are live, unedited attempts by ${esc(athlete.name)} that follow the test procedure.`, `मैं, ${esc(athlete.name)} का माता-पिता या अभिभावक, पुष्टि करता/करती हूँ कि इस टेस्ट की रिकॉर्डिंग ${esc(athlete.name)} के सीधे, बिना संपादित प्रयास हैं और टेस्ट प्रक्रिया का पालन करते हैं।`) : t(`I, ${esc(athlete.name)}, confirm that the recordings of this test are live, unedited attempts by me that follow the test procedure.`, `मैं, ${esc(athlete.name)}, पुष्टि करता/करती हूँ कि इस टेस्ट की रिकॉर्डिंग मेरे सीधे, बिना संपादित प्रयास हैं और टेस्ट प्रक्रिया का पालन करते हैं।`)}</span></label>
+          <label class="chk"><input type="checkbox" id="declCoach"><span>${t("I, the coach or assessor, confirm that I supervised these attempts and that the recordings are genuine and unaltered.", "मैं, कोच या मूल्यांकनकर्ता, पुष्टि करता/करती हूँ कि मैंने इन प्रयासों की निगरानी की और रिकॉर्डिंग असली और बिना बदलाव की हैं।")}</span></label>
+          ${state.assessor.trim() ? "" : `<div class="field"><label for="declName">${t("Coach or assessor name", "कोच या मूल्यांकनकर्ता का नाम")}</label><input id="declName" data-f3="assessor" value="" autocomplete="name"></div>`}
+          <span class="small" id="declHint" style="color:var(--amber)"></span>
+        </div>
+
         <button class="btn primary" id="btnRecToggle">● ${t("Start Recording Attempt", "प्रयास रिकॉर्डिंग शुरू करें")}</button>
         </main></div>
       `;
@@ -3354,6 +3365,25 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       const hudLive = document.getElementById("hudLive");
       const btnRec = document.getElementById("btnRecToggle");
       const calPanel = document.getElementById("calPanel");
+
+      // Authenticity declaration (ruling C43): athlete (or guardian) and coach both confirm before recording, and the
+      // declaration is stored with every clip. Ticks are kept for this athlete and test, so repeat attempts need no re-ticking.
+      const dk = `${athlete.id}:${test.key}`;
+      const dst = (VW.decl = VW.decl || {})[dk] || (VW.decl[dk] = { ath: false, coach: false });
+      const declAth = document.getElementById("declAth"), declCoach = document.getElementById("declCoach");
+      declAth.checked = dst.ath; declCoach.checked = dst.coach;
+      const declOk = () => dst.ath && dst.coach && !!state.assessor.trim();
+      const syncDecl = () => {
+        if (isRecording) return;
+        btnRec.disabled = !declOk();
+        const h = document.getElementById("declHint");
+        if (h) h.textContent = declOk() ? "" : t("Both confirmations and the coach name are needed to record.", "रिकॉर्ड करने के लिए दोनों पुष्टि और कोच का नाम ज़रूरी है।");
+      };
+      declAth.onchange = () => { dst.ath = declAth.checked; syncDecl(); };
+      declCoach.onchange = () => { dst.coach = declCoach.checked; syncDecl(); };
+      const declName = document.getElementById("declName"); if (declName) declName.addEventListener("input", () => { state.assessor = declName.value; persist(); syncDecl(); });
+      syncDecl();
+      let curDecl = null;
 
       function currentCalib() {
         return frameW ? getCalib(test.key, frameW, frameH) : null;
@@ -4051,15 +4081,15 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         } catch (e) { recorder = null; }
       }
       // Stops the recorder and stores the clip under the attempt's key; returns the metadata kept on the attempt.
-      function stopRecorder(vkey, attemptNo, durationSec, hKey) {
+      function stopRecorder(vkey, attemptNo, durationSec, hKey, decl) {
         const rec = recorder; recorder = null;
         if (!rec || rec.state === "inactive") return null;
-        const meta = { key: vkey, mime: rec.mimeType || "video/webm", durationSec };
+        const meta = { key: vkey, mime: rec.mimeType || "video/webm", durationSec, decl: decl || null };
         rec.onstop = async () => {
           const blob = new Blob(rec._chunks || [], { type: meta.mime });
           if (!blob.size) return;
           try {
-            await VDB.put(vkey, { blob, mime: meta.mime, durationSec, sizeBytes: blob.size, athleteId: athlete.id, testKey: test.key, attemptNo, savedAt: Date.now() });
+            await VDB.put(vkey, { blob, mime: meta.mime, durationSec, decl: meta.decl, sizeBytes: blob.size, athleteId: athlete.id, testKey: test.key, attemptNo, savedAt: Date.now() });
             const h = state.results[hKey]?.attemptsHistory?.[attemptNo - 1];
             if (h && h.video) { h.video.sizeBytes = blob.size; h.video.oversize = blob.size > test.maxMB * 1048576 * 1.5; persist(); }
           } catch (e) { /* storage full or unavailable: the attempt keeps no stored clip */ }
@@ -4073,7 +4103,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         const key = cellKey(athlete.id, test.key);
         const prevHistory = state.results[key]?.attemptsHistory || [];
         const attemptNo = prevHistory.length + 1;
-        const videoMeta = stopRecorder(`v:${athlete.id}:${test.key}:${attemptNo}:${Date.now().toString(36)}`, attemptNo, captureElapsed, key) // unique per recording, so resetting attempts can never overwrite earlier evidence;
+        const videoMeta = stopRecorder(`v:${athlete.id}:${test.key}:${attemptNo}:${Date.now().toString(36)}`, attemptNo, captureElapsed, key, curDecl) // unique per recording, so resetting attempts can never overwrite earlier evidence;
         stopCamera();
         const attemptOut = computeAttemptResult(test, athlete, recordedFrames, fps, calibUsed);
         if (videoMeta) attemptOut.video = videoMeta;
@@ -4106,6 +4136,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           cal.mode = null;
           canvasEl.style.pointerEvents = "none";
           if (calPanel) calPanel.style.display = "none";
+          if (!declOk()) return syncDecl();
+          curDecl = { v: 1, athlete: athlete.name, minor: athlete.age < 18, assessor: state.assessor.trim(), at: Date.now() };
           isRecording = true;
           captureElapsed = 0;
           let validSec = 0;
@@ -4157,7 +4189,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
     }
 
 
-const parH = a => { const f = (c, sr) => c ? `${c} cm (${sr === "measured" ? t("measured", "मापी") : t("self-reported", "स्वयं बताई")})` : t("not recorded", "दर्ज नहीं"); return `${t("Mother", "माँ")} ${f(a.motherCm, a.motherSrc)} · ${t("Father", "पिता")} ${f(a.fatherCm, a.fatherSrc)}`; };
+const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attempts || []).forEach(x => { if (x.video && x.video.sizeBytes) { n++; if (x.video.decl) d++; } })); return { n, d }; };
+    const parH = a => { const f = (c, sr) => c ? `${c} cm (${sr === "measured" ? t("measured", "मापी") : t("self-reported", "स्वयं बताई")})` : t("not recorded", "दर्ज नहीं"); return `${t("Mother", "माँ")} ${f(a.motherCm, a.motherSrc)} · ${t("Father", "पिता")} ${f(a.fatherCm, a.fatherSrc)}`; };
     function donutH(sm) {
       const segs = [[sm.g, "var(--green)"], [sm.am, "var(--amber)"], [sm.rj, "var(--red)"], [sm.nr, "var(--line-strong)"]];
       let off = 25;
@@ -4213,6 +4246,7 @@ const parH = a => { const f = (c, sr) => c ? `${c} cm (${sr === "measured" ? t("
   <div class="rec-box"><h3>${t("Sit-up rule audit", "सिट-अप नियम ऑडिट")}</h3><ul>${audit}</ul></div>
   <div class="rec-box"><h3>${t("Re-test suggested", "दोबारा टेस्ट सुझाया")}</h3><ul>${rt.length ? rt.join("") : `<li>${t("None", "कोई नहीं")}</li>`}</ul></div>
  </div>
+ ${(() => { const v = vidStats(a); return v.n ? `<p class="nb">${v.n} ${v.n === 1 ? t("attempt video is", "प्रयास वीडियो") : t("attempt videos are", "प्रयास वीडियो")} ${t("kept on the assessor's phone", "मूल्यांकनकर्ता के फ़ोन पर रखे हैं")}. ${v.d === v.n ? t("Every video carries the athlete and coach authenticity declaration.", "हर वीडियो के साथ एथलीट और कोच की प्रामाणिकता घोषणा है।") : `${v.d} ${t("of them carry the athlete and coach authenticity declaration.", "के साथ एथलीट और कोच की प्रामाणिकता घोषणा है।")}`}</p>` : ""; })()}
  <p class="nb">${t("Raw measurements only. No grades, percentiles or norms are applied, because validated Indian norm data does not exist yet. ≈ marks an estimate. ✕ marks a rejected attempt.", "केवल वास्तविक माप। कोई ग्रेड, पर्सेंटाइल या मानक लागू नहीं, क्योंकि मान्य भारतीय मानक डेटा अभी उपलब्ध नहीं है। ≈ अनुमान दर्शाता है। ✕ अस्वीकृत प्रयास दर्शाता है।")}</p>
 </div>`;
     }
@@ -4255,7 +4289,7 @@ const parH = a => { const f = (c, sr) => c ? `${c} cm (${sr === "measured" ? t("
    <div>${r.attempts.map((x, k) => `<div class="att"><span class="k">${t("Attempt", "प्रयास")} ${k + 1}</span>${x.ok ? `<span class="v">${fmtS(te, x.v)}</span>${x.v === r.best && valid > 1 ? `<span class="tag ai">${t("Best", "सर्वश्रेष्ठ")}</span>` : ""}` : `${shape("R", 14)}<span class="grow"><b style="color:var(--red)">${t("Rejected", "अस्वीकृत")}</b> · ${esc(x.why)}</span>`}</div>`).join("")}</div></div>` : ""}
   ${(() => {
       const rows = [];
-      r.attempts.forEach((x, k) => { if (x.video) rows.push(`<div class="att"><span class="k">${t("Attempt", "प्रयास")} ${k + 1}</span><span class="grow small">${x.video.sizeBytes ? `${t("Video saved", "वीडियो सहेजा")} · ${Math.round(x.video.durationSec || 0)} s · ${fmtMB(x.video.sizeBytes)}${x.video.oversize ? ` · ${t("over the size limit", "आकार सीमा से अधिक")}` : ""}` : t("Video not stored", "वीडियो सहेजा नहीं गया")}</span>${x.video.sizeBytes ? `<button class="btn q" style="flex:0 0 auto;min-height:40px;padding:4px 12px" data-act="dlmedia" data-k="${esc(x.video.key)}" data-n="${esc(safeName(a.name) + "_" + te.id + "_attempt" + (k + 1))}">${IC.dl}</button>` : ""}</div>`); });
+      r.attempts.forEach((x, k) => { if (x.video) rows.push(`<div class="att"><span class="k">${t("Attempt", "प्रयास")} ${k + 1}</span><span class="grow small">${x.video.sizeBytes ? `${t("Video saved", "वीडियो सहेजा")} · ${Math.round(x.video.durationSec || 0)} s · ${fmtMB(x.video.sizeBytes)}${x.video.oversize ? ` · ${t("over the size limit", "आकार सीमा से अधिक")}` : ""}${x.video.decl ? ` · ${t("declared by athlete and coach", "एथलीट और कोच द्वारा घोषित")}` : ""}` : t("Video not stored", "वीडियो सहेजा नहीं गया")}</span>${x.video.sizeBytes ? `<button class="btn q" style="flex:0 0 auto;min-height:40px;padding:4px 12px" data-act="dlmedia" data-k="${esc(x.video.key)}" data-n="${esc(safeName(a.name) + "_" + te.id + "_attempt" + (k + 1))}">${IC.dl}</button>` : ""}</div>`); });
       if (r.photo && r.photo.sizeBytes) rows.push(`<div class="att"><span class="k">${t("Photo", "फोटो")}</span><span class="grow small">${t("Scale display", "मशीन का डिस्प्ले")} · ${fmtMB(r.photo.sizeBytes)}</span><button class="btn q" style="flex:0 0 auto;min-height:40px;padding:4px 12px" data-act="dlmedia" data-k="${esc(r.photo.key)}" data-n="${esc(safeName(a.name) + "_weight_photo")}">${IC.dl}</button></div>`);
       return rows.length ? `<div class="sec"><span class="eyebrow">${t("Recordings kept on this phone", "इस फ़ोन पर रखी रिकॉर्डिंग")}</span><div>${rows.join("")}</div></div>` : "";
     })()}
@@ -4282,7 +4316,7 @@ const parH = a => { const f = (c, sr) => c ? `${c} cm (${sr === "measured" ? t("
 
     // ---- A4 PDF pages (print-root) -----------------------------------------------
     function pdfHead(title) { return `<div class="ph"><img class="lg" src="sai-logo.png" alt="SAI"><div class="org"><b>Sports Authority of India</b><span>${t("National Hackathon on AI-Powered Battery Fitness Assessment", "AI-संचालित बैटरी फिटनेस मूल्यांकन पर राष्ट्रीय हैकथॉन")}</span></div><div class="ti"><b>${title}</b><div class="ptri"><i></i><i></i><i></i></div></div></div>`; }
-    function pdfFoot(i, n, guardian = true) { return `<div class="pf"><div class="sig"><div>${t("Assessor", "मूल्यांकनकर्ता")}: ${esc(state.assessor) || "&nbsp;"}<span>${t("Signature and date", "हस्ताक्षर और तिथि")}</span></div>${guardian ? `<div>${t("Parent / guardian", "अभिभावक")}<span>${t("Signature and date", "हस्ताक्षर और तिथि")}</span></div>` : '<div style="border:0"></div>'}</div><div class="fl"><span>${t("Video was processed on the assessor's phone and never stored or uploaded. Share only with the athlete, guardian, school and SAI officials.", "वीडियो मूल्यांकनकर्ता के फ़ोन पर प्रोसेस हुआ, न सहेजा गया न अपलोड। केवल एथलीट, अभिभावक, स्कूल और SAI अधिकारियों के साथ साझा करें।")}</span><span class="ds"><img src="dset_logo.png" alt="">DSeT Consulting</span><span style="white-space:nowrap;font-weight:700;color:#0B0F14">${t("Page", "पृष्ठ")} ${i} ${t("of", "/")} ${n}</span></div></div>`; }
+    function pdfFoot(i, n, guardian = true) { return `<div class="pf"><div class="sig"><div>${t("Assessor", "मूल्यांकनकर्ता")}: ${esc(state.assessor) || "&nbsp;"}<span>${t("Signature and date", "हस्ताक्षर और तिथि")}</span></div>${guardian ? `<div>${t("Parent / guardian", "अभिभावक")}<span>${t("Signature and date", "हस्ताक्षर और तिथि")}</span></div>` : '<div style="border:0"></div>'}</div><div class="fl"><span>${t("Video was processed on the assessor's phone, is kept there for audit and is not uploaded. Share this report only with the athlete, guardian, school and SAI officials.", "वीडियो मूल्यांकनकर्ता के फ़ोन पर प्रोसेस हुआ, ऑडिट के लिए वहीं रखा है और अपलोड नहीं हुआ। यह रिपोर्ट केवल एथलीट, अभिभावक, स्कूल और SAI अधिकारियों के साथ साझा करें।")}</span><span class="ds"><img src="dset_logo.png" alt="">DSeT Consulting</span><span style="white-space:nowrap;font-weight:700;color:#0B0F14">${t("Page", "पृष्ठ")} ${i} ${t("of", "/")} ${n}</span></div></div>`; }
     function pdfAthlete(a, i, n) {
       return `<section class="page">${pdfHead(t("Battery Fitness Report Card", "बैटरी फिटनेस रिपोर्ट कार्ड"))}<div class="pb">${recordBody(a, false)}</div>${pdfFoot(i, n)}</section>`;
     }
