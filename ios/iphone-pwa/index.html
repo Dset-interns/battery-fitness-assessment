@@ -464,16 +464,16 @@ body.cam .rotate{display:none!important}
         nameEn: "Weight", nameHi: "वज़न (Weight)",
         minSec: 0, maxSec: 0, minMB: 0.1, maxMB: 1,
         attempts: 1, unit: "kg", mode: "Manual", isPhoto: true,
-        guideEn: "Subject stands in centre of calibrated digital scale in minimal clothing. Record weight to nearest 0.1 kg.",
-        guideHi: "डिजिटल वज़न मशीन के बीच में सीधे खड़े हों और 0.1 किग्रा तक वज़न दर्ज करें।"
+        guideEn: "Athlete stands barefoot at the centre of the scale in minimal clothing, still, arms by the sides. Record the weight from the display, rounded to the nearest kg.",
+        guideHi: "एथलीट कम कपड़ों में नंगे पैर मशीन के बीच में स्थिर खड़ा हो, हाथ बगल में। डिस्प्ले से वज़न नज़दीकी किलोग्राम तक दर्ज करें।"
       },
       {
         number: 3, key: "sit_and_reach",
         nameEn: "Sit and Reach", nameHi: "सिट एंड रीच (Sit & Reach)",
         minSec: 5, maxSec: 30, minMB: 2, maxMB: 15,
         attempts: 3, unit: "cm", mode: "AI", isPhoto: false,
-        guideEn: "Side profile view. You MUST sit on the floor with legs extended horizontally (standing/other exercises are rejected). Keep knees straight (≥165°) and reach forward toward/past your toes.",
-        guideHi: "बगल से कैमरा रखें। जमीन पर बैठकर पैर सीधे फैलाएं (खड़े होने पर प्रयास अमान्य होगा)। घुटने सीधे (≥165°) रखते हुए पंजों की ओर आगे झुकें।"
+        guideEn: "Side view. Floor tape 0–53 cm placed midway between the legs with the 23 cm mark exactly on the heel line. Sit with legs straight in a V, heels about 30 cm apart, knees flat, toes up. Reach slowly with palms down, hands together, and hold the farthest point for 2 seconds. No bouncing. The score is the tape reading, with nothing added or subtracted. Three attempts from the same position, best counts.",
+        guideHi: "साइड व्यू। दोनों पैरों के बीच फ़र्श पर 0–53 cm टेप, 23 cm का निशान एड़ी की रेखा पर। पैर सीधे V आकार में, एड़ियाँ लगभग 30 cm दूर, घुटने ज़मीन पर, पंजे ऊपर। हथेलियाँ नीचे, हाथ साथ रखकर धीरे आगे बढ़ें और सबसे दूर बिंदु पर 2 सेकंड रुकें। झटका नहीं। स्कोर टेप की रीडिंग है, कुछ जोड़ना या घटाना नहीं। एक ही स्थिति से तीन प्रयास, सर्वश्रेष्ठ गिना जाएगा।"
       },
       {
         number: 4, key: "vertical_jump",
@@ -495,41 +495,41 @@ body.cam .rotate{display:none!important}
         number: 6, key: "medicine_ball_throw",
         nameEn: "Medicine Ball Throw", nameHi: "मेडिसिन बॉल थ्रो",
         minSec: 15, maxSec: 30, minMB: 3, maxMB: 15,
-        attempts: 2, unit: "cm", mode: "Manual", isPhoto: false,
-        guideEn: "Seated on floor with back against wall. Hold medicine ball (1 kg for girls & U-12 boys; 2 kg for 12+ boys) at chest and push forward.",
-        guideHi: "दीवार से पीठ सटाकर बैठें और मेडिसिन बॉल को छाती से आगे की ओर फेंकें।"
+        attempts: 3, unit: "cm", mode: "Manual", isPhoto: false,
+        guideEn: "Backward overhead throw. Stand with your back to the throw and heels at the line. Swing the ball down between the legs, then throw back over the head with a backward arch. Ball: 2 kg for males, 1 kg for females. Distance is measured from the line to where the ball first lands, in metres and centimetres. Three attempts, best counts.",
+        guideHi: "पीछे की ओर सिर के ऊपर से थ्रो। पीठ थ्रो की दिशा में, एड़ियाँ रेखा पर। गेंद को पैरों के बीच से झुलाकर पीछे की ओर फेंकें। गेंद: पुरुष 2 kg, महिला 1 kg। दूरी रेखा से गेंद के पहली बार गिरने तक, मीटर और सेंटीमीटर में। तीन प्रयास, सर्वश्रेष्ठ गिना जाएगा।"
       },
       {
         number: 7, key: "sprint_30m",
-        nameEn: "30m Standing Start", nameHi: "30 मीटर स्प्रिंट",
+        nameEn: "30 m Run", nameHi: "30 मीटर दौड़",
         minSec: 10, maxSec: 45, minMB: 2, maxMB: 25,
         attempts: 2, unit: "s", mode: "Planned", isPhoto: false,
-        guideEn: "Standing start behind start line. Run 30m maximally on command. Best of 2 trials recorded in seconds.",
-        guideHi: "स्टार्ट लाइन के पीछे से 30 मीटर अधिकतम गति से दौड़ें।"
+        guideEn: "Standing start behind the line. On “ready” and “go”, run 30 m as fast as possible, one athlete at a time. Timing starts at the first movement and stops when the torso reaches the finish line. Two trials, best time counts, in seconds to two decimals.",
+        guideHi: "रेखा के पीछे खड़े होकर शुरुआत। “रेडी” और “गो” पर 30 मीटर पूरी गति से दौड़ें, एक समय में एक एथलीट। पहली हरकत पर समय शुरू, धड़ के फ़िनिश रेखा पर पहुँचने पर रुकेगा। दो प्रयास, सर्वश्रेष्ठ समय, सेकंड में दो दशमलव तक।"
       },
       {
         number: 8, key: "shuttle_run",
-        nameEn: "6 × 10m Shuttle Run", nameHi: "6 × 10 मीटर शटल रन",
+        nameEn: "4 × 10 m Shuttle Run", nameHi: "4 × 10 मीटर शटल रन",
         minSec: 15, maxSec: 60, minMB: 3, maxMB: 30,
-        attempts: 2, unit: "s", mode: "Planned", isPhoto: false,
-        guideEn: "Two parallel lines 10m apart. Sprint back and forth 6 times (60m total), touching each line with hand/foot.",
-        guideHi: "10 मीटर की दूरी पर बनी दो रेखाओं के बीच 6 बार तेजी से दौड़ें।"
+        attempts: 1, unit: "s", mode: "Planned", isPhoto: false,
+        guideEn: "Two lines 10 m apart. On “GO” run to the far line, touch it with one hand, turn and return to the start line and touch it. Repeat for 3 runs, and on the 4th run cross the line as fast as possible (40 m in total). One attempt, in seconds to two decimals.",
+        guideHi: "10 मीटर दूर दो रेखाएँ। “गो” पर दूर की रेखा तक दौड़ें, एक हाथ से छुएँ, मुड़ें और शुरुआती रेखा छुएँ। तीन बार दोहराएँ और चौथी बार रेखा पार करें (कुल 40 मीटर)। एक प्रयास, सेकंड में दो दशमलव तक।"
       },
       {
         number: 9, key: "sit_ups",
         nameEn: "Sit-Ups", nameHi: "सिट-अप्स (Sit-Ups)",
         minSec: 10, maxSec: 60, minMB: 5, maxMB: 30,
         attempts: 1, unit: "reps", mode: "AI", isPhoto: false,
-        guideEn: "Side profile view. Lie on back, knees bent, hands behind neck (Rule 3a). Curl torso up until elbows touch knees and return flat (Rule 3c).",
-        guideHi: "पीठ के बल लेटें, घुटने मोड़ें, हाथ गर्दन के पीछे रखें (3a)। कोहनी घुटनों से छुएं और वापस जमीन पर लाएं (3c)।"
+        guideEn: "Side view. Lie on your back, knees bent below 90°, heels within 30 cm of the buttocks, fingers clasped behind the neck, elbows on the floor. Curl up until the elbows touch the knees, then return with the elbows flat before the next sit-up. 45 seconds, one trial. A sit-up does not count if the fingers come unclasped (2a), an elbow pushes off the floor (2b), or the elbows do not return flat (2c).",
+        guideHi: "साइड व्यू। पीठ के बल लेटें, घुटने 90° से कम मुड़े, एड़ियाँ नितंब से 30 cm के भीतर, उँगलियाँ गर्दन के पीछे जुड़ी, कोहनियाँ ज़मीन पर। कोहनियाँ घुटनों से छूने तक उठें, फिर अगले सिट-अप से पहले कोहनियाँ ज़मीन पर सपाट लाएँ। 45 सेकंड, एक प्रयास। उँगलियाँ खुलें (2a), कोहनी से ज़मीन को धक्का दें (2b), या कोहनियाँ सपाट न लौटें (2c) तो सिट-अप नहीं गिना जाएगा।"
       },
       {
         number: 10, key: "endurance_run",
-        nameEn: "800m / 1.6km Run", nameHi: "800 मी / 1.6 किमी दौड़",
-        minSec: 120, maxSec: 900, minMB: 20, maxMB: 200,
+        nameEn: "800 m Endurance Run", nameHi: "800 मीटर एंड्योरेंस रन",
+        minSec: 120, maxSec: 1020, minMB: 20, maxMB: 200,
         attempts: 1, unit: "s", mode: "Manual", isPhoto: false,
-        guideEn: "U-12 athletes run 800m; 12+ athletes run 1.6km (1600m). Record total completion time in seconds.",
-        guideHi: "12 वर्ष से कम आयु के लिए 800 मीटर और 12+ वर्ष के लिए 1.6 किमी दौड़ का समय दर्ज करें।"
+        guideEn: "Standing start at the line. On “ready” and the starting signal, run 800 m as fast as possible. If there is no 200/400 m track, measure exactly 800 m (for example with a measuring wheel). One attempt. Record the time in minutes and seconds.",
+        guideHi: "रेखा पर खड़े होकर शुरुआत। “रेडी” और शुरुआती संकेत पर 800 मीटर पूरी गति से दौड़ें। 200/400 मीटर ट्रैक न हो तो ठीक 800 मीटर नापें (जैसे मेज़रिंग व्हील से)। एक प्रयास। समय मिनट और सेकंड में दर्ज करें।"
       }
     ];
 
@@ -1563,9 +1563,11 @@ body.cam .rotate{display:none!important}
         cmPerPx = tibiaCm / tibiaPx;
       }
 
-      const reachCm = reachPx * cmPerPx;
-      const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
-      const scoreCm = boxOffset + reachCm;
+      const reachCm = reachPx * cmPerPx; // relative to the toes, used for posture gating only
+      const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0; // tape mark that sits on the heel line (23 cm)
+      // Revised handbook: the score is the tape reading and 23 cm is the heel line, so measure from the heel, not the toes.
+      const heelOffsetCm = Math.max(0, ((ft.x - heel.x) * u.x + (ft.y - heel.y) * u.y) * cmPerPx);
+      const scoreCm = boxOffset + reachCm + heelOffsetCm;
       // Knees are flat & straight ONLY if angle >= 165°, knee is not lifted above floor line, thigh doesn't point up, and trunk-thigh angle >= 22°
       const kneeUp = maxKneeLiftRatio > 0.058 || thighUpFoul || trunkDeg < 22;
       const kneeOk = kneeDeg >= 165 && !kneeUp;
@@ -1591,6 +1593,7 @@ body.cam .rotate{display:none!important}
         isReaching,
         reachPx,
         reachCm,
+        heelOffsetCm,
         scoreCm,
         cmPerPx,
         scaleMode,
@@ -1602,7 +1605,7 @@ body.cam .rotate{display:none!important}
         liveMetric: !kneeOk
           ? `${t("FOUL: Knees up/bent", "फाउल: घुटने उठे/मुड़े")} (${kneeDeg.toFixed(0)}°)`
           : (isReaching
-              ? `${scoreCm.toFixed(1)} cm (${reachCm >= 0 ? "+" : ""}${reachCm.toFixed(1)} cm ${t("vs toes", "पंजों से")})`
+              ? `${scoreCm.toFixed(1)} cm (${t("tape reading", "टेप रीडिंग")})`
               : t("Seated — bend forward & reach toward toes", "बैठे हैं — आगे झुकें और पंजों की ओर हाथ बढ़ाएँ")),
         reason: !kneeOk
           ? `${t("FOUL: Keep knees flat on floor", "फाउल: घुटने ज़मीन पर सीधे रखें")} (${kneeDeg.toFixed(0)}° < 165°)`
@@ -1646,13 +1649,13 @@ body.cam .rotate{display:none!important}
       };
     }
 
-    // TEST 9 — SIT-UPS (Scale-free isotropic joint angles + SAI Handbook Rules 1, 2, 3a, 3b, 3c)
+    // TEST 9 — SIT-UPS (Scale-free isotropic joint angles + revised KHOJ handbook, Rule 2a, 2b, 2c)
     // Enforces:
     //  - Rule 1: Lying on floor (rejects standing or upright swinging without lying flat on back <= 28°)
-    //  - Rule 2: Knees MUST be bent (60°–120°) with knee apex raised above the hip-ankle floor line + No resting > 3.0s between reps
-    //  - Rule 3a: Hands clasped behind neck/head
-    //  - Rule 3b: Curl torso up (>= 46°) until elbows reach knees WITHOUT pushing off the floor with the elbow
-    //  - Rule 3c: Return shoulder blades & elbows flat to floor (torsoDeg <= 28° and hipDeg >= 104°) before next rep counts
+    //  - Setup: Knees MUST be bent (60°–120°; the handbook says under 90°, relaxed for pose-estimation noise) with knee apex raised above the hip-ankle floor line
+    //  - Rule 2a: Hands clasped behind neck/head
+    //  - Rule 2b: Curl torso up (>= 46°) until elbows reach knees WITHOUT pushing off the floor with the elbow
+    //  - Rule 2c: Return shoulder blades & elbows flat to floor (torsoDeg <= 28° and hipDeg >= 104°) before next rep counts
     function evalSitUps(lm, mask, W, H) {
       const s = sideChain(lm);
       for (const i of [s.sh, s.hip, s.kn, s.an]) {
@@ -1729,7 +1732,7 @@ body.cam .rotate{display:none!important}
         anX: an.x, anY: an.y,
         liveMetric: stateText,
         reason: !kneeBentOk
-          ? t("🚫 FOUL (Rule 2): Your knees are straight! Bend your knees (~90°) with feet flat on the floor.", "🚫 फाउल (नियम 2): आपके घुटने सीधे हैं! घुटनों को ~90° मोड़ें और पैर ज़मीन पर रखें।")
+          ? t("🚫 FOUL (Setup): Your knees are straight! Bend your knees (~90°) with feet flat on the floor.", "🚫 फाउल (सेटअप): आपके घुटने सीधे हैं! घुटनों को ~90° मोड़ें और पैर ज़मीन पर रखें।")
           : t("Start flat on back (Torso ≤28°) → Curl up to knees (Torso ≥46°, Hip ≤88°) → Return flat to floor (≤28°).",
               "पीठ के बल सीधा लेटें (धड़ ≤28°) → घुटनों तक उठें (धड़ ≥46°) → वापस सीधा लेटें (≤28°)।")
       };
@@ -1965,17 +1968,17 @@ body.cam .rotate{display:none!important}
         const nearPeakHoldMs = nearPeakFrames.length >= 2
           ? (nearPeakFrames[nearPeakFrames.length - 1].t - nearPeakFrames[0].t)
           : 0;
-        if (nearPeakFrames.length < 3 || nearPeakHoldMs < 220) {
+        if (nearPeakFrames.length < 3 || nearPeakHoldMs < 1800) {
           return rejected(test, t("FOUL — Jerky bounce (reach not held)", "फाउल — झटके से छूना (रोका नहीं गया)"),
-            t("SAI Rule Foul: Do not bounce! Reach forward smoothly and hold your maximum reach steady for 1–2 seconds.",
-              "SAI नियम उल्लंघन: झटका न दें! आगे झुककर अधिकतम पहुँच को 1–2 सेकंड तक स्थिर रखें।"));
+            t("SAI Rule Foul: Do not bounce! Reach forward smoothly and hold your maximum reach steady for 2 seconds.",
+              "SAI नियम उल्लंघन: झटका न दें! आगे झुककर अधिकतम पहुँच को 2 सेकंड तक स्थिर रखें।"));
         }
 
         // Prefer a held plateau window (≥450 ms with spread ≤2.5 cm), fallback to 85th percentile valid reach
         let heldReach = pct(r, 0.85);
         for (let i = 0; i < reachingFrames.length; i++) {
           let j = i;
-          while (j < reachingFrames.length && (reachingFrames[j].t - reachingFrames[i].t) < 450) j++;
+          while (j < reachingFrames.length && (reachingFrames[j].t - reachingFrames[i].t) < 1800) j++;
           if (j >= reachingFrames.length) break;
           const win = r.slice(i, j + 1);
           const sp = Math.max(...win) - Math.min(...win);
@@ -1988,7 +1991,8 @@ body.cam .rotate{display:none!important}
         }
 
         const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
-        const score = Math.max(0.0, boxOffset + heldReach);
+        const heelOff = median(reachingFrames.map(f => f.heelOffsetCm || 0));
+        const score = Math.max(0.0, boxOffset + heldReach + heelOff);
         const minKnee = Math.min(minKneeAtPeak, minKneeDuringReach);
         const isCalib = !!calib && calib.method !== "distance";
 
@@ -1997,10 +2001,10 @@ body.cam .rotate{display:none!important}
           value: Number(score.toFixed(1)),
           unit: "cm",
           confidence: isCalib ? "GREEN" : "AMBER",
-          method: `${reachingFrames[0].scaleMode} · Held reach ${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes)`,
+          method: `${reachingFrames[0].scaleMode} · Held reach ${score.toFixed(1)} cm (tape reading, 23 cm = heel line)`,
           audit: [{
             label: "Peak Held Reach",
-            detail: `${score.toFixed(1)} cm (${heldReach >= 0 ? "+" : ""}${heldReach.toFixed(1)} cm vs toes) · Excursion ${excursion.toFixed(1)} cm · Hold ${(nearPeakHoldMs / 1000).toFixed(2)}s · Knee ≥${minKnee.toFixed(0)}° PASS`,
+            detail: `${score.toFixed(1)} cm (tape reading, 23 cm = heel line) · Excursion ${excursion.toFixed(1)} cm · Hold ${(nearPeakHoldMs / 1000).toFixed(2)}s · Knee ≥${minKnee.toFixed(0)}° PASS`,
             valid: true
           }]
         };
@@ -2301,15 +2305,15 @@ body.cam .rotate{display:none!important}
 
       // ---------------- TEST 9: SIT-UPS ----------------
       // Enforces ALL SAI Handbook Test IX Rules:
-      //  - Window cutoff: 30s for Under-12 (age < 12), 45s for 12+ (age >= 12)
+      //  - Window cutoff: 45 s for every athlete (revised KHOJ handbook, Oct 2026)
       //  - Rule 1: Supine on floor with knees bent (<= 120°), rejects standing or upright swinging
-      //  - Rule 2: No resting between sit-ups (> 3.0s gap at bottom flags Rule 2 foul)
-      //  - Rule 3a: Fingers clasped behind the neck (wristEar <= 0.85)
-      //  - Rule 3b: Elbows brought forward to touch knees WITHOUT pushing off the floor with the elbow during rise
-      //  - Rule 3c: Return to starting position with back & elbows flat on the surface before next rep
+      //  - (No-resting rule removed in the revised handbook)
+      //  - Rule 2a: Fingers clasped behind the neck (wristEar <= 0.85)
+      //  - Rule 2b: Elbows brought forward to touch knees WITHOUT pushing off the floor with the elbow during rise
+      //  - Rule 2c: Return to starting position with back & elbows flat on the surface before next rep
       if (test.key === "sit_ups") {
         const athleteAge = Number(athlete?.age) || 16;
-        const windowSec = athleteAge < 12 ? 30 : 45;
+        const windowSec = 45; // revised handbook: 45 s for every athlete
         const t0 = ok[0].t;
         const windowCutMs = t0 + windowSec * 1000.0;
 
@@ -2329,20 +2333,20 @@ body.cam .rotate{display:none!important}
         if (medKnee > 120 || straightKneeRatio > 0.65) {
           return {
             valid: false, value: null, unit: "reps", confidence: "RED",
-            method: t(`FOUL (Rule 2) — Knees straight (${medKnee.toFixed(0)}° > 120°)`, `फाउल (नियम 2) — घुटने सीधे हैं (${medKnee.toFixed(0)}° > 120°)`),
+            method: t(`FOUL (Setup) — Knees straight (${medKnee.toFixed(0)}° > 120°)`, `फाउल (सेटअप) — घुटने सीधे हैं (${medKnee.toFixed(0)}° > 120°)`),
             audit: [{
-              label: "Rule 2 Foul (Knees Straight)",
+              label: "Setup Foul (Knees Straight)",
               detail: `Attempt rejected: Knees remained straight (${medKnee.toFixed(0)}° > 120° max allowed). You must bend your knees (~90°) with feet flat on the floor.`,
               valid: false
             }]
           };
         }
 
-        // 2. Check Rule 1 & 3c: Swinging/rocking in an upright seated position without ever lying flat on back (torso <= 28°)
+        // 2. Check Rule 2c: Swinging/rocking in an upright seated position without ever lying flat on back (torso <= 28°)
         if (minTorso > 28 || maxHip < 102) {
           return {
             valid: false, value: null, unit: "reps", confidence: "RED",
-            method: t(`FOUL (Rule 1/3c) — Swinging upright without lying flat (min torso ${minTorso.toFixed(0)}° > 28°)`,
+            method: t(`FOUL (Rule 2c) — Swinging upright without lying flat (min torso ${minTorso.toFixed(0)}° > 28°)`,
                       `फाउल — पीठ के बल सीधा लेटे बिना ऊपर ही झूलना (न्यूनतम धड़ ${minTorso.toFixed(0)}° > 28°)`),
             audit: [{
               label: "Upright Swinging Rejected",
@@ -2379,7 +2383,7 @@ body.cam .rotate{display:none!important}
         let validReps = 0;
 
         for (let i = 0; i < ok.length; i++) {
-          if (ok[i].t > windowCutMs) break; // Handbook rule: count stops at whistle (30s U-12 / 45s 12+)
+          if (ok[i].t > windowCutMs) break; // Handbook rule: count stops at whistle (45 s for every athlete)
 
           const hAng = hipSm[i], tAng = torsoSm[i], kAng = kneeSm[i], eY = elYSm[i];
           const f = { ...ok[i], hipSm: hAng, torsoSm: tAng, kneeSm: kAng, elYSm: eY };
@@ -2400,7 +2404,7 @@ body.cam .rotate{display:none!important}
             }
             if (riseStartTimeMs !== null) {
               riseMinElbowY = Math.min(riseMinElbowY, eY);
-              // Rule 3b: elbow driving downward toward floor (Y increasing) while torso rises
+              // Rule 2b: elbow driving downward toward floor (Y increasing) while torso rises
               if ((eY - riseMinElbowY) > 0.25 * medTorsoPx) {
                 elbowPushoffDetected = true;
               }
@@ -2412,7 +2416,7 @@ body.cam .rotate{display:none!important}
             }
           } else if (phase === "UP") {
             up.push(f);
-            // Complete rep only when returning flat on back (Rule 3c: torso <= 28° and hip >= 104°)
+            // Complete rep only when returning flat on back (Rule 2c: torso <= 28° and hip >= 104°)
             if (tAng <= 28 && hAng >= 104) {
               const repFrames = [...down, ...up];
               const ek = up.map(x => x.elbowKnee).filter(v => v !== null);
@@ -2428,30 +2432,30 @@ body.cam .rotate{display:none!important}
                 : 0;
 
               const fouls = [];
-              // Rule 2: No resting between sit-ups (> 3.0s) & knees must stay bent (<= 120°)
-              if (restSec > 3.0) {
-                fouls.push(`Rule 2: rested ${restSec.toFixed(1)}s between sit-ups (>3.0s max)`);
+              // Setup: knees must stay bent (<= 120°). The no-resting rule was removed in the revised handbook.
+              if (false && restSec > 3.0) { // 'no resting' rule removed in the revised handbook
+                fouls.push(`resting ${restSec.toFixed(1)}s between sit-ups`);
               }
               if (maxKneeInRep > 120 || straightFramesInRep > repFrames.length * 0.30) {
-                fouls.push(`Rule 2: knees straight (${maxKneeInRep.toFixed(0)}° > 120°)`);
+                fouls.push(`Setup: knees straight (${maxKneeInRep.toFixed(0)}° > 120°)`);
               }
-              // Rule 3a: Fingers clasped behind neck
+              // Rule 2a: Fingers clasped behind neck
               if (we.length && median(we) > 0.85) {
-                fouls.push("Rule 3a: hands unclasped from neck/head");
+                fouls.push("Rule 2a: hands unclasped from neck/head");
               }
-              // Rule 3b: Elbows forward to touch knees WITHOUT pushing off floor with elbow
+              // Rule 2b: Elbows forward to touch knees WITHOUT pushing off floor with elbow
               if (elbowPushoffDetected) {
-                fouls.push("Rule 3b: pushed off the floor with elbow during rise");
+                fouls.push("Rule 2b: pushed off the floor with elbow during rise");
               }
               if (maxTorsoInUp < 46 || (maxTorsoInUp - minTorsoInDown) < 24) {
-                fouls.push(`Rule 3b: partial curl (torso ${maxTorsoInUp.toFixed(0)}° < 46°)`);
+                fouls.push(`Rule 2b: partial curl (torso ${maxTorsoInUp.toFixed(0)}° < 46°)`);
               }
               if (ek.length && Math.min(...ek) > 0.68) {
-                fouls.push("Rule 3b: elbows did not reach knees");
+                fouls.push("Rule 2b: elbows did not reach knees");
               }
-              // Rule 3c: Return elbows & back flat to surface
+              // Rule 2c: Return elbows & back flat to surface
               if (eY < floorElbowY - 0.55 * medTorsoPx) {
-                fouls.push("Rule 3c: elbows did not return flat to the floor");
+                fouls.push("Rule 2c: elbows did not return flat to the floor");
               }
 
               const repOk = fouls.length === 0;
@@ -2473,12 +2477,12 @@ body.cam .rotate{display:none!important}
           }
         }
 
-        // If athlete curled up at the end and oscillated upright without returning flat to floor (Rule 3c violation):
+        // If athlete curled up at the end and oscillated upright without returning flat to floor (Rule 2c violation):
         if (phase === "UP" && up.length >= 4) {
           const endTorso = up[up.length - 1].torsoSm;
           audit.push({
             label: `Rep #${audit.length + 1}`,
-            detail: `🚫 FOUL — Rule 3c: Did not return flat to floor after curl (ended upright at torso ${endTorso.toFixed(0)}° > 28°)`,
+            detail: `🚫 FOUL — Rule 2c: Did not return flat to floor after curl (ended upright at torso ${endTorso.toFixed(0)}° > 28°)`,
             valid: false
           });
         }
@@ -2530,7 +2534,7 @@ body.cam .rotate{display:none!important}
     const VW = {
       sheet: null, modal: null, toast: null, genstep: 0, list: state.sequencing === "ATHLETE_WISE" ? "athletes" : "stations",
       mode: state.session?.mode === "INDIVIDUAL" ? "indiv" : "coach", picked: null,
-      reg: { name: "", age: "", g: "", school: "", idType: "none", idNo: "", date: todayISO() },
+      reg: { name: "", age: "", g: "", school: "", idType: "none", idNo: "", date: todayISO(), motherCm: "", motherSrc: "", fatherCm: "", fatherSrc: "" },
       entry: { m: "", s: "", val: "" }, manualFrom: "session", capFail: null
     };
 
@@ -2604,10 +2608,11 @@ body.cam .rotate{display:none!important}
     }
     let ATH = [];
     function buildAth() {
+      // (athlete records already carry motherCm/fatherCm and their sources)
       ATH = rosterAthletes().map(a => {
         const o = {
           id: a.id, raw: a, name: a.name, age: a.age, g: a.gender === "F" ? t("Female", "महिला") : a.gender === "M" ? t("Male", "पुरुष") : t("Other", "अन्य"),
-          school: a.school || "", idType: (a.idType && a.idType !== "LOCAL") ? a.idType : "none", idNo: a.externalId || "", date: a.date || todayISO(), r: {}
+          school: a.school || "", motherCm: a.motherCm || null, motherSrc: a.motherSrc || "", fatherCm: a.fatherCm || null, fatherSrc: a.fatherSrc || "", idType: (a.idType && a.idType !== "LOCAL") ? a.idType : "none", idNo: a.externalId || "", date: a.date || todayISO(), r: {}
         };
         TESTS.forEach(te => { o.r[te.id] = adaptResult(a, te); });
         return o;
@@ -2616,16 +2621,19 @@ body.cam .rotate{display:none!important}
     const dT = id => TESTS.find(x => x.id === id);
     const curA = () => ATH.find(a => a.id === state.selectedAthleteId) || ATH[0];
     const u12 = a => a.age < 12;
-    const ageGrp = a => u12(a) ? t("Under 12", "12 से कम") : t("12 and above", "12 और ऊपर");
+    const ageGrp = a => a.g; // gender label; age no longer changes any test rule
     function bandOf(a, tid) { const r = a.r[tid], te = dT(tid); if (te.m === "planned") return "N"; if (r.status === "rejected") return "R"; if (r.status === "notrec") return "P"; return r.band; }
-    function tname(a, te) { if (te.id === "run") return u12(a) ? t("800 m Run", "800 मी दौड़") : t("1.6 km Run", "1.6 किमी दौड़"); return tN(te); }
-    function tsub(a, te) { if (te.id === "situps") return (u12(a) ? 30 : 45) + " s " + t("window", "समय"); if (te.id === "mball") return (u12(a) ? 1 : 2) + " kg " + t("ball", "बॉल"); return ""; }
+    function tname(a, te) { return tN(te); }
+    function tsub(a, te) { if (te.id === "situps") return "45 s " + t("window", "समय"); if (te.id === "mball") return (a.raw.gender === "M" ? 2 : 1) + " kg " + t("ball", "बॉल"); return ""; }
     function fmtV(te, v) {
       if (v == null) return { v: "", u: "" };
       if (te.id === "run") { const s = Math.round(v); return { v: Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"), u: "min" }; }
       if (te.id === "situps") return { v: String(Math.round(v)), u: UNIT.reps };
       const n = +v;
-      return { v: (te.id === "height" || te.id === "weight" || !Number.isInteger(n)) ? n.toFixed(1) : String(n), u: UNIT[te.u] || te.u };
+      if (te.id === "weight") return { v: String(Math.round(n)), u: "kg" }; // nearest kg
+      if (te.id === "mball") return { v: (n / 100).toFixed(2), u: "m" }; // metres and centimetres
+      if (te.id === "sprint" || te.id === "shuttle") return { v: n.toFixed(2), u: "s" }; // two decimals
+      return { v: (te.id === "height" || !Number.isInteger(n)) ? n.toFixed(1) : String(n), u: UNIT[te.u] || te.u };
     }
     const fmtS = (te, v) => { const f = fmtV(te, v); return f.v + " " + f.u; };
     function athSummary(a) { let rec = 0, ai = 0, g = 0, am = 0, rj = 0, nr = 0; const rt = [], lim = []; TESTS.forEach(te => { const r = a.r[te.id], b = bandOf(a, te.id); if (r.status === "rec") { rec++; if (te.m === "ai") ai++; if (b === "G") g++; if (b === "A") am++; } if (b === "R") rj++; if (b === "P" || b === "N") nr++; if (r.retest) rt.push(te); if (r.limit && !r.retest) lim.push(te); }); return { rec, ai, g, am, rj, nr, rt, lim }; }
@@ -2766,9 +2774,7 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
     };
 
     function ageRule(age) {
-      if (!age) return `<div class="note">${IC.info}<span>${t("Enter age to set the test rules for this athlete.", "टेस्ट नियम तय करने के लिए आयु दर्ज करें।")}</span></div>`;
-      const u = +age < 12;
-      return `<div class="card" style="background:var(--primary-soft);box-shadow:none;display:flex;flex-direction:column;gap:8px"><span class="eyebrow" style="color:var(--primary)">${t("Age group", "आयु वर्ग")} · ${u ? t("Under 12", "12 से कम") : t("12 and above", "12 और ऊपर")}</span><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">${[[u ? "30 s" : "45 s", t("Sit-ups", "सिट-अप")], [u ? "1 kg" : "2 kg", t("Ball throw", "बॉल थ्रो")], [u ? "800 m" : "1.6 km", t("Run", "दौड़")]].map(([v, k]) => `<div><b class="num" style="display:block;font-size:1.375rem;line-height:1.1">${v}</b><span class="small">${k}</span></div>`).join("")}</div></div>`;
+      return `<div class="note">${IC.info}<span>${t("Age is kept for the record. Every athlete follows the same test protocol.", "आयु केवल रिकॉर्ड के लिए रखी जाती है। सभी एथलीट के लिए टेस्ट प्रोटोकॉल समान है।")}</span></div>`;
     }
     const regOK = () => { const R = VW.reg, n = parseInt(R.age, 10); return R.name.trim() && n >= 5 && n <= 25 && R.g; };
     SCR.register = () => {
@@ -2780,6 +2786,10 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
  <div class="field grow"><label for="f-date">${t("Assessment date", "मूल्यांकन तिथि")}</label><input id="f-date" type="date" data-f="date" value="${esc(R.date)}"></div></div>
  <div id="agerule">${ageRule(R.age)}</div>
  <div class="field"><span class="lab">${t("Gender", "लिंग")}</span><div class="seg">${[["Female", t("Female", "महिला")], ["Male", t("Male", "पुरुष")], ["Other", t("Other", "अन्य")]].map(([g, l]) => `<button aria-pressed="${R.g === g}" data-act="reg" data-k="g" data-v="${g}">${l}</button>`).join("")}</div></div>
+
+ <div class="field"><span class="lab">${t("Parental height (optional)", "माता-पिता की ऊँचाई (वैकल्पिक)")}</span>
+  ${[["mother", t("Mother", "माँ")], ["father", t("Father", "पिता")]].map(([k, l]) => `<div class="row" style="gap:10px;align-items:flex-end;margin-top:6px"><div class="field" style="width:120px"><label for="f-${k}">${l} (cm)</label><input id="f-${k}" data-f="${k}Cm" value="${esc(R[k + "Cm"])}" inputmode="numeric" pattern="[0-9]*" placeholder="cm"></div><div class="seg grow">${[["measured", t("Measured", "मापी")], ["self", t("Self-reported", "स्वयं बताई")]].map(([v, lb]) => `<button aria-pressed="${R[k + "Src"] === v}" data-act="reg" data-k="${k}Src" data-v="${v}">${lb}</button>`).join("")}</div></div>`).join("")}
+  <span class="hint">${t("Collected with consent, in cm, mother and father separately. Used only as an indicative input for estimating adult height, never as a measurement of current height or a selection criterion.", "सहमति से, cm में, माँ और पिता अलग-अलग। केवल वयस्क ऊँचाई के अनुमान के लिए संकेतात्मक इनपुट, वर्तमान ऊँचाई का माप या चयन मानदंड नहीं।")}</span></div>
  <div class="field"><label for="f-sch">${t("School or club", "स्कूल या क्लब")}</label><input id="f-sch" data-f="school" value="${esc(R.school)}"></div>
  <div class="field"><span class="lab">${t("Programme ID", "कार्यक्रम ID")}</span><div class="seg">${["APAAR", "Aadhaar", "NSRS", "none"].map(g => `<button aria-pressed="${R.idType === g}" data-act="reg" data-k="idType" data-v="${g}">${g === "none" ? t("None", "कोई नहीं") : g}</button>`).join("")}</div>
   ${R.idType === "none" ? `<span class="hint">${t('The report will show "ID not provided".', 'रिपोर्ट में "ID उपलब्ध नहीं" दिखेगा।')}</span>` : `<input aria-label="${t("ID number", "ID संख्या")}" placeholder="${R.idType} ${t("number", "संख्या")}" data-f="idNo" value="${esc(R.idNo)}" inputmode="numeric" style="width:100%;min-height:54px;border:0;box-shadow:inset 0 0 0 1.5px var(--line-strong);border-radius:12px;padding:0 14px;font-size:1.0625rem;background:var(--surface);color:var(--ink)">${R.idType === "Aadhaar" ? `<span class="hint">${t("Only the last 4 digits are saved and printed.", "केवल अंतिम 4 अंक सहेजे और छापे जाते हैं।")}</span>` : ""}`}</div>
@@ -2794,7 +2804,7 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
     SCR.setup = () => {
       const P = pickedMap(), n = state.athletes.filter(a => P[a.id]).length;
       const order = state.sequencing === "TEST_WISE" ? "test" : "ath";
-      const lbl = a => `${a.age} · ${a.gender === "F" ? t("Female", "महिला") : a.gender === "M" ? t("Male", "पुरुष") : t("Other", "अन्य")} · ${u12(a) ? t("Under 12", "12 से कम") : t("12 and above", "12 और ऊपर")}`;
+      const lbl = a => `${a.age} · ${a.gender === "F" ? t("Female", "महिला") : a.gender === "M" ? t("Male", "पुरुष") : t("Other", "अन्य")}`;
       return `<div class="scr">${barH(t("Start assessment", "मूल्यांकन शुरू करें"), t("Choose mode and roster", "मोड और सूची चुनें"))}
 <main class="main">
  <div class="stack" style="gap:8px"><span class="eyebrow">${t("Who is assessing", "कौन मूल्यांकन कर रहा है")}</span><div class="seg"><button aria-pressed="${VW.mode === "coach"}" data-act="mode" data-v="coach">${t("Coach", "कोच")}<small>${t("Many athletes", "कई एथलीट")}</small></button><button aria-pressed="${VW.mode === "indiv"}" data-act="mode" data-v="indiv">${t("Individual", "व्यक्तिगत")}<small>${t("One athlete", "एक एथलीट")}</small></button></div></div>
@@ -2883,7 +2893,7 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
       const field = isRun
         ? `<div class="kv"><div><input data-f2="m" value="${esc(E.m)}" inputmode="numeric" maxlength="2" aria-label="${t("Minutes", "मिनट")}" placeholder="0"><label>${t("min", "मिनट")}</label></div><span>:</span><div><input data-f2="s" value="${esc(E.s)}" inputmode="numeric" maxlength="2" aria-label="${t("Seconds", "सेकंड")}" placeholder="00"><label>${t("sec", "सेकंड")}</label></div></div>`
         : `<div class="kv"><div><input data-f2="val" value="${esc(E.val)}" inputmode="decimal" style="width:5.2ch" aria-label="${te.u}" placeholder="0"><label>${UNIT[te.u] || te.u}</label></div></div>`;
-      const hint = isRun ? t("Enter the time from the stopwatch.", "स्टॉपवॉच का समय दर्ज करें।") : te.id === "weight" ? t("Enter weight to the nearest 0.1 kg.", "0.1 किग्रा तक वज़न दर्ज करें।") : t(`Enter the measured value in ${te.u}.`, `मापा गया मान ${te.u} में दर्ज करें।`);
+      const hint = isRun ? t("Enter the time from the stopwatch.", "स्टॉपवॉच का समय दर्ज करें।") : te.id === "weight" ? t("Enter weight to the nearest kg.", "नज़दीकी किग्रा तक वज़न दर्ज करें।") : t(`Enter the measured value in ${te.u}.`, `मापा गया मान ${te.u} में दर्ज करें।`);
       return `<div class="scr">${barH(tname(a, te), `${esc(a.name)} · ${ageGrp(a)}`)}
 <main class="main" style="gap:18px">
  <div class="card" style="padding:8px 16px 20px">${field}<p class="sub" style="text-align:center">${hint}</p></div>
@@ -2896,7 +2906,7 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
       const a = curA(), te = dT(TKEY[state.selectedTestKey]) || TESTS[0], E = VW.entry;
       let val;
       if (te.id === "run") { const m = parseInt(E.m || "0", 10), s = parseInt(E.s || "0", 10); val = m * 60 + s; if (!(val > 0) || s > 59) return toast(t("Enter a valid time (seconds under 60)", "सही समय दर्ज करें (सेकंड 60 से कम)")); }
-      else { val = parseFloat(String(E.val).replace(",", ".")); if (!(val > 0)) return toast(t("Enter a value above zero, or choose Not run today", "शून्य से अधिक मान दर्ज करें या “आज नहीं हुआ” चुनें")); }
+      else { val = parseFloat(String(E.val).replace(",", ".")); if (te.id === "weight") val = Math.round(val); if (!(val > 0)) return toast(t("Enter a value above zero, or choose Not run today", "शून्य से अधिक मान दर्ज करें या “आज नहीं हुआ” चुनें")); }
       const key = cellKey(a.id, te.key);
       const entry = { valid: true, value: val, unit: te.b.unit, confidence: te.m === "manual" ? "GREEN" : "AMBER", method: te.m === "manual" ? "Assessor Protocol Entry" : "Rung 5 Manual Override", audit: [{ label: "Manual", detail: `Assessor entered ${val} ${te.b.unit}`, valid: true }] };
       entry.attemptsHistory = [...(state.results[key]?.attemptsHistory || []), { ...entry }];
@@ -3687,7 +3697,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
             ctx.fillStyle = "#FFFFFF";
             ctx.textAlign = "center";
             ctx.font = `bold ${Math.round(fontMain * 1.05)}px -apple-system, sans-serif`;
-            ctx.fillText(`🚫 FOUL (Rule 2): KNEES STRAIGHT (${ev.kneeDeg.toFixed(0)}° > 120°)`, frameW / 2, by + Math.round(fontMain * 1.35));
+            ctx.fillText(`🚫 FOUL (Setup): KNEES STRAIGHT (${ev.kneeDeg.toFixed(0)}° > 120°)`, frameW / 2, by + Math.round(fontMain * 1.35));
             ctx.font = `bold ${Math.round(fontMain * 0.85)}px -apple-system, sans-serif`;
             ctx.fillText(t("Bend your knees (~90°) with feet flat on the floor!", "घुटनों को (~90°) मोड़ें और पैर ज़मीन पर रखें!"), frameW / 2, by + Math.round(fontMain * 2.55));
             ctx.textAlign = "left";
@@ -3979,7 +3989,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
     }
 
 
-function donutH(sm) {
+const parH = a => { const f = (c, sr) => c ? `${c} cm (${sr === "measured" ? t("measured", "मापी") : t("self-reported", "स्वयं बताई")})` : t("not recorded", "दर्ज नहीं"); return `${t("Mother", "माँ")} ${f(a.motherCm, a.motherSrc)} · ${t("Father", "पिता")} ${f(a.fatherCm, a.fatherSrc)}`; };
+    function donutH(sm) {
       const segs = [[sm.g, "var(--green)"], [sm.am, "var(--amber)"], [sm.rj, "var(--red)"], [sm.nr, "var(--line-strong)"]];
       let off = 25;
       const arcs = segs.filter(x => x[0] > 0).map(([n, c]) => { const L = n / 10 * 100, d = Math.max(L - 1, .1); const e = `<circle cx="21" cy="21" r="15.9155" fill="none" stroke="${c}" stroke-width="5" stroke-dasharray="${d} ${100 - d}" stroke-dashoffset="${off}"/>`; off -= L; return e; }).join("");
@@ -4022,7 +4033,7 @@ function donutH(sm) {
       const rt = sm.rt.map(te => `<li><b>${tname(a, te)}:</b> ${esc(a.r[te.id].retest)}</li>`).concat(sm.lim.map(te => `<li><b>${tname(a, te)}:</b> ${esc(a.r[te.id].limit)}</li>`));
       return `<div class="rec">
  <div class="rec-ath">
-  <div class="rec-det"><div class="nm"><span>${t("Athlete", "एथलीट")}</span><b>${esc(a.name)}</b></div><div><span>${t("Age · Gender", "आयु · लिंग")}</span><b>${a.age} · ${a.g}</b></div><div><span>${t("Age group", "आयु वर्ग")}</span><b>${ageGrp(a)}</b></div><div><span>${t("School", "स्कूल")}</span><b>${esc(a.school) || "—"}</b></div><div><span>${t("Programme ID", "कार्यक्रम ID")}</span><b>${a.idType === "none" ? t("Not provided", "उपलब्ध नहीं") : esc(a.idType + " · " + (a.idNo || "—"))}</b></div><div><span>${t("Assessed", "मूल्यांकन")}</span><b>${fmtDate(a.date)}</b></div></div>
+  <div class="rec-det"><div class="nm"><span>${t("Athlete", "एथलीट")}</span><b>${esc(a.name)}</b></div><div><span>${t("Age · Gender", "आयु · लिंग")}</span><b>${a.age} · ${a.g}</b></div><div style="grid-column:1/-1"><span>${t("Parental height", "माता-पिता की ऊँचाई")}</span><b style="font-size:.85em;font-weight:600">${parH(a)}</b></div><div><span>${t("School", "स्कूल")}</span><b>${esc(a.school) || "—"}</b></div><div><span>${t("Programme ID", "कार्यक्रम ID")}</span><b>${a.idType === "none" ? t("Not provided", "उपलब्ध नहीं") : esc(a.idType + " · " + (a.idNo || "—"))}</b></div><div><span>${t("Assessed", "मूल्यांकन")}</span><b>${fmtDate(a.date)}</b></div></div>
   <div class="rec-don">${donutH(sm)}<ul>${leg.map(([b, n, l]) => `<li>${shape(b, 12)}<span>${l}<b>${n}</b></span></li>`).join("")}</ul></div>
  </div>
  <div class="rec-sum">${headline(sm)}</div>
@@ -4107,7 +4118,7 @@ function donutH(sm) {
  <div class="det"><div class="nm"><span>${t("Session", "सत्र")}</span><b>${fmtDate(sessDate())}</b></div><div><span>${t("Athletes", "एथलीट")}</span><b>${ATH.length}</b></div><div><span>${t("Tests recorded", "दर्ज टेस्ट")}</span><b>${rec} / ${ATH.length * 10} · ${ai} ${t("by AI", "AI से")}</b></div></div>
  <div class="sum"><b>${bw.G} ${s.g} · ${bw.A} ${s.am} · ${bw.R} ${s.rj}</b><span class="cf">${shape("G", 11)}${bw.G}</span><span class="cf">${shape("A", 11)}${bw.A}</span><span class="cf">${shape("R", 11)}${bw.R}</span><span class="cf">${shape("P", 11)}${bw.P}</span></div>
  <table class="rtp"><thead><tr><th>${t("Athlete", "एथलीट")}</th>${TESTS.map(te => `<th>${te.n}</th>`).join("")}<th>${t("Rec.", "दर्ज")}</th></tr></thead><tbody>
- ${ATH.map(a => `<tr><td><b>${esc(a.name)}</b><br><span style="font-size:8.5pt;color:#3D4A59">${a.age} · ${a.g} · ${ageGrp(a)}${a.school ? "<br>" + esc(a.school) : ""}</span></td>${TESTS.map(te => { const b = bandOf(a, te.id), r = a.r[te.id]; return `<td><span class="cv">${shape(b, 11)}<span style="${b === "A" ? "font-style:italic;font-weight:400" : ""}">${b === "G" ? fmtV(te, r.best).v : b === "A" ? "≈" + fmtV(te, r.best).v : "—"}</span></span></td>`; }).join("")}<td><b>${athSummary(a).rec}/10</b></td></tr>`).join("")}
+ ${ATH.map(a => `<tr><td><b>${esc(a.name)}</b><br><span style="font-size:8.5pt;color:#3D4A59">${a.age} · ${a.g}${a.school ? "<br>" + esc(a.school) : ""}</span></td>${TESTS.map(te => { const b = bandOf(a, te.id), r = a.r[te.id]; return `<td><span class="cv">${shape(b, 11)}<span style="${b === "A" ? "font-style:italic;font-weight:400" : ""}">${b === "G" ? fmtV(te, r.best).v : b === "A" ? "≈" + fmtV(te, r.best).v : "—"}</span></span></td>`; }).join("")}<td><b>${athSummary(a).rec}/10</b></td></tr>`).join("")}
  </tbody></table>
  <div><h3>${t("Tests", "टेस्ट")}</h3><div class="key">${TESTS.map(te => `<span><b>${te.n}</b> ${esc(te.en)} (${te.id === "run" ? "min" : UNIT[te.u] || te.u})</span>`).join("")}</div></div>
  <div><h3>${t("Re-test suggested", "दोबारा टेस्ट सुझाया")}</h3><ul>${retestList().map(x => `<li><b>${esc(x.a.name)} · ${tname(x.a, x.te)}:</b> ${esc(x.why)}</li>`).join("") || `<li>${t("None", "कोई नहीं")}</li>`}</ul></div>
@@ -4153,9 +4164,9 @@ function shareModal(k) {
       saveath: () => {
         const R = VW.reg; if (!regOK()) return;
         const id = Date.now();
-        state.athletes.push({ id, name: R.name.trim(), age: parseInt(R.age, 10), gender: R.g === "Female" ? "F" : R.g === "Male" ? "M" : "O", school: R.school.trim(), idType: R.idType === "none" ? "LOCAL" : R.idType, externalId: R.idType === "none" ? "" : R.idType === "Aadhaar" ? "XXXX XXXX " + R.idNo.replace(/\D/g, "").slice(-4) : R.idNo.trim(), date: R.date || todayISO() });
+        state.athletes.push({ id, name: R.name.trim(), age: parseInt(R.age, 10), gender: R.g === "Female" ? "F" : R.g === "Male" ? "M" : "O", school: R.school.trim(), motherCm: parseInt(R.motherCm, 10) || null, motherSrc: R.motherCm ? (R.motherSrc || "self") : "", fatherCm: parseInt(R.fatherCm, 10) || null, fatherSrc: R.fatherCm ? (R.fatherSrc || "self") : "", idType: R.idType === "none" ? "LOCAL" : R.idType, externalId: R.idType === "none" ? "" : R.idType === "Aadhaar" ? "XXXX XXXX " + R.idNo.replace(/\D/g, "").slice(-4) : R.idNo.trim(), date: R.date || todayISO() });
         state.selectedAthleteId = id; if (VW.picked) VW.picked[id] = true;
-        VW.reg = { name: "", age: "", g: "", school: "", idType: "none", idNo: "", date: todayISO() };
+        VW.reg = { name: "", age: "", g: "", school: "", idType: "none", idNo: "", date: todayISO(), motherCm: "", motherSrc: "", fatherCm: "", fatherSrc: "" };
         nav("setup");
       },
       addath: () => nav("register"),
@@ -4195,7 +4206,7 @@ function shareModal(k) {
     document.addEventListener("input", e => {
       const d = e.target.dataset || {};
       if (d.f) {
-        VW.reg[d.f] = d.f === "age" ? e.target.value.replace(/\D/g, "").slice(0, 2) : e.target.value;
+        VW.reg[d.f] = d.f === "age" ? e.target.value.replace(/\D/g, "").slice(0, 2) : (d.f === "motherCm" || d.f === "fatherCm") ? e.target.value.replace(/\D/g, "").slice(0, 3) : e.target.value;
         if (d.f === "age") { const ar = document.getElementById("agerule"); if (ar) ar.innerHTML = ageRule(VW.reg.age); }
         const b = document.getElementById("btnSaveAth"); if (b) b.disabled = !regOK();
       }
