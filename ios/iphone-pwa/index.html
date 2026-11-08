@@ -525,10 +525,10 @@ body.cam .rotate{display:none!important}
       {
         number: 8, key: "shuttle_run",
         nameEn: "4 × 10 m Shuttle Run", nameHi: "4 × 10 मीटर शटल रन",
-        minSec: 15, maxSec: 60, minMB: 3, maxMB: 30,
-        attempts: 1, unit: "s", mode: "Planned", isPhoto: false,
-        guideEn: "Two lines 10 m apart. On “GO” run to the far line, touch it with one hand, turn and return to the start line and touch it. Repeat for 3 runs, and on the 4th run cross the line as fast as possible (40 m in total). One attempt, in seconds to two decimals.",
-        guideHi: "10 मीटर दूर दो रेखाएँ। “गो” पर दूर की रेखा तक दौड़ें, एक हाथ से छुएँ, मुड़ें और शुरुआती रेखा छुएँ। तीन बार दोहराएँ और चौथी बार रेखा पार करें (कुल 40 मीटर)। एक प्रयास, सेकंड में दो दशमलव तक।"
+        minSec: 8, maxSec: 60, minMB: 3, maxMB: 30,
+        attempts: 1, unit: "s", mode: "AI", isPhoto: false,
+        guideEn: "Mount the phone on a tripod at the side of the course, in landscape, so both lines 10 m apart are in view. Tap the start line and the far line on the screen. One athlete runs at a time. The athlete stands still behind the start line. On “GO” run to the far line, touch it with one hand, turn, return and touch the start line, repeat for three runs, and on the fourth run cross the start line as fast as possible (40 m in total). One attempt, in seconds to two decimals. Touching the lines cannot be verified from video, so this result is marked amber.",
+        guideHi: "फ़ोन को कोर्स के किनारे ट्राइपॉड पर लैंडस्केप में लगाएँ ताकि 10 मीटर दूर दोनों रेखाएँ दिखें। स्क्रीन पर शुरुआती रेखा और दूर वाली रेखा पर टैप करें। एक समय में एक एथलीट दौड़े। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो। “गो” पर दूर की रेखा तक दौड़ें, एक हाथ से छुएँ, मुड़ें, लौटकर शुरुआती रेखा छुएँ, तीन बार दोहराएँ और चौथी बार शुरुआती रेखा पार करें (कुल 40 मीटर)। एक प्रयास, सेकंड में दो दशमलव तक। रेखाओं को छूना वीडियो से जाँचा नहीं जा सकता, इसलिए यह परिणाम पीला चिह्नित है।"
       },
       {
         number: 9, key: "sit_ups",
@@ -2043,7 +2043,7 @@ body.cam .rotate{display:none!important}
 
       // ---------------- TEST 7: 30 M RUN (video motion timing) ----------------
       if (test.key === "sprint_30m") {
-        const an = sprintAnalyze(ok, calib && calib.sprintLines);
+        const an = sprintAnalyze(ok, calib && calib.trackLines);
         const R = (m, d) => rejected(test, m, d);
         if (an.err === "lines") return R(t("Start and finish lines not set", "शुरू और फ़िनिश रेखा तय नहीं"), t("Tap the start line and the finish line on the video before recording. They must be 30 m apart.", "रिकॉर्डिंग से पहले वीडियो पर शुरुआती और फ़िनिश रेखा पर टैप करें। दोनों 30 मीटर दूर हों।"));
         if (an.err === "short") return R(t("Recording too short", "रिकॉर्डिंग बहुत छोटी"), t("Keep recording until the athlete has crossed the finish line.", "एथलीट के फ़िनिश रेखा पार करने तक रिकॉर्डिंग जारी रखें।"));
@@ -2059,6 +2059,26 @@ body.cam .rotate{display:none!important}
           confidence: good ? "GREEN" : "AMBER",
           method: `AI motion timing · first movement → torso at the finish line · ${Math.round(an.frameMs)} ms per frame`,
           audit: [{ label: "Timing", detail: `${an.time.toFixed(2)} s · ${an.i1 - an.s0 + 1} frames · ${an.gaps} tracking gaps · start signal ${an.ratio.toFixed(1)}× noise`, valid: true }]
+        };
+      }
+
+      // ---------------- TEST 8: 4 x 10 M SHUTTLE RUN (video motion timing) ----------------
+      if (test.key === "shuttle_run") {
+        const an = shuttleAnalyze(ok, calib && calib.trackLines);
+        const R = (m, d) => rejected(test, m, d);
+        if (an.err === "lines") return R(t("Start and far lines not set", "शुरुआती और दूर की रेखा तय नहीं"), t("Tap the start line and the far line on the video before recording. They must be 10 m apart.", "रिकॉर्डिंग से पहले वीडियो पर शुरुआती रेखा और दूर की रेखा पर टैप करें। दोनों 10 मीटर दूर हों।"));
+        if (an.err === "short") return R(t("Recording too short", "रिकॉर्डिंग बहुत छोटी"), t("Keep recording until the athlete has crossed the start line on the fourth run.", "चौथी दौड़ में एथलीट के शुरुआती रेखा पार करने तक रिकॉर्डिंग जारी रखें।"));
+        if (an.err === "shake") return R(t("Phone moved", "फ़ोन हिला"), t("The phone was not steady before the start. Fix it on a tripod and record again.", "शुरू से पहले फ़ोन स्थिर नहीं था। ट्राइपॉड पर लगाकर फिर रिकॉर्ड करें।"));
+        if (an.err === "nostart") return R(t("Start not detected", "शुरुआत नहीं मिली"), t("No movement was seen at the start line. The athlete stands still behind it, then runs after recording begins. Keep the start line in view.", "शुरुआती रेखा पर कोई हरकत नहीं दिखी। एथलीट उसके पीछे स्थिर खड़ा हो और रिकॉर्डिंग शुरू होने के बाद दौड़े। शुरुआती रेखा फ्रेम में रखें।"));
+        if (an.err === "turns") return R(t(`Only ${an.lengths} of 4 lengths seen`, `4 में से केवल ${an.lengths} चरण दिखे`), t("The course must be covered four times: out, back, out, then back over the start line. Keep both lines in view and make sure the athlete reaches the far line each time.", "कोर्स चार बार पूरा होना चाहिए: जाना, लौटना, जाना, फिर शुरुआती रेखा के पार लौटना। दोनों रेखाएँ फ्रेम में रखें और एथलीट हर बार दूर की रेखा तक पहुँचे।"));
+        if (an.time < 7 || an.time > 30) return R(t("Time not realistic", "समय यथार्थ नहीं"), t(`The measured time was ${an.time.toFixed(2)} s. Check that the two lines are 10 m apart and that only the athlete moved.`, `मापा गया समय ${an.time.toFixed(2)} s था। जाँचें कि दोनों रेखाएँ 10 मीटर दूर हैं और केवल एथलीट हिला।`));
+        return {
+          valid: true,
+          value: Number(an.time.toFixed(2)),
+          unit: "s",
+          confidence: "AMBER", // touching the lines cannot be verified from video
+          method: `AI motion timing · first movement → torso over the start line after 4 lengths · ${Math.round(an.frameMs)} ms per frame`,
+          audit: [{ label: "Timing", detail: `${an.time.toFixed(2)} s · turns at ${an.splits.map(x => x.toFixed(2)).join(" · ")} s · start signal ${an.ratio.toFixed(1)}× noise`, valid: true }]
         };
       }
 
@@ -2636,6 +2656,7 @@ body.cam .rotate{display:none!important}
     if (!state.theme) state.theme = "auto";
     if (state.assessor === undefined) state.assessor = "";
     if (state.centre === undefined) state.centre = "";
+    if (state.sprintLines) { state.trackLines = { ...(state.trackLines || {}), sprint_30m: state.sprintLines }; delete state.sprintLines; }
     if (!["home", "login", "register", "consent", "setup", "session", "cell", "manual", "saved", "reports", "report", "roster"].includes(state.route)) state.route = "home";
     if (state.session && !state.session.date) state.session.date = todayISO();
     state.athletes.forEach(a => { if (!a.date) a.date = todayISO(); });
@@ -2672,6 +2693,8 @@ body.cam .rotate{display:none!important}
       sprintM: ["Timed from video: first movement to the torso at the finish line", "वीडियो से समय: पहली हरकत से धड़ के फ़िनिश रेखा तक"],
       sprintA: ["Timed from video with reduced confidence (frame rate or tracking)", "वीडियो से समय, कम विश्वसनीयता (फ़्रेम रेट या ट्रैकिंग)"],
       limSprint: ["Resolution is one video frame (about 33 ms at 30 fps). The start is the first visible movement and can be picked up one or two frames late, so a time can read slightly short.", "रिज़ॉल्यूशन एक वीडियो फ़्रेम (30 fps पर लगभग 33 ms) है। शुरुआत पहली दिखने वाली हरकत है और एक-दो फ़्रेम देर से पकड़ी जा सकती है, इसलिए समय थोड़ा कम दिख सकता है।"],
+      shuttleA: ["Timed from video over four lengths of 10 m; touching the lines cannot be verified", "वीडियो से 10 मीटर के चार चरणों का समय; रेखाओं को छूना जाँचा नहीं जा सकता"],
+      limShuttle: ["Touching the lines with the hand cannot be verified from video, so a turn is counted when the athlete reaches the line. Resolution is one video frame and the start can be picked up one or two frames late.", "रेखाओं को हाथ से छूना वीडियो से जाँचा नहीं जा सकता, इसलिए एथलीट के रेखा तक पहुँचने पर मोड़ गिना जाता है। रिज़ॉल्यूशन एक फ़्रेम है और शुरुआत एक-दो फ़्रेम देर से पकड़ी जा सकती है।"],
       retSprint: ["Re-run with the phone steady on a tripod, both lines in view, and at least 30 fps", "फ़ोन को ट्राइपॉड पर स्थिर रखकर, दोनों रेखाएँ दिखाते हुए, कम से कम 30 fps पर दोबारा चलाएँ"]
     };
     const X = k => t(TX[k][0], TX[k][1]);
@@ -2705,13 +2728,15 @@ body.cam .rotate{display:none!important}
       let reason, limit, retest;
       if (manual) reason = te.id === "weight" ? X("scale") : te.id === "mball" ? X("tape") : te.id === "run" ? X("watch") : X("manual");
       else if (te.id === "sprint") reason = band === "G" ? X("sprintM") : X("sprintA");
+      else if (te.id === "shuttle") reason = X("shuttleA");
       else if (te.id === "situps") reason = X("reps");
       else reason = band === "G" ? X("measured") : X("estimate");
       if (te.id === "height" && !manual) limit = X("limHair");
       if (te.id === "vjump" && !manual && band === "A") limit = X("limFps");
       if (te.id === "sprint") limit = X("limSprint");
+      if (te.id === "shuttle") limit = X("limShuttle");
       if (te.id === "sprint" && band === "A") retest = X("retSprint");
-      else if (band === "A" && te.m === "ai" && !manual && te.id !== "vjump" && te.id !== "situps") {
+      else if (band === "A" && te.m === "ai" && !manual && te.id !== "vjump" && te.id !== "situps" && te.id !== "shuttle") {
         retest = te.id === "height" ? t("Lock a wall reference photo, then re-measure for a measured result", "दीवार संदर्भ फोटो लॉक करें, फिर मापें")
           : t("Place a physical reference (floor tape or box scale) in frame, then re-test for a measured result", "फ़्रेम में भौतिक संदर्भ (फ़र्श टेप / बॉक्स स्केल) रखकर दोबारा टेस्ट करें");
       }
@@ -2780,7 +2805,8 @@ body.cam .rotate{display:none!important}
       return { e: cnt / n, n: cnt, cx: cnt >= 4 ? (sx / cnt) / w : null, gm: tot / n };
     }
     // fr: [{t (ms), e, n, cx (0..1 or null), gm}], L: {startX, finishX} as fractions of the frame width
-    function sprintAnalyze(fr, L) {
+    // Shared first half: validate the lines, find the noise floor and the first movement near the start line.
+    function sprPrelude(fr, L) {
       if (!L || L.startX == null || L.finishX == null) return { err: "lines" };
       const dir = Math.sign(L.finishX - L.startX);
       if (!dir || Math.abs(L.finishX - L.startX) < 0.2) return { err: "lines" };
@@ -2802,6 +2828,12 @@ body.cam .rotate{display:none!important}
       let s0 = i0;                                                       // walk back to where the movement began, bridging gaps of up to 2 frames
       for (;;) { let j = -1; for (let k = 1; k <= 3; k++) if (s0 - k >= nb && fr[s0 - k].e > lo) { j = s0 - k; break; } if (j < 0) break; s0 = j; }
       const c = i => { const w = [fr[i - 1] && fr[i - 1].cx, fr[i].cx, fr[i + 1] && fr[i + 1].cx].filter(v => v != null); return w.length ? median(w) : null; };
+      return { dir, frameMs, shake, hi, i0, s0, c };
+    }
+    // fr: [{t (ms), e, n, cx (0..1 or null), gm}], L: {startX, finishX} as fractions of the frame width
+    function sprintAnalyze(fr, L) {
+      const P = sprPrelude(fr, L); if (P.err) return P;
+      const { dir, frameMs, shake, hi, i0, s0, c } = P;
       let i1 = -1, prev = -1;
       for (let i = s0; i < fr.length - 1; i++) {
         const ci = c(i); if (ci == null) continue;
@@ -2815,6 +2847,35 @@ body.cam .rotate{display:none!important}
       let gaps = 0; for (let i = s0; i <= i1; i++) if (fr[i].n < 4) gaps++;
       let peak = 0; for (let i = i0; i < Math.min(fr.length, i0 + 30); i++) peak = Math.max(peak, fr[i].e);
       return { startT, finishT, time: (finishT - startT) / 1000, frameMs, gaps, shake, ratio: peak / hi, s0, i0, i1 };
+    }
+    // 4 x 10 m shuttle: start line (startX) and far line (finishX). Out, back, out, back over the start line.
+    // p = 0 at the start line and 1 at the far line. Turns are counted from the motion centre so the course is
+    // covered four times; the clock stops when the torso crosses the start line on the last run.
+    function shuttleAnalyze(fr, L) {
+      const P = sprPrelude(fr, L); if (P.err) return P;
+      const { frameMs, shake, hi, i0, s0, c } = P;
+      const span = L.finishX - L.startX;
+      let phase = 0, prevP = null, prevT = null, finishT = null;
+      const marks = [];                                                  // times of reaching the far line, start line, far line
+      for (let i = s0; i < fr.length - 1 && finishT == null; i++) {
+        const ci = c(i); if (ci == null) continue;
+        const p = (ci - L.startX) / span, t = fr[i].t;
+        if (phase === 0 && p >= 0.88) { phase = 1; marks.push(t); }
+        else if (phase === 1 && p <= 0.7) phase = 2;
+        else if (phase === 2 && p <= 0.15) { phase = 3; marks.push(t); }
+        else if (phase === 3 && p >= 0.3) phase = 4;
+        else if (phase === 4 && p >= 0.88) { phase = 5; marks.push(t); }
+        else if (phase === 5 && p <= 0.7) phase = 6;
+        else if (phase === 6 && p <= 0 && prevP != null) {
+          const f = Math.min(1, Math.max(0, (0 - prevP) / ((p - prevP) || -1e-9)));
+          finishT = prevT + f * (t - prevT); phase = 7;
+        }
+        prevP = p; prevT = t;
+      }
+      if (finishT == null) return { err: "turns", frameMs, shake, lengths: [0, 1, 1, 2, 2, 3, 3, 4][phase] };
+      const startT = fr[s0].t;
+      let peak = 0; for (let i = i0; i < Math.min(fr.length, i0 + 30); i++) peak = Math.max(peak, fr[i].e);
+      return { startT, finishT, time: (finishT - startT) / 1000, frameMs, shake, ratio: peak / hi, splits: marks.map(m => (m - startT) / 1000) };
     }
     const fmtMB = b => (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + " MB";
     const safeName = v => String(v).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -3358,7 +3419,9 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       let isRecording = false;
       let recorder = null;
       const supportsCalib = test.key === "height" || test.key === "sit_and_reach" || test.key === "vertical_jump";
-      const isSprint = test.key === "sprint_30m";
+      const isSprint = test.key === "sprint_30m" || test.key === "shuttle_run", isShuttle = test.key === "shuttle_run";
+      const trackL = () => (state.trackLines || {})[test.key];
+      const setTrackL = v => { state.trackLines = { ...(state.trackLines || {}), [test.key]: v }; persist(); };
       let sprintSet = null, sprintPrev = null, sprintLastHud = 0;
       const cal = { mode: null, pts: [], active: 0 };
       let frameW = 0, frameH = 0;
@@ -3370,10 +3433,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         <main class="main" style="gap:14px">
 
         ${isSprint ? `
-          <details class="card stack" style="gap:8px" ${(state.sprintLines && state.sprintLines.startX != null && state.sprintLines.finishX != null) ? "" : "open"}>
-            <summary>${t("Set up the track", "ट्रैक सेट करें")}</summary>
-            <span class="small">${t("Phone on a tripod, in landscape, both lines in view. Tap a button, then tap that line on the video. The lines must be 30 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 30 मीटर दूर हों।")}</span>
-            <div class="row" style="gap:8px"><button class="btn s" id="btnSetStart" style="min-height:48px">${t("Set start line", "शुरुआती रेखा")}</button><button class="btn s" id="btnSetFinish" style="min-height:48px">${t("Set finish line", "फ़िनिश रेखा")}</button></div>
+          <details class="card stack" style="gap:8px" ${(trackL() && trackL().startX != null && trackL().finishX != null) ? "" : "open"}>
+            <summary>${isShuttle ? t("Set up the course", "कोर्स सेट करें") : t("Set up the track", "ट्रैक सेट करें")}</summary>
+            <span class="small">${isShuttle ? t("Phone on a tripod, in landscape, both lines in view, one athlete at a time. Tap a button, then tap that line on the video. The lines must be 10 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें, एक समय में एक एथलीट। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 10 मीटर दूर हों।") : t("Phone on a tripod, in landscape, both lines in view. Tap a button, then tap that line on the video. The lines must be 30 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 30 मीटर दूर हों।")}</span>
+            <div class="row" style="gap:8px"><button class="btn s" id="btnSetStart" style="min-height:48px">${t("Set start line", "शुरुआती रेखा")}</button><button class="btn s" id="btnSetFinish" style="min-height:48px">${isShuttle ? t("Set far line", "दूर की रेखा") : t("Set finish line", "फ़िनिश रेखा")}</button></div>
             <div class="row" style="justify-content:space-between"><span class="small" id="sprintStatus" style="font-weight:700"></span><button class="lang-btn" id="btnSprintReset" style="margin:0">${t("Reset lines", "रेखाएँ रीसेट")}</button></div>
           </details>
         ` : ""}
@@ -3485,13 +3548,13 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       const declAth = document.getElementById("declAth"), declCoach = document.getElementById("declCoach");
       declAth.checked = dst.ath; declCoach.checked = dst.coach;
       const declOk = () => dst.ath && dst.coach && !!state.assessor.trim();
-      const linesOk = () => { const L = state.sprintLines; return !!L && L.startX != null && L.finishX != null && Math.abs(L.finishX - L.startX) >= 0.2; };
+      const linesOk = () => { const L = trackL(); return !!L && L.startX != null && L.finishX != null && Math.abs(L.finishX - L.startX) >= 0.2; };
       const readyOk = () => declOk() && (!isSprint || linesOk());
       const syncDecl = () => {
         if (isRecording) return;
         btnRec.disabled = !readyOk();
         const h = document.getElementById("declHint");
-        if (h) h.textContent = readyOk() ? "" : (isSprint && !linesOk() ? t("Set the start and finish lines first, about 30 m apart.", "पहले शुरुआती और फ़िनिश रेखा तय करें, लगभग 30 मीटर दूर।") : t("Both confirmations and the coach name are needed to record.", "रिकॉर्ड करने के लिए दोनों पुष्टि और कोच का नाम ज़रूरी है।"));
+        if (h) h.textContent = readyOk() ? "" : (isSprint && !linesOk() ? (isShuttle ? t("Set the start line and the far line first, 10 m apart.", "पहले शुरुआती रेखा और दूर की रेखा तय करें, 10 मीटर दूर।") : t("Set the start and finish lines first, about 30 m apart.", "पहले शुरुआती और फ़िनिश रेखा तय करें, लगभग 30 मीटर दूर।")) : t("Both confirmations and the coach name are needed to record.", "रिकॉर्ड करने के लिए दोनों पुष्टि और कोच का नाम ज़रूरी है।"));
       };
       declAth.onchange = () => { dst.ath = declAth.checked; syncDecl(); };
       declCoach.onchange = () => { dst.coach = declCoach.checked; syncDecl(); };
@@ -3707,24 +3770,24 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
 
       function refreshSprintStatus() {
         const el = document.getElementById("sprintStatus"); if (!el) return;
-        const L = state.sprintLines || {};
-        el.textContent = sprintSet ? (sprintSet === "start" ? t("Tap the START line on the video", "वीडियो पर शुरुआती रेखा पर टैप करें") : t("Tap the FINISH line on the video", "वीडियो पर फ़िनिश रेखा पर टैप करें"))
-          : `${L.startX != null ? "✅" : "○"} ${t("Start", "शुरू")}   ${L.finishX != null ? "✅" : "○"} ${t("Finish", "फ़िनिश")}`;
+        const L = trackL() || {};
+        el.textContent = sprintSet ? (sprintSet === "start" ? t("Tap the START line on the video", "वीडियो पर शुरुआती रेखा पर टैप करें") : (isShuttle ? t("Tap the FAR line on the video", "वीडियो पर दूर की रेखा पर टैप करें") : t("Tap the FINISH line on the video", "वीडियो पर फ़िनिश रेखा पर टैप करें")))
+          : `${L.startX != null ? "✅" : "○"} ${t("Start", "शुरू")}   ${L.finishX != null ? "✅" : "○"} ${isShuttle ? t("Far line", "दूर की रेखा") : t("Finish", "फ़िनिश")}`;
         el.style.color = sprintSet ? "var(--amber)" : "var(--ink)";
       }
       if (isSprint) {
         const armSet = k => { sprintSet = k; canvasEl.style.pointerEvents = "auto"; refreshSprintStatus(); };
         document.getElementById("btnSetStart").onclick = () => armSet("start");
         document.getElementById("btnSetFinish").onclick = () => armSet("finish");
-        document.getElementById("btnSprintReset").onclick = () => { delete state.sprintLines; sprintSet = null; canvasEl.style.pointerEvents = "none"; persist(); refreshSprintStatus(); syncDecl(); };
+        document.getElementById("btnSprintReset").onclick = () => { if (state.trackLines) delete state.trackLines[test.key]; sprintSet = null; canvasEl.style.pointerEvents = "none"; persist(); refreshSprintStatus(); syncDecl(); };
         canvasEl.addEventListener("pointerdown", (e) => {
           if (!sprintSet || !frameW) return;
           const rect = canvasEl.getBoundingClientRect();
           const sc = Math.min(rect.width / frameW, rect.height / frameH), ox = (rect.width - frameW * sc) / 2;
           const x = (e.clientX - rect.left - ox) / sc / frameW;
           if (x < 0 || x > 1) return;
-          state.sprintLines = { ...(state.sprintLines || {}), [sprintSet === "start" ? "startX" : "finishX"]: x };
-          sprintSet = null; canvasEl.style.pointerEvents = "none"; persist(); refreshSprintStatus(); syncDecl();
+          setTrackL({ ...(trackL() || {}), [sprintSet === "start" ? "startX" : "finishX"]: x });
+          sprintSet = null; canvasEl.style.pointerEvents = "none"; refreshSprintStatus(); syncDecl();
         });
         refreshSprintStatus();
       }
@@ -3875,11 +3938,11 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       }
 
       function drawSprintLines(W, H, cx) {
-        const L = state.sprintLines || {}, fs = Math.max(14, Math.round(W / 40));
+        const L = trackL() || {}, fs = Math.max(14, Math.round(W / 40));
         ctx.lineWidth = Math.max(2, W / 320); ctx.font = `700 ${fs}px sans-serif`;
         const line = (x, color, label) => { ctx.strokeStyle = color; ctx.fillStyle = color; ctx.setLineDash([12, 8]); ctx.beginPath(); ctx.moveTo(x * W, 0); ctx.lineTo(x * W, H); ctx.stroke(); ctx.setLineDash([]); ctx.fillText(label, Math.min(W - fs * 6, x * W + 6), fs * 1.6); };
         if (L.startX != null) line(L.startX, "#3BE08A", t("START", "शुरू"));
-        if (L.finishX != null) line(L.finishX, "#FF5A4E", t("FINISH", "फ़िनिश"));
+        if (L.finishX != null) line(L.finishX, "#FF5A4E", isShuttle ? t("FAR LINE", "दूर की रेखा") : t("FINISH", "फ़िनिश"));
         if (cx != null) { ctx.fillStyle = "#FFD166"; ctx.beginPath(); ctx.arc(cx * W, H * 0.5, fs * 0.45, 0, 6.3); ctx.fill(); }
       }
 
@@ -4168,7 +4231,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
               sprintLastHud = now;
               hudFps.textContent = `${Math.round(fps)} fps · ${t("MOTION TIMING", "मोशन टाइमिंग")}`;
               hudMetric.style.display = "none"; // keep the track clear so the lines can be tapped and the athlete seen
-              hudLive.textContent = `${linesOk() ? (isRecording ? t("Recording. The athlete runs on “go”.", "रिकॉर्डिंग। “गो” पर एथलीट दौड़े।") : t("Track ready. The athlete stands still behind the start line.", "ट्रैक तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।")) : t("Set the start and finish lines.", "शुरुआती और फ़िनिश रेखा तय करें।")} ${t("Only the athlete should move.", "केवल एथलीट हिले।")}`;
+              hudLive.textContent = `${linesOk() ? (isRecording ? t("Recording. The athlete runs on “go”.", "रिकॉर्डिंग। “गो” पर एथलीट दौड़े।") : isShuttle ? t("Course ready. The athlete stands still behind the start line.", "कोर्स तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।") : t("Track ready. The athlete stands still behind the start line.", "ट्रैक तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।")) : isShuttle ? t("Set the start line and the far line.", "शुरुआती रेखा और दूर की रेखा तय करें।") : t("Set the start and finish lines.", "शुरुआती और फ़िनिश रेखा तय करें।")} ${t("Only the athlete should move.", "केवल एथलीट हिले।")}`;
             }
             schedule(); return;
           }
@@ -4260,7 +4323,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       }
 
       function finishRecording() {
-        const calibUsed = isSprint ? { sprintLines: state.sprintLines } : currentCalib();
+        const calibUsed = isSprint ? { trackLines: (state.trackLines || {})[test.key] } : currentCalib();
         const key = cellKey(athlete.id, test.key);
         const prevHistory = state.results[key]?.attemptsHistory || [];
         const attemptNo = prevHistory.length + 1;
@@ -4311,7 +4374,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           captureTimer = setInterval(() => {
             captureElapsed++;
             if (isSprint && recordedFrames.length > 20) {
-              const an = sprintAnalyze(recordedFrames, state.sprintLines);
+              const an = (isShuttle ? shuttleAnalyze : sprintAnalyze)(recordedFrames, trackL());
               if (an && an.finishT && recordedFrames[recordedFrames.length - 1].t - an.finishT > 1500) { finishRecording(); return; }
             }
             const validCount = recordedFrames.filter(f => f.postureOk).length;
