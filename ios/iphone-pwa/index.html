@@ -421,6 +421,7 @@ details>summary{cursor:pointer;min-height:var(--touch);display:flex;align-items:
 .cam-wrap .capzone .zl{position:absolute;top:-15px;left:50%;transform:translateX(-50%);white-space:nowrap;background:#3BE08A;color:#03220F;font-weight:700;font-size:.8125rem;padding:4px 12px;border-radius:999px;display:none}
 .cam-wrap.out .capzone .zl{background:#FF5A4E;color:#2A0300}
 .cam-wrap.ok .capzone .zl,.cam-wrap.out .capzone .zl{display:block}
+.cam-hud-top,.hud-live-metric,.cam-hud-bottom{pointer-events:none}
 .cam-hud-top{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:center;gap:6px}
 .hud-pill{background:rgba(0,0,0,.6);color:#fff;padding:5px 10px;border-radius:999px;font-size:.75rem;font-weight:600;backdrop-filter:blur(6px)}
 #hudTimer{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:1.125rem;font-weight:700;border-radius:12px;padding:4px 12px}
@@ -516,10 +517,10 @@ body.cam .rotate{display:none!important}
       {
         number: 7, key: "sprint_30m",
         nameEn: "30 m Run", nameHi: "30 मीटर दौड़",
-        minSec: 10, maxSec: 45, minMB: 2, maxMB: 25,
-        attempts: 2, unit: "s", mode: "Planned", isPhoto: false,
-        guideEn: "Standing start behind the line. On “ready” and “go”, run 30 m as fast as possible, one athlete at a time. Timing starts at the first movement and stops when the torso reaches the finish line. Two trials, best time counts, in seconds to two decimals.",
-        guideHi: "रेखा के पीछे खड़े होकर शुरुआत। “रेडी” और “गो” पर 30 मीटर पूरी गति से दौड़ें, एक समय में एक एथलीट। पहली हरकत पर समय शुरू, धड़ के फ़िनिश रेखा पर पहुँचने पर रुकेगा। दो प्रयास, सर्वश्रेष्ठ समय, सेकंड में दो दशमलव तक।"
+        minSec: 5, maxSec: 45, minMB: 2, maxMB: 25,
+        attempts: 2, unit: "s", mode: "AI", isPhoto: false,
+        guideEn: "Mount the phone on a tripod at the side of the track, in landscape and far enough back that the start line and the finish line are both in view. Tap the start line and the finish line on the screen; the lines must be 30 m apart. The athlete stands still behind the start line. Start recording, then give “ready” and “go”. Timing starts at the first visible movement and stops when the torso reaches the finish line. One athlete at a time, two trials, best time counts, in seconds to two decimals.",
+        guideHi: "फ़ोन को ट्रैक के किनारे ट्राइपॉड पर लैंडस्केप में लगाएँ, इतनी दूर कि शुरुआती और फ़िनिश दोनों रेखाएँ दिखें। स्क्रीन पर शुरुआती और फ़िनिश रेखा पर टैप करें; दोनों रेखाएँ 30 मीटर दूर होनी चाहिए। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो। रिकॉर्डिंग शुरू करें, फिर “रेडी” और “गो” कहें। पहली दिखने वाली हरकत पर समय शुरू और धड़ के फ़िनिश रेखा पर पहुँचने पर रुकेगा। एक समय में एक एथलीट, दो प्रयास, सर्वश्रेष्ठ समय, सेकंड में दो दशमलव तक।"
       },
       {
         number: 8, key: "shuttle_run",
@@ -2040,6 +2041,27 @@ body.cam .rotate{display:none!important}
         };
       }
 
+      // ---------------- TEST 7: 30 M RUN (video motion timing) ----------------
+      if (test.key === "sprint_30m") {
+        const an = sprintAnalyze(ok, calib && calib.sprintLines);
+        const R = (m, d) => rejected(test, m, d);
+        if (an.err === "lines") return R(t("Start and finish lines not set", "शुरू और फ़िनिश रेखा तय नहीं"), t("Tap the start line and the finish line on the video before recording. They must be 30 m apart.", "रिकॉर्डिंग से पहले वीडियो पर शुरुआती और फ़िनिश रेखा पर टैप करें। दोनों 30 मीटर दूर हों।"));
+        if (an.err === "short") return R(t("Recording too short", "रिकॉर्डिंग बहुत छोटी"), t("Keep recording until the athlete has crossed the finish line.", "एथलीट के फ़िनिश रेखा पार करने तक रिकॉर्डिंग जारी रखें।"));
+        if (an.err === "shake") return R(t("Phone moved", "फ़ोन हिला"), t("The phone was not steady before the start. Fix it on a tripod and record again.", "शुरू से पहले फ़ोन स्थिर नहीं था। ट्राइपॉड पर लगाकर फिर रिकॉर्ड करें।"));
+        if (an.err === "nostart") return R(t("Start not detected", "शुरुआत नहीं मिली"), t("No movement was seen at the start line. The athlete stands still behind the start line, then runs after recording begins. Keep the start line in view.", "शुरुआती रेखा पर कोई हरकत नहीं दिखी। एथलीट रेखा के पीछे स्थिर खड़ा हो और रिकॉर्डिंग शुरू होने के बाद दौड़े। शुरुआती रेखा फ्रेम में रखें।"));
+        if (an.err === "nofinish") return R(t("Finish line not crossed", "फ़िनिश रेखा पार नहीं हुई"), t("The athlete's torso was not seen reaching the finish line. Keep the finish line in view and record until the athlete is past it.", "एथलीट का धड़ फ़िनिश रेखा तक पहुँचता नहीं दिखा। फ़िनिश रेखा फ्रेम में रखें और एथलीट के पार जाने तक रिकॉर्ड करें।"));
+        if (an.time < 2.5 || an.time > 20) return R(t("Time not realistic", "समय यथार्थ नहीं"), t(`The measured time was ${an.time.toFixed(2)} s. Check that the two lines are 30 m apart and that only the athlete moved.`, `मापा गया समय ${an.time.toFixed(2)} s था। जाँचें कि दोनों रेखाएँ 30 मीटर दूर हैं और केवल एथलीट हिला।`));
+        const good = an.frameMs <= 40 && an.gaps <= 6 && an.ratio >= 1.5;
+        return {
+          valid: true,
+          value: Number(an.time.toFixed(2)),
+          unit: "s",
+          confidence: good ? "GREEN" : "AMBER",
+          method: `AI motion timing · first movement → torso at the finish line · ${Math.round(an.frameMs)} ms per frame`,
+          audit: [{ label: "Timing", detail: `${an.time.toFixed(2)} s · ${an.i1 - an.s0 + 1} frames · ${an.gaps} tracking gaps · start signal ${an.ratio.toFixed(1)}× noise`, valid: true }]
+        };
+      }
+
       // ---------------- TEST 4: VERTICAL JUMP ----------------
       // Score = jump reach - standing reach (handbook Test 4, ruling C21), read at the raised fingertip.
       // The coupled-body detector below finds the jump itself and rejects fakes:
@@ -2646,7 +2668,11 @@ body.cam .rotate{display:none!important}
       scale: ["Entered by coach from a scale", "कोच ने मशीन से देखकर दर्ज किया"],
       tape: ["Measured with a tape by the coach", "कोच ने टेप से मापा"],
       watch: ["Timed by the coach with a stopwatch", "कोच ने स्टॉपवॉच से समय लिया"],
-      manual: ["Entered manually by the assessor", "मूल्यांकनकर्ता ने मैन्युअल दर्ज किया"]
+      manual: ["Entered manually by the assessor", "मूल्यांकनकर्ता ने मैन्युअल दर्ज किया"],
+      sprintM: ["Timed from video: first movement to the torso at the finish line", "वीडियो से समय: पहली हरकत से धड़ के फ़िनिश रेखा तक"],
+      sprintA: ["Timed from video with reduced confidence (frame rate or tracking)", "वीडियो से समय, कम विश्वसनीयता (फ़्रेम रेट या ट्रैकिंग)"],
+      limSprint: ["Resolution is one video frame (about 33 ms at 30 fps). The start is the first visible movement and can be picked up one or two frames late, so a time can read slightly short.", "रिज़ॉल्यूशन एक वीडियो फ़्रेम (30 fps पर लगभग 33 ms) है। शुरुआत पहली दिखने वाली हरकत है और एक-दो फ़्रेम देर से पकड़ी जा सकती है, इसलिए समय थोड़ा कम दिख सकता है।"],
+      retSprint: ["Re-run with the phone steady on a tripod, both lines in view, and at least 30 fps", "फ़ोन को ट्राइपॉड पर स्थिर रखकर, दोनों रेखाएँ दिखाते हुए, कम से कम 30 fps पर दोबारा चलाएँ"]
     };
     const X = k => t(TX[k][0], TX[k][1]);
     const BW = () => ({ G: t("Green", "हरा"), A: t("Amber", "पीला"), R: t("Rejected", "अस्वीकृत"), P: t("Not recorded", "दर्ज नहीं"), N: t("Not available yet", "अभी उपलब्ध नहीं") });
@@ -2678,11 +2704,14 @@ body.cam .rotate{display:none!important}
       const band = (!manual && r.confidence === "GREEN") || (manual && te.m === "manual") ? "G" : "A";
       let reason, limit, retest;
       if (manual) reason = te.id === "weight" ? X("scale") : te.id === "mball" ? X("tape") : te.id === "run" ? X("watch") : X("manual");
+      else if (te.id === "sprint") reason = band === "G" ? X("sprintM") : X("sprintA");
       else if (te.id === "situps") reason = X("reps");
       else reason = band === "G" ? X("measured") : X("estimate");
       if (te.id === "height" && !manual) limit = X("limHair");
       if (te.id === "vjump" && !manual && band === "A") limit = X("limFps");
-      if (band === "A" && te.m === "ai" && !manual && te.id !== "vjump" && te.id !== "situps") {
+      if (te.id === "sprint") limit = X("limSprint");
+      if (te.id === "sprint" && band === "A") retest = X("retSprint");
+      else if (band === "A" && te.m === "ai" && !manual && te.id !== "vjump" && te.id !== "situps") {
         retest = te.id === "height" ? t("Lock a wall reference photo, then re-measure for a measured result", "दीवार संदर्भ फोटो लॉक करें, फिर मापें")
           : t("Place a physical reference (floor tape or box scale) in frame, then re-test for a measured result", "फ़्रेम में भौतिक संदर्भ (फ़र्श टेप / बॉक्स स्केल) रखकर दोबारा टेस्ट करें");
       }
@@ -2727,6 +2756,66 @@ body.cam .rotate{display:none!important}
       }));
       return { put: (k, v) => tx("readwrite", st => st.put(v, k)), get: k => tx("readonly", st => st.get(k)) };
     })();
+
+    // ---- 30 m run: timing from video motion ------------------------------------------------------------------
+    // Handbook Test 7 and ruling C48: timing starts at the athlete's first movement and ends when the torso reaches the
+    // vertical line of the finish line. A fixed phone sees both lines. Per frame we measure how many pixels changed
+    // against the previous frame and where they are, so no pose model is needed at 20 m range, and the result does not
+    // depend on a scale: the two lines the coach taps define the course.
+    const SPR_W = 256;
+    let _sprCv = null;
+    function sprGray(video) {
+      const W = video.videoWidth, H = video.videoHeight, w = SPR_W, h = Math.max(8, Math.round(w * H / W));
+      if (!_sprCv || _sprCv.width !== w || _sprCv.height !== h) { _sprCv = document.createElement("canvas"); _sprCv.width = w; _sprCv.height = h; _sprCv._c = _sprCv.getContext("2d", { willReadFrequently: true }); }
+      _sprCv._c.drawImage(video, 0, 0, w, h);
+      const d = _sprCv._c.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h);
+      for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
+      return { g, w, h };
+    }
+    function sprMotion(prev, cur, thr = 22) {
+      if (!prev || prev.w !== cur.w || prev.h !== cur.h) return null;
+      const a = prev.g, b = cur.g, w = cur.w, n = b.length;
+      let cnt = 0, sx = 0, tot = 0;
+      for (let i = 0; i < n; i++) { const d = a[i] > b[i] ? a[i] - b[i] : b[i] - a[i]; tot += d; if (d > thr) { cnt++; sx += i % w; } }
+      return { e: cnt / n, n: cnt, cx: cnt >= 4 ? (sx / cnt) / w : null, gm: tot / n };
+    }
+    // fr: [{t (ms), e, n, cx (0..1 or null), gm}], L: {startX, finishX} as fractions of the frame width
+    function sprintAnalyze(fr, L) {
+      if (!L || L.startX == null || L.finishX == null) return { err: "lines" };
+      const dir = Math.sign(L.finishX - L.startX);
+      if (!dir || Math.abs(L.finishX - L.startX) < 0.2) return { err: "lines" };
+      if (fr.length < 20) return { err: "short" };
+      const dts = []; for (let i = 1; i < fr.length; i++) if (fr[i].t > fr[i - 1].t) dts.push(fr[i].t - fr[i - 1].t);
+      const frameMs = median(dts) || 33.3;
+      const nb = Math.max(8, Math.min(24, Math.floor(fr.length * 0.15)));
+      const b0 = median(fr.slice(0, nb).map(f => f.e)), mad = median(fr.slice(0, nb).map(f => Math.abs(f.e - b0)));
+      const hi = b0 + Math.max(5 * mad, 0.0004), lo = b0 + Math.max(2.5 * mad, 0.00015);
+      const shake = median(fr.slice(0, nb).map(f => f.gm));
+      if (shake > 8) return { err: "shake", frameMs, shake };
+      // first movement: energy above the noise floor for 3 frames, close to the start line
+      let i0 = -1;
+      for (let i = nb; i < fr.length - 3; i++) {
+        if (fr[i].e > hi && fr[i + 1].e > hi && fr[i + 2].e > hi && fr[i].n >= 6 &&
+            [fr[i], fr[i + 1], fr[i + 2]].some(f => f.cx != null && Math.abs(f.cx - L.startX) <= 0.2)) { i0 = i; break; }
+      }
+      if (i0 < 0) return { err: "nostart", frameMs, shake };
+      let s0 = i0;                                                       // walk back to where the movement began, bridging gaps of up to 2 frames
+      for (;;) { let j = -1; for (let k = 1; k <= 3; k++) if (s0 - k >= nb && fr[s0 - k].e > lo) { j = s0 - k; break; } if (j < 0) break; s0 = j; }
+      const c = i => { const w = [fr[i - 1] && fr[i - 1].cx, fr[i].cx, fr[i + 1] && fr[i + 1].cx].filter(v => v != null); return w.length ? median(w) : null; };
+      let i1 = -1, prev = -1;
+      for (let i = s0; i < fr.length - 1; i++) {
+        const ci = c(i); if (ci == null) continue;
+        if (prev < 0) { if ((ci - L.finishX) * dir >= 0) return { err: "nofinish", frameMs, shake }; prev = i; continue; }
+        if ((ci - L.finishX) * dir >= 0) { i1 = i; break; }
+        prev = i;
+      }
+      if (i1 < 0) return { err: "nofinish", frameMs, shake, s0, i0 };
+      const cp = c(prev), ci = c(i1), frac = Math.min(1, Math.max(0, (L.finishX - cp) / (ci - cp || 1e-9)));
+      const finishT = fr[prev].t + frac * (fr[i1].t - fr[prev].t), startT = fr[s0].t;
+      let gaps = 0; for (let i = s0; i <= i1; i++) if (fr[i].n < 4) gaps++;
+      let peak = 0; for (let i = i0; i < Math.min(fr.length, i0 + 30); i++) peak = Math.max(peak, fr[i].e);
+      return { startT, finishT, time: (finishT - startT) / 1000, frameMs, gaps, shake, ratio: peak / hi, s0, i0, i1 };
+    }
     const fmtMB = b => (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + " MB";
     const safeName = v => String(v).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
     async function downloadMedia(key, fname) {
@@ -3269,6 +3358,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       let isRecording = false;
       let recorder = null;
       const supportsCalib = test.key === "height" || test.key === "sit_and_reach" || test.key === "vertical_jump";
+      const isSprint = test.key === "sprint_30m";
+      let sprintSet = null, sprintPrev = null, sprintLastHud = 0;
       const cal = { mode: null, pts: [], active: 0 };
       let frameW = 0, frameH = 0;
       let latestValidEv = null;
@@ -3278,6 +3369,14 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         <header class="bar dk"><button class="ib" id="btnCancelCam" aria-label="${t("Close camera", "कैमरा बंद करें")}">${IC.close}</button><h1>${state.lang === "hi" ? test.nameHi : test.nameEn}<small>${esc(athlete.name)} · ${((state.results[cellKey(athlete.id, test.key)]?.attemptsHistory?.length || 0) + 1) > test.attempts ? t("Extra attempt", "अतिरिक्त प्रयास") : t("Attempt", "प्रयास") + " " + ((state.results[cellKey(athlete.id, test.key)]?.attemptsHistory?.length || 0) + 1) + " " + t("of", "/") + " " + test.attempts}</small></h1><button class="ib" id="btnFlipCam" aria-label="${t("Flip camera", "कैमरा बदलें")}">${IC.flip}</button></header>
         <main class="main" style="gap:14px">
 
+        ${isSprint ? `
+          <details class="card stack" style="gap:8px" ${(state.sprintLines && state.sprintLines.startX != null && state.sprintLines.finishX != null) ? "" : "open"}>
+            <summary>${t("Set up the track", "ट्रैक सेट करें")}</summary>
+            <span class="small">${t("Phone on a tripod, in landscape, both lines in view. Tap a button, then tap that line on the video. The lines must be 30 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 30 मीटर दूर हों।")}</span>
+            <div class="row" style="gap:8px"><button class="btn s" id="btnSetStart" style="min-height:48px">${t("Set start line", "शुरुआती रेखा")}</button><button class="btn s" id="btnSetFinish" style="min-height:48px">${t("Set finish line", "फ़िनिश रेखा")}</button></div>
+            <div class="row" style="justify-content:space-between"><span class="small" id="sprintStatus" style="font-weight:700"></span><button class="lang-btn" id="btnSprintReset" style="margin:0">${t("Reset lines", "रेखाएँ रीसेट")}</button></div>
+          </details>
+        ` : ""}
         ${supportsCalib ? `
           <details class="card" style="padding:4px 14px 12px;" ${(state.calib?.[test.key] && state.calib[test.key].cmPerPx) ? "" : "open"}>
             <summary>${t("Setup and calibration", "सेटअप और कैलिब्रेशन")}</summary>
@@ -3386,11 +3485,13 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       const declAth = document.getElementById("declAth"), declCoach = document.getElementById("declCoach");
       declAth.checked = dst.ath; declCoach.checked = dst.coach;
       const declOk = () => dst.ath && dst.coach && !!state.assessor.trim();
+      const linesOk = () => { const L = state.sprintLines; return !!L && L.startX != null && L.finishX != null && Math.abs(L.finishX - L.startX) >= 0.2; };
+      const readyOk = () => declOk() && (!isSprint || linesOk());
       const syncDecl = () => {
         if (isRecording) return;
-        btnRec.disabled = !declOk();
+        btnRec.disabled = !readyOk();
         const h = document.getElementById("declHint");
-        if (h) h.textContent = declOk() ? "" : t("Both confirmations and the coach name are needed to record.", "रिकॉर्ड करने के लिए दोनों पुष्टि और कोच का नाम ज़रूरी है।");
+        if (h) h.textContent = readyOk() ? "" : (isSprint && !linesOk() ? t("Set the start and finish lines first, about 30 m apart.", "पहले शुरुआती और फ़िनिश रेखा तय करें, लगभग 30 मीटर दूर।") : t("Both confirmations and the coach name are needed to record.", "रिकॉर्ड करने के लिए दोनों पुष्टि और कोच का नाम ज़रूरी है।"));
       };
       declAth.onchange = () => { dst.ath = declAth.checked; syncDecl(); };
       declCoach.onchange = () => { dst.coach = declCoach.checked; syncDecl(); };
@@ -3604,6 +3705,29 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         }
       }
 
+      function refreshSprintStatus() {
+        const el = document.getElementById("sprintStatus"); if (!el) return;
+        const L = state.sprintLines || {};
+        el.textContent = sprintSet ? (sprintSet === "start" ? t("Tap the START line on the video", "वीडियो पर शुरुआती रेखा पर टैप करें") : t("Tap the FINISH line on the video", "वीडियो पर फ़िनिश रेखा पर टैप करें"))
+          : `${L.startX != null ? "✅" : "○"} ${t("Start", "शुरू")}   ${L.finishX != null ? "✅" : "○"} ${t("Finish", "फ़िनिश")}`;
+        el.style.color = sprintSet ? "var(--amber)" : "var(--ink)";
+      }
+      if (isSprint) {
+        const armSet = k => { sprintSet = k; canvasEl.style.pointerEvents = "auto"; refreshSprintStatus(); };
+        document.getElementById("btnSetStart").onclick = () => armSet("start");
+        document.getElementById("btnSetFinish").onclick = () => armSet("finish");
+        document.getElementById("btnSprintReset").onclick = () => { delete state.sprintLines; sprintSet = null; canvasEl.style.pointerEvents = "none"; persist(); refreshSprintStatus(); syncDecl(); };
+        canvasEl.addEventListener("pointerdown", (e) => {
+          if (!sprintSet || !frameW) return;
+          const rect = canvasEl.getBoundingClientRect();
+          const sc = Math.min(rect.width / frameW, rect.height / frameH), ox = (rect.width - frameW * sc) / 2;
+          const x = (e.clientX - rect.left - ox) / sc / frameW;
+          if (x < 0 || x > 1) return;
+          state.sprintLines = { ...(state.sprintLines || {}), [sprintSet === "start" ? "startX" : "finishX"]: x };
+          sprintSet = null; canvasEl.style.pointerEvents = "none"; persist(); refreshSprintStatus(); syncDecl();
+        });
+        refreshSprintStatus();
+      }
       canvasEl.addEventListener("pointerdown", (e) => {
         if ((cal.mode !== "tap" && cal.mode !== "wall") || !frameW) return;
         const rect = canvasEl.getBoundingClientRect();
@@ -3724,7 +3848,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         try {
           mediaStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
+            video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: isSprint ? 60 : 30 } }
           });
           videoEl.srcObject = mediaStream;
           await videoEl.play();
@@ -3733,6 +3857,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           if (token === captureToken && state.route === "capture") render();
           return;
         }
+        if (isSprint) { hudFps.textContent = t("Motion timing ready", "मोशन टाइमिंग तैयार"); schedule(); return; }
         try {
           await ensureMediaPipeLoaded();
           hudFps.textContent = t("Pose AI ready", "पोज़ AI तैयार");
@@ -3747,6 +3872,15 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         if (token !== captureToken) return;
         if (useRVFC) videoEl.requestVideoFrameCallback(onFrame);
         else animFrameId = requestAnimationFrame((now) => onFrame(now, null));
+      }
+
+      function drawSprintLines(W, H, cx) {
+        const L = state.sprintLines || {}, fs = Math.max(14, Math.round(W / 40));
+        ctx.lineWidth = Math.max(2, W / 320); ctx.font = `700 ${fs}px sans-serif`;
+        const line = (x, color, label) => { ctx.strokeStyle = color; ctx.fillStyle = color; ctx.setLineDash([12, 8]); ctx.beginPath(); ctx.moveTo(x * W, 0); ctx.lineTo(x * W, H); ctx.stroke(); ctx.setLineDash([]); ctx.fillText(label, Math.min(W - fs * 6, x * W + 6), fs * 1.6); };
+        if (L.startX != null) line(L.startX, "#3BE08A", t("START", "शुरू"));
+        if (L.finishX != null) line(L.finishX, "#FF5A4E", t("FINISH", "फ़िनिश"));
+        if (cx != null) { ctx.fillStyle = "#FFD166"; ctx.beginPath(); ctx.arc(cx * W, H * 0.5, fs * 0.45, 0, 6.3); ctx.fill(); }
       }
 
       function drawSkeleton(lm, color) {
@@ -4012,7 +4146,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         if (dt > 0 && dt < 1) fps = 0.9 * fps + 0.1 * (1 / dt);
 
         const fresh = useRVFC || videoEl.currentTime !== lastVideoTime;
-        if (videoEl.readyState >= 2 && poseLandmarker && fresh && videoEl.videoWidth) {
+        if (videoEl.readyState >= 2 && (poseLandmarker || isSprint) && fresh && videoEl.videoWidth) {
           lastVideoTime = videoEl.currentTime;
           const W = videoEl.videoWidth, H = videoEl.videoHeight;
           if (W !== frameW || H !== frameH) {
@@ -4024,6 +4158,20 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           const lvl = phoneLevel();
           hudTilt.textContent = lvl.known ? `${lvl.ok ? "✅" : "⚠️"} ${lvl.text}` : lvl.text;
 
+          if (isSprint) {
+            const wrap = document.querySelector(".cam-wrap"); if (wrap && wrap.dataset.ar !== `${W}x${H}`) { wrap.dataset.ar = `${W}x${H}`; wrap.style.aspectRatio = `${W} / ${H}`; wrap.style.maxHeight = "none"; }
+            const cur = sprGray(videoEl), ft = meta && meta.mediaTime ? meta.mediaTime * 1000 : now;
+            const f = sprMotion(sprintPrev, cur); sprintPrev = cur;
+            if (f && isRecording) recordedFrames.push({ postureOk: true, t: ft, ...f });
+            drawSprintLines(W, H, f && f.cx);
+            if (now - sprintLastHud > 400) {
+              sprintLastHud = now;
+              hudFps.textContent = `${Math.round(fps)} fps · ${t("MOTION TIMING", "मोशन टाइमिंग")}`;
+              hudMetric.style.display = "none"; // keep the track clear so the lines can be tapped and the athlete seen
+              hudLive.textContent = `${linesOk() ? (isRecording ? t("Recording. The athlete runs on “go”.", "रिकॉर्डिंग। “गो” पर एथलीट दौड़े।") : t("Track ready. The athlete stands still behind the start line.", "ट्रैक तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।")) : t("Set the start and finish lines.", "शुरुआती और फ़िनिश रेखा तय करें।")} ${t("Only the athlete should move.", "केवल एथलीट हिले।")}`;
+            }
+            schedule(); return;
+          }
           const tsMs = Math.max(lastMpTimestampMs + 1, Math.round(now));
           lastMpTimestampMs = tsMs;
           const tFrame = meta && meta.mediaTime ? meta.mediaTime * 1000 : now;
@@ -4112,7 +4260,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       }
 
       function finishRecording() {
-        const calibUsed = currentCalib();
+        const calibUsed = isSprint ? { sprintLines: state.sprintLines } : currentCalib();
         const key = cellKey(athlete.id, test.key);
         const prevHistory = state.results[key]?.attemptsHistory || [];
         const attemptNo = prevHistory.length + 1;
@@ -4125,7 +4273,9 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         if (validAttempts.length > 0) {
           const best = test.key === "height"
             ? validAttempts[validAttempts.length - 1]
-            : validAttempts.reduce((b, c) => (c.value > b.value ? c : b), validAttempts[0]);
+            : (test.key === "sprint_30m" || test.key === "shuttle_run")
+              ? validAttempts.reduce((b, c) => (c.value < b.value ? c : b), validAttempts[0])
+              : validAttempts.reduce((b, c) => (c.value > b.value ? c : b), validAttempts[0]);
           state.results[key] = { ...best, attemptsHistory: newHistory };
         } else {
           state.results[key] = { ...attemptOut, attemptsHistory: newHistory };
@@ -4149,7 +4299,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           cal.mode = null;
           canvasEl.style.pointerEvents = "none";
           if (calPanel) calPanel.style.display = "none";
-          if (!declOk()) return syncDecl();
+          if (!readyOk()) return syncDecl();
           curDecl = { v: 1, athlete: athlete.name, minor: athlete.age < 18, assessor: state.assessor.trim(), at: Date.now() };
           isRecording = true;
           captureElapsed = 0;
@@ -4160,6 +4310,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           btnRec.textContent = `${t("Recording...", "रिकॉर्डिंग...")} (${test.minSec}s min)`;
           captureTimer = setInterval(() => {
             captureElapsed++;
+            if (isSprint && recordedFrames.length > 20) {
+              const an = sprintAnalyze(recordedFrames, state.sprintLines);
+              if (an && an.finishT && recordedFrames[recordedFrames.length - 1].t - an.finishT > 1500) { finishRecording(); return; }
+            }
             const validCount = recordedFrames.filter(f => f.postureOk).length;
             if (test.key === "height") {
               const isCurrentlyValid = !!(latestLiveEv && latestLiveEv.postureOk);
