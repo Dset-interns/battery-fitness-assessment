@@ -480,8 +480,8 @@ body.cam .rotate{display:none!important}
         nameEn: "Standing Vertical Jump", nameHi: "स्टैंडिंग वर्टिकल जंप",
         minSec: 5, maxSec: 30, minMB: 3, maxMB: 15,
         attempts: 3, unit: "cm", mode: "AI", isPhoto: false,
-        guideEn: "Full body in frame showing feet on ground. Stand still for 1s, then jump vertically as high as possible and land in frame.",
-        guideHi: "पूरा शरीर और पैर फ्रेम में रखें। 1 सेकंड स्थिर खड़े रहें, फिर अधिकतम ऊँचाई तक सीधा कूदें।"
+        guideEn: "Stand side-on to the wall scale. 1) Raise the dominant arm fully overhead, heels down, and hold 1 second with the middle fingertip at the wall. That is the standing reach. 2) Lower the arm, then jump straight up from the spot, with no shuffling or approach steps, and reach as high as you can. Score = jump reach minus standing reach. Three attempts, best counts.",
+        guideHi: "दीवार के स्केल के बगल में खड़े हों। 1) प्रमुख हाथ को सिर के ऊपर पूरा उठाएँ, एड़ियाँ ज़मीन पर, बीच की उँगली दीवार पर 1 सेकंड रोकें। यही स्टैंडिंग रीच है। 2) हाथ नीचे करें, फिर बिना पैर खिसकाए या आगे बढ़े, उसी जगह से सीधा कूदकर जितना ऊँचा हो सके पहुँचें। स्कोर = जंप रीच − स्टैंडिंग रीच। तीन प्रयास, सर्वश्रेष्ठ गिना जाएगा।"
       },
       {
         number: 5, key: "broad_jump",
@@ -1633,8 +1633,22 @@ body.cam .rotate{display:none!important}
       const ankleMidX = 0.5 * (p(27).x + p(28).x);
       const ankleMidY = 0.5 * (p(27).y + p(28).y);
       const kneeDeg = Math.min(angleDeg(p(23), p(25), p(27)), angleDeg(p(24), p(26), p(28)));
+      // Handbook Test 4: the score is jump reach minus standing reach, both read at the fingertip of the
+      // dominant (raised) arm. Track the highest visible index fingertip whose arm is fully raised above the head.
+      // The same landmark is used for both readings, so any constant offset to the true middle fingertip cancels.
+      const shToAnkPx = Math.max(H * 0.22, ankleMidY - shMid.y);
+      let tipY = null, tipX = null;
+      for (const [shI, elI, wrI, ixI] of [[11, 13, 15, 19], [12, 14, 16, 20]]) {
+        if (!vis(lm, wrI, 0.4) || !vis(lm, ixI, 0.4)) continue;
+        const sh = p(shI), wr = p(wrI), tp = p(ixI);
+        const raised = wr.y < sh.y - 0.22 * shToAnkPx;
+        const straight = !vis(lm, elI, 0.4) || angleDeg(sh, p(elI), wr) >= 145;
+        if (raised && straight && (tipY === null || tp.y < tipY)) { tipY = tp.y; tipX = tp.x; }
+      }
+      const armUp = tipY !== null;
       return {
         postureOk: true,
+        tipY, tipX, armUp,
         shY: shMid.y,
         hipX: hipMid.x,
         hipY: hipMid.y,
@@ -1644,8 +1658,10 @@ body.cam .rotate{display:none!important}
         kneeDeg,
         hipToFootPx: Math.max(H * 0.12, ankleMidY - hipMid.y),
         shToFootPx: Math.max(H * 0.22, ankleMidY - shMid.y),
-        liveMetric: `${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° · ${t("Ready", "तैयार")}`,
-        reason: t("Stand still ~1 s, then jump straight up and land in frame.", "~1 सेकंड स्थिर खड़े रहें, फिर सीधा ऊपर कूदें।")
+        liveMetric: armUp
+          ? `${t("Arm up ✓ — hold 1 s with heels down, then jump", "हाथ ऊपर ✓ — एड़ियाँ ज़मीन पर 1 सेकंड रुकें, फिर कूदें")}`
+          : `${t("Raise your dominant arm fully above your head", "प्रमुख हाथ को सिर के ऊपर पूरा उठाएँ")}`,
+        reason: t("Side-on to the wall: raise the arm and hold 1 s (standing reach), then jump straight up and reach as high as you can.", "दीवार के बगल में: हाथ ऊपर उठाकर 1 सेकंड रुकें (स्टैंडिंग रीच), फिर सीधा कूदकर जितना ऊँचा हो सके पहुँचें।")
       };
     }
 
@@ -2011,7 +2027,8 @@ body.cam .rotate{display:none!important}
       }
 
       // ---------------- TEST 4: VERTICAL JUMP ----------------
-      // Whole-Body Coupled Ballistic Jump Detector:
+      // Score = jump reach - standing reach (handbook Test 4, ruling C21), read at the raised fingertip.
+      // The coupled-body detector below finds the jump itself and rejects fakes:
       // Requires BOTH ankles, hips, and shoulders to rise simultaneously above their local upright standing baselines
       // and return to the same floor level. Standing still, toe-landmark flicker, walking back, or squatting = REJECTED.
       if (test.key === "vertical_jump") {
@@ -2034,6 +2051,31 @@ body.cam .rotate{display:none!important}
 
         // Minimum simultaneous ankle lift to enter airborne state: at least 3.2 cm above local floor
         const liftThrPx = Math.max(3.2 / cmPerPx, 0.026 * shFoot);
+
+        // Handbook Test 4: score = jump reach - standing reach (ruling C21).
+        // Standing reach = the fingertip of the raised dominant arm, held still with the heels down before the jump.
+        const tipRaw = ok.map(f => (f.tipY == null ? NaN : f.tipY));
+        const armUpA = ok.map(f => !!f.armUp);
+        let missingStanding = false, missingTip = false, lowReach = false;
+        function standingReachBefore(takeIdx, floorY) {
+          const okFrame = k => armUpA[k] && isFinite(tipRaw[k]) && Math.abs(footSm[k] - floorY) <= liftThrPx * 1.1;
+          let found = null;
+          let k = Math.max(0, takeIdx - 240);
+          while (k < takeIdx) {
+            if (!okFrame(k)) { k++; continue; }
+            let e = k;
+            while (e + 1 < takeIdx && okFrame(e + 1)) e++;
+            for (let i = k; i <= e; i++) {
+              let j = i;
+              while (j <= e && ok[j].t - ok[i].t < 400) j++;
+              if (j > e) break;
+              const win = tipRaw.slice(i, j + 1);
+              if ((Math.max(...win) - Math.min(...win)) * cmPerPx <= 3.0) found = { y: median(win), frames: j - i + 1 };
+            }
+            k = e + 1;
+          }
+          return found;
+        }
 
         // Find contiguous airborne intervals [sIdx .. eIdx] bounded by ground contact before AND after
         const candidates = [];
@@ -2120,18 +2162,33 @@ body.cam .rotate{display:none!important}
                       horizontalRunupFoul = true;
                     } else {
                       const kinematicCm = Math.min(footClearanceCm * 1.08, coMRiseCm);
-                      const boundedFlightCm = Math.min(rawFlightCm, kinematicCm * 1.12);
-                      const jumpCm = 0.65 * kinematicCm + 0.35 * boundedFlightCm;
-
-                      candidates.push({
-                        jumpCm,
-                        kinematicCm,
-                        footClearanceCm,
-                        hipRiseCm,
-                        shRiseCm,
-                        flightSec,
-                        flightCm: rawFlightCm
-                      });
+                      const stand = standingReachBefore(sIdx, preFloor);
+                      const apexTips = [];
+                      for (let k = Math.max(0, sIdx - 2); k <= Math.min(n - 1, eIdx + 2); k++) if (isFinite(tipRaw[k])) apexTips.push(tipRaw[k]);
+                      if (!stand) {
+                        missingStanding = true;
+                      } else if (apexTips.length < 3) {
+                        missingTip = true;
+                      } else {
+                        apexTips.sort((a, b) => a - b);
+                        const apexTipY = median(apexTips.slice(0, 2));
+                        const jumpCm = (stand.y - apexTipY) * cmPerPx; // jump reach - standing reach
+                        if (jumpCm < 3.5 || jumpCm > 130) {
+                          lowReach = true;
+                        } else {
+                          candidates.push({
+                            jumpCm,
+                            kinematicCm,
+                            footClearanceCm,
+                            hipRiseCm,
+                            shRiseCm,
+                            flightSec,
+                            flightCm: rawFlightCm,
+                            // Cross-check only: the body lift measured at the ankles should be of the same order as the fingertip rise
+                            crossDiffCm: jumpCm - footClearanceCm
+                          });
+                        }
+                      }
                     }
                   }
                 }
@@ -2147,17 +2204,34 @@ body.cam .rotate{display:none!important}
               t("SAI Rule Foul: Standing Vertical Jump must be performed straight up from a stationary two-foot stance (no horizontal run-up or broad jump).",
                 "SAI नियम उल्लंघन: एक स्थान पर स्थिर खड़े होकर सीधा ऊपर कूदें (आगे की ओर कूदना अमान्य है)।"));
           }
+          if (missingStanding) {
+            return rejected(test, t("FOUL — Standing reach not recorded", "फाउल — स्टैंडिंग रीच दर्ज नहीं हुई"),
+              t("Before jumping, stand side-on to the wall, raise the dominant arm fully and hold it still for 1 second with both heels down. That is the standing reach. Then lower the arm and jump.",
+                "कूदने से पहले दीवार के बगल में खड़े होकर प्रमुख हाथ पूरा ऊपर उठाएँ और दोनों एड़ियाँ ज़मीन पर रखकर 1 सेकंड स्थिर रहें। यही स्टैंडिंग रीच है। फिर हाथ नीचे करके कूदें।"));
+          }
+          if (missingTip) {
+            return rejected(test, t("Fingertip not visible at the top of the jump", "कूद के शिखर पर उँगली दिखाई नहीं दी"),
+              t("Keep the reaching hand in view and stretched overhead at the top of the jump so the jump reach can be read.",
+                "कूद के शिखर पर पहुँचने वाला हाथ फ्रेम में और सिर के ऊपर रखें ताकि जंप रीच पढ़ी जा सके।"));
+          }
+          if (lowReach) {
+            return rejected(test, t("Jump reach not above standing reach", "जंप रीच स्टैंडिंग रीच से ऊपर नहीं"),
+              t("The fingertip did not rise above the standing reach. Reach up as high as you can at the top of the jump.",
+                "उँगली स्टैंडिंग रीच से ऊपर नहीं गई। कूद के शिखर पर जितना ऊँचा हो सके पहुँचें।"));
+          }
           return rejected(test, t("No vertical jump detected", "कोई वर्टिकल जंप नहीं मिली"),
             t("Stand still on your spot for 1s, jump straight up with both feet, and land on the same spot.", "एक स्थान पर 1 सेकंड स्थिर खड़े रहें, दोनों पैरों से सीधा ऊपर कूदें और उसी स्थान पर उतरें।"));
         }
 
         const best = candidates.reduce((a, b) => (b.jumpCm > a.jumpCm ? b : a), candidates[0]);
+        // Engineering guard (not a handbook rule): if the fingertip rise and the ankle lift disagree a lot, a landmark is likely off.
+        const crossOk = best.crossDiffCm <= 25 && best.crossDiffCm >= -12;
         return {
           valid: true,
           value: Number(best.jumpCm.toFixed(1)),
           unit: "cm",
-          confidence: calib ? "GREEN" : "AMBER",
-          method: `AI Ballistic Jump · Foot lift ${best.footClearanceCm.toFixed(1)} cm · CoM rise ${best.kinematicCm.toFixed(1)} cm · Flight ${(best.flightSec * 1000).toFixed(0)} ms`,
+          confidence: (calib && crossOk) ? "GREEN" : "AMBER",
+          method: `AI Reach Jump · jump reach − standing reach ${best.jumpCm.toFixed(1)} cm · Ankle lift ${best.footClearanceCm.toFixed(1)} cm · Flight ${(best.flightSec * 1000).toFixed(0)} ms${crossOk ? "" : " · fingertip and ankle readings differ, check the recording"}`,
           audit: candidates.map((c, idx) => ({
             label: `Jump #${idx + 1}`,
             detail: `${c.jumpCm.toFixed(1)} cm (Ankles +${c.footClearanceCm.toFixed(1)} cm · Hips +${c.hipRiseCm.toFixed(1)} cm · Shoulders +${c.shRiseCm.toFixed(1)} cm · Airborne ${(c.flightSec * 1000).toFixed(0)} ms)`,
