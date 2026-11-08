@@ -2655,7 +2655,7 @@ body.cam .rotate{display:none!important}
       const r = state.results[cellKey(a.id, te.key)];
       if (!r) return { status: "notrec", reason: X("notRun"), method: "", attempts: [] };
       const hist = r.attemptsHistory?.length ? r.attemptsHistory : [r];
-      const attempts = hist.map(x => (x.valid && x.value !== null) ? { v: x.value, ok: 1 } : { ok: 0, why: shortWhy(x) });
+      const attempts = hist.map(x => (x.valid && x.value !== null) ? { v: x.value, ok: 1, video: x.video || null } : { ok: 0, why: shortWhy(x), video: x.video || null });
       if (!(r.valid && r.value !== null)) {
         const why = shortWhy(r);
         return { status: "rejected", band: "R", reason: hist.length > 1 ? `${t("All", "सभी")} ${hist.length} ${t("attempts rejected", "प्रयास अस्वीकृत")}: ${why}` : why, method: r.method || "", attempts, retest: `${why}. ${t("Fix this, then re-test.", "इसे ठीक करके दोबारा टेस्ट करें।")}` };
@@ -2672,7 +2672,7 @@ body.cam .rotate{display:none!important}
         retest = te.id === "height" ? t("Lock a wall reference photo, then re-measure for a measured result", "दीवार संदर्भ फोटो लॉक करें, फिर मापें")
           : t("Place a physical reference (floor tape or box scale) in frame, then re-test for a measured result", "फ़्रेम में भौतिक संदर्भ (फ़र्श टेप / बॉक्स स्केल) रखकर दोबारा टेस्ट करें");
       }
-      const out = { status: "rec", band, best: r.value, reason, method: r.method || "", limit, retest, attempts };
+      const out = { status: "rec", band, best: r.value, reason, method: r.method || "", limit, retest, attempts, photo: r.photo || null };
       if (te.id === "situps") {
         out.fouls = (r.audit || []).filter(x => x.valid === false).map(x => {
           const rep = parseInt((String(x.label).match(/#?(\d+)/) || [])[1], 10);
@@ -2696,6 +2696,42 @@ body.cam .rotate{display:none!important}
       });
     }
     const dT = id => TESTS.find(x => x.id === id);
+
+    // ---- On-device media store ------------------------------------------------------------
+    // One video per attempt and one photo (the scale display) per athlete, kept as Blobs in IndexedDB so they never leave
+    // the phone (rulings C23, C36, C42). Metadata that the screens need synchronously lives on the attempt itself.
+    const VDB = (() => {
+      let dbp = null;
+      const open = () => dbp || (dbp = new Promise((res, rej) => {
+        const r = indexedDB.open("bfa_media", 1);
+        r.onupgradeneeded = () => r.result.createObjectStore("media");
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      }));
+      const tx = (mode, fn) => open().then(db => new Promise((res, rej) => {
+        const t = db.transaction("media", mode), rq = fn(t.objectStore("media"));
+        t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+      }));
+      return { put: (k, v) => tx("readwrite", st => st.put(v, k)), get: k => tx("readonly", st => st.get(k)) };
+    })();
+    const fmtMB = b => (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + " MB";
+    const safeName = v => String(v).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    async function downloadMedia(key, fname) {
+      try {
+        const rec = await VDB.get(key);
+        if (!rec || !rec.blob) return toast(t("This file is not stored on this phone", "यह फ़ाइल इस फ़ोन पर सहेजी नहीं है"));
+        const url = URL.createObjectURL(rec.blob), a = document.createElement("a");
+        a.href = url; a.download = fname + (rec.mime && rec.mime.includes("mp4") ? ".mp4" : rec.mime && rec.mime.includes("webm") ? ".webm" : rec.mime && rec.mime.includes("jpeg") ? ".jpg" : "");
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (e) { toast(t("Could not read the stored file", "सहेजी फ़ाइल पढ़ी नहीं जा सकी")); }
+    }
+    // Downscale a photo so the stored evidence stays small (about 150-300 KB).
+    async function shrinkPhoto(file, maxEdge = 1280) {
+      const bmp = await createImageBitmap(file);
+      const k = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      return await new Promise(r => c.toBlob(r, "image/jpeg", 0.8));
+    }
     const curA = () => ATH.find(a => a.id === state.selectedAthleteId) || ATH[0];
     const u12 = a => a.age < 12;
     const ageGrp = a => a.g; // gender label; age no longer changes any test rule
@@ -2971,9 +3007,12 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
         ? `<div class="kv"><div><input data-f2="m" value="${esc(E.m)}" inputmode="numeric" maxlength="2" aria-label="${t("Minutes", "मिनट")}" placeholder="0"><label>${t("min", "मिनट")}</label></div><span>:</span><div><input data-f2="s" value="${esc(E.s)}" inputmode="numeric" maxlength="2" aria-label="${t("Seconds", "सेकंड")}" placeholder="00"><label>${t("sec", "सेकंड")}</label></div></div>`
         : `<div class="kv"><div><input data-f2="val" value="${esc(E.val)}" inputmode="decimal" style="width:5.2ch" aria-label="${te.u}" placeholder="0"><label>${UNIT[te.u] || te.u}</label></div></div>`;
       const hint = isRun ? t("Enter the time from the stopwatch.", "स्टॉपवॉच का समय दर्ज करें।") : te.id === "weight" ? t("Enter weight to the nearest kg.", "नज़दीकी किग्रा तक वज़न दर्ज करें।") : t(`Enter the measured value in ${te.u}.`, `मापा गया मान ${te.u} में दर्ज करें।`);
+      const photoBlock = te.id === "weight" ? `<div class="card stack" style="gap:10px"><span class="eyebrow">${t("Photo of the scale display", "मशीन के डिस्प्ले की फोटो")}</span>
+  ${E.photoUrl ? `<img src="${E.photoUrl}" alt="" style="width:100%;max-height:220px;object-fit:contain;border-radius:12px;background:var(--surface-2)">` : `<span class="small">${t("Required. Photograph the weight shown on the display so it can be checked later.", "आवश्यक। डिस्प्ले पर दिख रहे वज़न की फोटो लें ताकि बाद में जाँच हो सके।")}</span>`}
+  <label class="btn s" for="inp-photo" style="cursor:pointer">${IC.cam}${E.photoUrl ? t("Retake photo", "फोटो दोबारा लें") : t("Take photo", "फोटो लें")}</label><input id="inp-photo" type="file" accept="image/*" capture="environment" hidden></div>` : "";
       return `<div class="scr">${barH(tname(a, te), `${esc(a.name)} · ${ageGrp(a)}`)}
 <main class="main" style="gap:18px">
- <div class="card" style="padding:8px 16px 20px">${field}<p class="sub" style="text-align:center">${hint}</p></div>
+ <div class="card" style="padding:8px 16px 20px">${field}<p class="sub" style="text-align:center">${hint}</p></div>${photoBlock}
  <div class="list"><div class="li" style="min-height:56px"><span class="grow small">${t("Method", "तरीका")}</span><span class="tag">${t("Manual", "मैन्युअल")}</span></div><div class="li" style="min-height:56px"><span class="grow small">${t("Shown on the report as", "रिपोर्ट में दिखेगा")}</span>${chipH(te.m === "manual" ? "G" : "A", te.m === "manual" ? null : t("Amber · estimate", "पीला · अनुमान"))}</div></div>
  <div class="note">${IC.info}<span>${t("Manual results are labelled as entered by the assessor. If the test was not done, leave it as Not recorded; nothing is written as zero.", "मैन्युअल परिणाम मूल्यांकनकर्ता द्वारा दर्ज के रूप में दिखते हैं। टेस्ट न हुआ हो तो “दर्ज नहीं” रहने दें; शून्य नहीं लिखा जाता।")}</span></div>
 </main>
@@ -2982,11 +3021,21 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
     function saveManual() {
       const a = curA(), te = dT(TKEY[state.selectedTestKey]) || TESTS[0], E = VW.entry;
       if (!canManual(te)) return toast(t("This test is measured by the camera only", "यह टेस्ट केवल कैमरे से मापा जाता है"));
+      const prevPhoto = state.results[cellKey(a.id, te.key)]?.photo;
+      if (te.id === "weight" && !E.photoBlob && !prevPhoto) return toast(t("Take a photo of the scale display first", "पहले मशीन के डिस्प्ले की फोटो लें"));
       let val;
       if (te.id === "run") { const m = parseInt(E.m || "0", 10), s = parseInt(E.s || "0", 10); val = m * 60 + s; if (!(val > 0) || s > 59) return toast(t("Enter a valid time (seconds under 60)", "सही समय दर्ज करें (सेकंड 60 से कम)")); }
       else { val = parseFloat(String(E.val).replace(",", ".")); if (te.id === "weight") val = Math.round(val); if (!(val > 0)) return toast(t("Enter a value above zero, or choose Not run today", "शून्य से अधिक मान दर्ज करें या “आज नहीं हुआ” चुनें")); }
       const key = cellKey(a.id, te.key);
       const entry = { valid: true, value: val, unit: te.b.unit, confidence: te.m === "manual" ? "GREEN" : "AMBER", method: te.m === "manual" ? "Assessor Protocol Entry" : "Rung 5 Manual Override", audit: [{ label: "Manual", detail: `Assessor entered ${val} ${te.b.unit}`, valid: true }] };
+      if (te.id === "weight") {
+        const pk = `p:${a.id}:weight`;
+        if (E.photoBlob) {
+          const blob = E.photoBlob;
+          entry.photo = { key: pk, mime: "image/jpeg", sizeBytes: blob.size };
+          VDB.put(pk, { blob, mime: "image/jpeg", sizeBytes: blob.size, athleteId: a.id, testKey: te.key, savedAt: Date.now() }).catch(() => { });
+        } else if (prevPhoto) entry.photo = prevPhoto;
+      }
       entry.attemptsHistory = [...(state.results[key]?.attemptsHistory || []), { ...entry }];
       state.results[key] = entry;
       nav("session", {}, true);
@@ -3203,6 +3252,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       const recordedFrames = [];
       let fps = 30;
       let isRecording = false;
+      let recorder = null;
       const supportsCalib = test.key === "height" || test.key === "sit_and_reach" || test.key === "vertical_jump";
       const cal = { mode: null, pts: [], active: 0 };
       let frameW = 0, frameH = 0;
@@ -3985,12 +4035,48 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         schedule();
       }
 
+      // One video per attempt. The raw camera stream is recorded with a bitrate budget derived from the test's size limit,
+      // so a long recording stays inside the limit instead of being rejected (rulings C27, C37).
+      function startRecorder() {
+        recorder = null;
+        if (!window.MediaRecorder || !mediaStream) return;
+        try {
+          const mime = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find(m => MediaRecorder.isTypeSupported(m)) || "";
+          const bps = Math.max(600000, Math.min(2500000, Math.floor(test.maxMB * 8e6 * 0.9 / Math.max(test.maxSec, 1))));
+          recorder = new MediaRecorder(mediaStream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: bps });
+          // The clip's chunks live on the recorder itself: the last one arrives after stop() is called.
+          const chunks = recorder._chunks = [];
+          recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+          recorder.start(1000);
+        } catch (e) { recorder = null; }
+      }
+      // Stops the recorder and stores the clip under the attempt's key; returns the metadata kept on the attempt.
+      function stopRecorder(vkey, attemptNo, durationSec, hKey) {
+        const rec = recorder; recorder = null;
+        if (!rec || rec.state === "inactive") return null;
+        const meta = { key: vkey, mime: rec.mimeType || "video/webm", durationSec };
+        rec.onstop = async () => {
+          const blob = new Blob(rec._chunks || [], { type: meta.mime });
+          if (!blob.size) return;
+          try {
+            await VDB.put(vkey, { blob, mime: meta.mime, durationSec, sizeBytes: blob.size, athleteId: athlete.id, testKey: test.key, attemptNo, savedAt: Date.now() });
+            const h = state.results[hKey]?.attemptsHistory?.[attemptNo - 1];
+            if (h && h.video) { h.video.sizeBytes = blob.size; h.video.oversize = blob.size > test.maxMB * 1048576 * 1.5; persist(); }
+          } catch (e) { /* storage full or unavailable: the attempt keeps no stored clip */ }
+        };
+        try { rec.stop(); } catch (e) { return null; }
+        return meta;
+      }
+
       function finishRecording() {
         const calibUsed = currentCalib();
-        stopCamera();
         const key = cellKey(athlete.id, test.key);
         const prevHistory = state.results[key]?.attemptsHistory || [];
+        const attemptNo = prevHistory.length + 1;
+        const videoMeta = stopRecorder(`v:${athlete.id}:${test.key}:${attemptNo}:${Date.now().toString(36)}`, attemptNo, captureElapsed, key) // unique per recording, so resetting attempts can never overwrite earlier evidence;
+        stopCamera();
         const attemptOut = computeAttemptResult(test, athlete, recordedFrames, fps, calibUsed);
+        if (videoMeta) attemptOut.video = videoMeta;
         const newHistory = [...prevHistory, attemptOut];
         const validAttempts = newHistory.filter(a => a.valid && a.value !== null);
         if (validAttempts.length > 0) {
@@ -4005,6 +4091,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       }
 
       document.getElementById("btnCancelCam").onclick = () => {
+        recorder = null;
         stopCamera();
         nav("cell", {}, true);
       };
@@ -4023,6 +4110,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           captureElapsed = 0;
           let validSec = 0;
           recordedFrames.length = 0;
+          startRecorder();
           btnRec.disabled = true;
           btnRec.textContent = `${t("Recording...", "रिकॉर्डिंग...")} (${test.minSec}s min)`;
           captureTimer = setInterval(() => {
@@ -4049,16 +4137,18 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
               return;
             }
             hudTimer.textContent = `${captureElapsed}s / ${test.minSec}–${test.maxSec}s (${validCount} ${t("valid", "मान्य")})`;
+            if (captureElapsed >= 2) btnRec.disabled = false;
             if (captureElapsed >= test.minSec) {
-              btnRec.disabled = false;
               btnRec.textContent = `■ ${t("Stop & Compute Score", "रोकें और स्कोर निकालें")} (${captureElapsed}s)`;
+            } else if (captureElapsed >= 2) {
+              btnRec.textContent = `■ ${t("Stop and evaluate", "रोकें और जाँचें")} (${t("recommended", "सुझाया")} ${test.minSec}s)`;
             } else {
-              btnRec.textContent = `${t("Keep recording", "रिकॉर्डिंग जारी")} (${test.minSec - captureElapsed}s)`;
+              btnRec.textContent = `${t("Recording...", "रिकॉर्डिंग...")}`;
             }
             if (captureElapsed >= test.maxSec) finishRecording();
           }, 1000);
         } else {
-          if (test.key !== "height" && captureElapsed < test.minSec) return;
+          if (captureElapsed < 2) return;
           finishRecording();
         }
       };
@@ -4163,6 +4253,12 @@ const parH = a => { const f = (c, sr) => c ? `${c} cm (${sr === "measured" ? t("
   ${r.limit ? `<div class="note am"><span>${shape("A", 18)}</span><span>${esc(r.limit)}</span></div>` : ""}
   ${r.attempts.length ? `<div class="sec"><div class="sec-h" style="padding:0"><span class="eyebrow">${r.attempts.length === 1 ? t("1 attempt", "1 प्रयास") : r.attempts.length + " " + t("attempts", "प्रयास")}</span><span class="small">${valid > 1 ? `${t("Spread", "अंतर")} <b class="num" style="color:var(--ink)">${fmtS(te, sp)}</b>` : valid === 1 ? t("One valid attempt", "एक वैध प्रयास") : t("No valid attempt", "कोई वैध प्रयास नहीं")}</span></div>${te.id !== "situps" ? plot(te, r) : ""}
    <div>${r.attempts.map((x, k) => `<div class="att"><span class="k">${t("Attempt", "प्रयास")} ${k + 1}</span>${x.ok ? `<span class="v">${fmtS(te, x.v)}</span>${x.v === r.best && valid > 1 ? `<span class="tag ai">${t("Best", "सर्वश्रेष्ठ")}</span>` : ""}` : `${shape("R", 14)}<span class="grow"><b style="color:var(--red)">${t("Rejected", "अस्वीकृत")}</b> · ${esc(x.why)}</span>`}</div>`).join("")}</div></div>` : ""}
+  ${(() => {
+      const rows = [];
+      r.attempts.forEach((x, k) => { if (x.video) rows.push(`<div class="att"><span class="k">${t("Attempt", "प्रयास")} ${k + 1}</span><span class="grow small">${x.video.sizeBytes ? `${t("Video saved", "वीडियो सहेजा")} · ${Math.round(x.video.durationSec || 0)} s · ${fmtMB(x.video.sizeBytes)}${x.video.oversize ? ` · ${t("over the size limit", "आकार सीमा से अधिक")}` : ""}` : t("Video not stored", "वीडियो सहेजा नहीं गया")}</span>${x.video.sizeBytes ? `<button class="btn q" style="flex:0 0 auto;min-height:40px;padding:4px 12px" data-act="dlmedia" data-k="${esc(x.video.key)}" data-n="${esc(safeName(a.name) + "_" + te.id + "_attempt" + (k + 1))}">${IC.dl}</button>` : ""}</div>`); });
+      if (r.photo && r.photo.sizeBytes) rows.push(`<div class="att"><span class="k">${t("Photo", "फोटो")}</span><span class="grow small">${t("Scale display", "मशीन का डिस्प्ले")} · ${fmtMB(r.photo.sizeBytes)}</span><button class="btn q" style="flex:0 0 auto;min-height:40px;padding:4px 12px" data-act="dlmedia" data-k="${esc(r.photo.key)}" data-n="${esc(safeName(a.name) + "_weight_photo")}">${IC.dl}</button></div>`);
+      return rows.length ? `<div class="sec"><span class="eyebrow">${t("Recordings kept on this phone", "इस फ़ोन पर रखी रिकॉर्डिंग")}</span><div>${rows.join("")}</div></div>` : "";
+    })()}
   ${te.id === "situps" && r.status === "rec" ? `<div class="sec"><span class="eyebrow">${t("Rule audit", "नियम ऑडिट")}</span><div style="font-weight:600">${Math.round(r.best) + fouls.length} ${t("reps detected", "रेप मिले")} · ${Math.round(r.best)} ${t("counted", "गिने गए")} · ${fouls.length} ${t("not counted", "नहीं गिने")}</div>${ticks}
    <div class="tl">${fouls.length ? fouls.map(f => `<div class="ev"><span class="rp">${t("Rep", "रेप")} ${f.rep}</span><span>${esc(f.t)}${f.rule ? ` <span class="small">· ${t("Rule", "नियम")} ${esc(f.rule)}</span>` : ""}</span></div>`).join("") : `<div class="small">${t("No fouls", "कोई फाउल नहीं")}</div>`}</div></div>` : ""}
   ${r.method ? `<div class="sec"><span class="eyebrow">${t("How it was measured", "कैसे मापा गया")}</span><span>${esc(r.method)}</span></div>` : ""}
@@ -4261,6 +4357,7 @@ function shareModal(k) {
       list: el => { VW.list = el.dataset.v; if (state.session?.mode !== "INDIVIDUAL") state.sequencing = VW.list === "athletes" ? "ATHLETE_WISE" : "TEST_WISE"; render(); },
       liststations: () => { VW.list = "stations"; render(); },
       open: el => { const a = ATH.find(x => x.id === Number(el.dataset.a)), te = TESTS.find(x => x.key === el.dataset.t); if (a && te) openTest(a, te); },
+      dlmedia: el => downloadMedia(el.dataset.k, el.dataset.n),
       manualfromcell: () => { if (canManual(dT(TKEY[state.selectedTestKey]))) openManual(state.selectedAthleteId, state.selectedTestKey, "cell"); },
       savemanual: saveManual,
       sheet: el => overlay("sheet", el.dataset.t),
@@ -4290,6 +4387,15 @@ function shareModal(k) {
       }
       if (d.f2) VW.entry[d.f2] = d.f2 === "val" ? e.target.value.replace(/[^0-9.,]/g, "") : e.target.value.replace(/\D/g, "");
       if (d.f3) { state[d.f3] = e.target.value; persist(); if (d.f3 === "assessor") { const lb = document.getElementById("btnLogin"); if (lb) lb.disabled = !e.target.value.trim(); } }
+    });
+    document.addEventListener("change", async e => {
+      if (e.target.id !== "inp-photo" || !e.target.files || !e.target.files[0]) return;
+      try {
+        const blob = await shrinkPhoto(e.target.files[0]);
+        if (VW.entry.photoUrl) URL.revokeObjectURL(VW.entry.photoUrl);
+        VW.entry.photoBlob = blob; VW.entry.photoUrl = URL.createObjectURL(blob);
+        render();
+      } catch (err) { toast(t("Could not read that photo, try again", "वह फोटो पढ़ी नहीं जा सकी, फिर कोशिश करें")); }
     });
     document.addEventListener("keydown", e => { if (e.key === "Escape" && (VW.sheet || VW.modal)) goBack(); });
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => state.theme === "auto" && state.route !== "capture" && render());
