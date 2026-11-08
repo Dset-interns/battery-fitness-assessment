@@ -1,0 +1,29 @@
+# Local production-like stack: the API plus PostgreSQL.
+#   BFA_DEVICE_KEY=... BFA_EXPORT_KEY=... BFA_ADMIN_KEY=... BFA_PSEUDONYM_SECRET=... docker compose up --build
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bfa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: bfa
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bfa -d bfa"]
+      interval: 5s
+      retries: 10
+  api:
+    build: .
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      DATABASE_URL: postgresql+psycopg://bfa:${POSTGRES_PASSWORD:-change-me}@db:5432/bfa
+      BFA_KEYS: "${BFA_DEVICE_KEY:?set BFA_DEVICE_KEY}:device,${BFA_EXPORT_KEY:?set BFA_EXPORT_KEY}:export,${BFA_ADMIN_KEY:?set BFA_ADMIN_KEY}:admin"
+      BFA_PSEUDONYM_SECRET: ${BFA_PSEUDONYM_SECRET:?set BFA_PSEUDONYM_SECRET}
+      BFA_RETENTION_DAYS: ${BFA_RETENTION_DAYS:-0}
+      BFA_CORS_ORIGINS: ${BFA_CORS_ORIGINS:-*}
+    volumes: [media:/data/media]
+    ports: ["8000:8000"]
+volumes:
+  dbdata:
+  media:

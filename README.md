@@ -95,8 +95,11 @@ bilingual PDF report card.
 Medicine ball throw (classical CV: Hough circles → Kalman → parabola fit
 against the ground plane) · 30 m sprint (finish-line crossing + audio start —
 the perpendicular full-track view needs ~23 m of lateral clearance that no
-school ground reliably has) · shuttle run · endurance lap timing ·
-production sync and de-identification gateway.
+school ground reliably has) · shuttle run · endurance lap timing.
+
+The sync service and de-identification gateway are built: see [`backend/README.md`](backend/README.md). The web app in
+`ios/iphone-pwa/` has moved well past this table (all ten tests, consent, per-attempt video, offline); this README has not
+been brought up to date yet.
 
 ---
 

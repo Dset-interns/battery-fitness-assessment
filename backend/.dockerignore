@@ -1,0 +1,6 @@
+tests
+scripts
+*.db
+media
+__pycache__
+.pytest_cache

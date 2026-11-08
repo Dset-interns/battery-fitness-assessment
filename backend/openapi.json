@@ -1,0 +1,1460 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Battery Fitness Assessment sync service",
+    "description": "Receives results from the assessor's phone after the video has been processed on the phone. Identified data (including signed consent) and de-identified data are kept in separate zones; the export endpoints read only the de-identified zone. Authenticate with `X-API-Key`; scopes: `device` (the app), `export`, `admin`.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Liveness and database check",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/config": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Limits the app should respect",
+        "operationId": "config_v1_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sync": {
+      "post": {
+        "tags": [
+          "sync"
+        ],
+        "summary": "Send athletes, signed consent and attempts",
+        "description": "Safe to repeat: athletes, consents (by signing time), attempts (by attempt id) and results are upserted.\n\nAn athlete without a complete consent is rejected, with a reason, and none of that athlete's data is stored.\nTwo requests from the same phone arriving together can collide on a first insert; the batch is simply\napplied again, which is safe because it is idempotent.",
+        "operationId": "sync_v1_sync_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/media": {
+      "post": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Upload one video or the scale photo for an athlete",
+        "operationId": "upload_media_v1_media_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_media_v1_media_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deidentified/subjects": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "De-identified subjects with their results",
+        "operationId": "deid_subjects_v1_deidentified_subjects_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "age_band",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Age Band"
+            }
+          },
+          {
+            "name": "gender",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[FMO]$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Gender"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeidPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/deidentified/results.csv": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Every de-identified result as CSV",
+        "operationId": "deid_csv_v1_deidentified_results_csv_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Counts",
+        "operationId": "stats_v1_stats_get",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/athletes/{athlete_uid}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "One athlete with identity, consent and media (identified)",
+        "operationId": "athlete_detail_v1_athletes__athlete_uid__get",
+        "parameters": [
+          {
+            "name": "athlete_uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Athlete Uid"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Withdraw consent: erase the athlete everywhere",
+        "description": "Removes the identified record, signed consent, attempts, media files and the de-identified subject.",
+        "operationId": "withdraw_v1_athletes__athlete_uid__delete",
+        "parameters": [
+          {
+            "name": "athlete_uid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Athlete Uid"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/purge-expired": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Delete videos and photos past their retention date",
+        "operationId": "purge_v1_admin_purge_expired_post",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AthleteIn": {
+        "properties": {
+          "local_id": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Local Id",
+            "description": "The app's own id for the athlete on that phone"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "age_years": {
+            "type": "integer",
+            "maximum": 25.0,
+            "minimum": 5.0,
+            "title": "Age Years",
+            "description": "Age at registration; 12 and over follows the 12+ rules (ruling C30)"
+          },
+          "gender": {
+            "type": "string",
+            "enum": [
+              "F",
+              "M",
+              "O"
+            ],
+            "title": "Gender"
+          },
+          "school": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "School",
+            "default": ""
+          },
+          "id_type": {
+            "type": "string",
+            "enum": [
+              "APAAR",
+              "AADHAAR",
+              "NSRS",
+              "LOCAL"
+            ],
+            "title": "Id Type",
+            "default": "LOCAL"
+          },
+          "id_number": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Id Number",
+            "default": ""
+          },
+          "assessment_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Assessment Date"
+          },
+          "mother_cm": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 250.0,
+                "minimum": 50.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mother Cm"
+          },
+          "mother_source": {
+            "type": "string",
+            "enum": [
+              "measured",
+              "self",
+              ""
+            ],
+            "title": "Mother Source",
+            "default": ""
+          },
+          "father_cm": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 250.0,
+                "minimum": 50.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Father Cm"
+          },
+          "father_source": {
+            "type": "string",
+            "enum": [
+              "measured",
+              "self",
+              ""
+            ],
+            "title": "Father Source",
+            "default": ""
+          },
+          "consent": {
+            "$ref": "#/components/schemas/ConsentIn"
+          }
+        },
+        "type": "object",
+        "required": [
+          "local_id",
+          "name",
+          "age_years",
+          "gender",
+          "assessment_date",
+          "consent"
+        ],
+        "title": "AthleteIn"
+      },
+      "AttemptIn": {
+        "properties": {
+          "attempt_id": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Attempt Id",
+            "description": "Stable id: the video key, or test:n when there is no video"
+          },
+          "attempt_no": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Attempt No"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 10,
+            "title": "Unit",
+            "default": ""
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "AMBER",
+              "RED"
+            ],
+            "title": "Confidence"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "default": ""
+          },
+          "audit": {
+            "items": {
+              "$ref": "#/components/schemas/AuditItem"
+            },
+            "type": "array",
+            "title": "Audit",
+            "default": []
+          },
+          "video": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoMeta"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "attempt_id",
+          "attempt_no",
+          "valid",
+          "confidence"
+        ],
+        "title": "AttemptIn"
+      },
+      "AuditItem": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          },
+          "valid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "AuditItem"
+      },
+      "Body_upload_media_v1_media_post": {
+        "properties": {
+          "athlete_uid": {
+            "type": "string",
+            "title": "Athlete Uid"
+          },
+          "test_key": {
+            "type": "string",
+            "title": "Test Key"
+          },
+          "kind": {
+            "type": "string",
+            "pattern": "^(video|photo)$",
+            "title": "Kind"
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Key"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "athlete_uid",
+          "test_key",
+          "kind",
+          "key",
+          "file"
+        ],
+        "title": "Body_upload_media_v1_media_post"
+      },
+      "ConsentIn": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "signed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Signed At"
+          },
+          "signer_name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 2,
+            "title": "Signer Name"
+          },
+          "relationship": {
+            "type": "string",
+            "enum": [
+              "self",
+              "parent",
+              "guardian"
+            ],
+            "title": "Relationship"
+          },
+          "minor": {
+            "type": "boolean",
+            "title": "Minor"
+          },
+          "items": {
+            "$ref": "#/components/schemas/ConsentItems"
+          },
+          "assessor": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Assessor",
+            "default": ""
+          },
+          "signature_png_base64": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 400000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Png Base64",
+            "description": "The drawn signature, PNG, base64"
+          }
+        },
+        "type": "object",
+        "required": [
+          "signed_at",
+          "signer_name",
+          "relationship",
+          "minor",
+          "items"
+        ],
+        "title": "ConsentIn"
+      },
+      "ConsentItems": {
+        "properties": {
+          "assess": {
+            "type": "boolean",
+            "title": "Assess",
+            "description": "Taking part in the assessment and recording the results"
+          },
+          "video": {
+            "type": "boolean",
+            "title": "Video",
+            "description": "Video and photo kept on the assessor's phone for audit, not uploaded to a commercial cloud"
+          },
+          "data": {
+            "type": "boolean",
+            "title": "Data",
+            "description": "Sharing de-identified results with SAI and NeGD, and with the athlete, guardian and school"
+          },
+          "parent_height": {
+            "type": "boolean",
+            "title": "Parent Height",
+            "description": "Optional: parental height recorded",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "assess",
+          "video",
+          "data"
+        ],
+        "title": "ConsentItems"
+      },
+      "DeidPage": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/DeidSubjectOut"
+            },
+            "type": "array",
+            "title": "Subjects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "subjects"
+        ],
+        "title": "DeidPage"
+      },
+      "DeidResultOut": {
+        "properties": {
+          "test_key": {
+            "type": "string",
+            "title": "Test Key"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "best_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Value"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "confidence": {
+            "type": "string",
+            "title": "Confidence"
+          },
+          "attempts_count": {
+            "type": "integer",
+            "title": "Attempts Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "test_key",
+          "status",
+          "best_value",
+          "unit",
+          "confidence",
+          "attempts_count"
+        ],
+        "title": "DeidResultOut"
+      },
+      "DeidSubjectOut": {
+        "properties": {
+          "pseudonym": {
+            "type": "string",
+            "title": "Pseudonym"
+          },
+          "age_years": {
+            "type": "integer",
+            "title": "Age Years"
+          },
+          "age_band": {
+            "type": "string",
+            "title": "Age Band"
+          },
+          "gender": {
+            "type": "string",
+            "title": "Gender"
+          },
+          "assessment_month": {
+            "type": "string",
+            "title": "Assessment Month"
+          },
+          "mother_cm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mother Cm"
+          },
+          "father_cm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Father Cm"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/DeidResultOut"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pseudonym",
+          "age_years",
+          "age_band",
+          "gender",
+          "assessment_month",
+          "results"
+        ],
+        "title": "DeidSubjectOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "database": {
+            "type": "string",
+            "const": "up",
+            "title": "Database"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "database"
+        ],
+        "title": "Health"
+      },
+      "MediaOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "video",
+              "photo"
+            ],
+            "title": "Kind"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "retain_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retain Until"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "kind",
+          "size_bytes",
+          "sha256",
+          "retain_until"
+        ],
+        "title": "MediaOut"
+      },
+      "Rejected": {
+        "properties": {
+          "local_id": {
+            "type": "string",
+            "title": "Local Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "local_id",
+          "reason"
+        ],
+        "title": "Rejected"
+      },
+      "ResultIn": {
+        "properties": {
+          "athlete_local_id": {
+            "type": "string",
+            "title": "Athlete Local Id"
+          },
+          "test_key": {
+            "type": "string",
+            "enum": [
+              "height",
+              "weight",
+              "sit_and_reach",
+              "vertical_jump",
+              "broad_jump",
+              "medicine_ball_throw",
+              "sprint_30m",
+              "shuttle_run",
+              "sit_ups",
+              "endurance_run"
+            ],
+            "title": "Test Key"
+          },
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptIn"
+            },
+            "type": "array",
+            "maxItems": 12,
+            "title": "Attempts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "athlete_local_id",
+          "test_key",
+          "attempts"
+        ],
+        "title": "ResultIn"
+      },
+      "ServerConfig": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "max_batch_athletes": {
+            "type": "integer",
+            "title": "Max Batch Athletes"
+          },
+          "max_media_mb": {
+            "type": "integer",
+            "title": "Max Media Mb"
+          },
+          "retention_days": {
+            "type": "integer",
+            "title": "Retention Days",
+            "description": "0 means kept until purged by hand"
+          },
+          "consent_version": {
+            "type": "integer",
+            "title": "Consent Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "max_batch_athletes",
+          "max_media_mb",
+          "retention_days",
+          "consent_version"
+        ],
+        "title": "ServerConfig"
+      },
+      "Stats": {
+        "properties": {
+          "devices": {
+            "type": "integer",
+            "title": "Devices"
+          },
+          "athletes": {
+            "type": "integer",
+            "title": "Athletes"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "media_files": {
+            "type": "integer",
+            "title": "Media Files"
+          },
+          "deidentified_subjects": {
+            "type": "integer",
+            "title": "Deidentified Subjects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "devices",
+          "athletes",
+          "attempts",
+          "media_files",
+          "deidentified_subjects"
+        ],
+        "title": "Stats"
+      },
+      "SyncBatch": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Device Id",
+            "description": "Generated by the app on first run"
+          },
+          "assessor": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Assessor",
+            "default": ""
+          },
+          "app_version": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "App Version",
+            "default": ""
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sent At"
+          },
+          "athletes": {
+            "items": {
+              "$ref": "#/components/schemas/AthleteIn"
+            },
+            "type": "array",
+            "title": "Athletes"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ResultIn"
+            },
+            "type": "array",
+            "title": "Results",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "device_id",
+          "sent_at",
+          "athletes"
+        ],
+        "title": "SyncBatch"
+      },
+      "SyncResponse": {
+        "properties": {
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Server Time"
+          },
+          "accepted_athletes": {
+            "type": "integer",
+            "title": "Accepted Athletes"
+          },
+          "attempts_upserted": {
+            "type": "integer",
+            "title": "Attempts Upserted"
+          },
+          "results_upserted": {
+            "type": "integer",
+            "title": "Results Upserted"
+          },
+          "rejected": {
+            "items": {
+              "$ref": "#/components/schemas/Rejected"
+            },
+            "type": "array",
+            "title": "Rejected"
+          },
+          "athlete_uids": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Athlete Uids",
+            "description": "local_id to server athlete uid, used for media uploads"
+          }
+        },
+        "type": "object",
+        "required": [
+          "server_time",
+          "accepted_athletes",
+          "attempts_upserted",
+          "results_upserted",
+          "rejected",
+          "athlete_uids"
+        ],
+        "title": "SyncResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VideoMeta": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Key"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "declaration": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declaration",
+            "description": "Athlete and coach authenticity declaration (ruling C43)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "VideoMeta"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "sync",
+      "description": "From the app: athletes, signed consent and attempts. Idempotent."
+    },
+    {
+      "name": "media",
+      "description": "Videos and the scale photo kept for audit."
+    },
+    {
+      "name": "export",
+      "description": "De-identified data for the programme (scope export)."
+    },
+    {
+      "name": "admin",
+      "description": "Identified data, withdrawal of consent and retention (scope admin)."
+    },
+    {
+      "name": "ops",
+      "description": "Health and configuration."
+    }
+  ]
+}
