@@ -2639,6 +2639,9 @@ body.cam .rotate{display:none!important}
     const UNIT = { cm: "cm", kg: "kg", s: "s", reps: "reps" };
     const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const tN = te => state.lang === "hi" ? te.hi : te.en;
+    // Rulings C39 and C42: no manual fallback or override for AI-measured tests. Only height and weight may be typed in;
+    // medicine ball and endurance stay manual only until their AI measurement exists.
+    const canManual = te => te.m === "manual" || te.id === "height";
 
     // ---- Data adapter: real result objects -> design shape --------------------
     function shortWhy(x) {
@@ -2946,7 +2949,7 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
 <main class="main" style="gap:14px">
  <div class="card stack" style="gap:6px"><span class="eyebrow">${t("SAI protocol", "SAI प्रोटोकॉल")} · ${bt.attempts} ${t("attempt(s) permitted", "प्रयास अनुमत")}</span><span class="sub">${state.lang === "hi" ? bt.guideHi : bt.guideEn}</span></div>
  ${refCard}${histRows}
- <div class="list"><button class="li" data-act="manualfromcell">${icoH(IC.stopwatch)}<span class="grow"><span class="t">${te.m === "ai" ? t("Enter result manually", "परिणाम मैन्युअल दर्ज करें") : t("Enter result", "परिणाम दर्ज करें")}</span><span class="d">${te.m === "ai" ? t("Rung 5 override · shown as an estimate", "रंग 5 ओवरराइड · अनुमान के रूप में") : t("Measured by the assessor", "मूल्यांकनकर्ता द्वारा मापा")}</span></span><span class="chev">${IC.chev}</span></button></div>
+ ${canManual(te) ? `<div class="list"><button class="li" data-act="manualfromcell">${icoH(IC.stopwatch)}<span class="grow"><span class="t">${te.m === "ai" ? t("Enter result manually", "परिणाम मैन्युअल दर्ज करें") : t("Enter result", "परिणाम दर्ज करें")}</span><span class="d">${te.m === "ai" ? t("Rung 5 override · shown as an estimate", "रंग 5 ओवरराइड · अनुमान के रूप में") : t("Measured by the assessor", "मूल्यांकनकर्ता द्वारा मापा")}</span></span><span class="chev">${IC.chev}</span></button></div>` : `<div class="note">${IC.info}<span>${t("This test is measured by the camera only. If a recording is rejected, fix the reason shown and record another attempt.", "यह टेस्ट केवल कैमरे से मापा जाता है। रिकॉर्डिंग अस्वीकृत हो तो दिखाया गया कारण ठीक करके दूसरा प्रयास रिकॉर्ड करें।")}</span></div>`}
 </main>
 <div class="bb">${te.m === "ai" ? `<button class="btn p" id="btnOpenCamera">${IC.cam}${t("Start capture", "कैप्चर शुरू करें")} · ${used >= bt.attempts ? t("extra attempt", "अतिरिक्त प्रयास") : t("attempt", "प्रयास") + " " + (used + 1)}</button>` : `<button class="btn p" data-act="manualfromcell">${IC.stopwatch}${t("Enter result", "परिणाम दर्ज करें")}</button>`}</div></div>`;
     };
@@ -2978,6 +2981,7 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
     };
     function saveManual() {
       const a = curA(), te = dT(TKEY[state.selectedTestKey]) || TESTS[0], E = VW.entry;
+      if (!canManual(te)) return toast(t("This test is measured by the camera only", "यह टेस्ट केवल कैमरे से मापा जाता है"));
       let val;
       if (te.id === "run") { const m = parseInt(E.m || "0", 10), s = parseInt(E.s || "0", 10); val = m * 60 + s; if (!(val > 0) || s > 59) return toast(t("Enter a valid time (seconds under 60)", "सही समय दर्ज करें (सेकंड 60 से कम)")); }
       else { val = parseFloat(String(E.val).replace(",", ".")); if (te.id === "weight") val = Math.round(val); if (!(val > 0)) return toast(t("Enter a value above zero, or choose Not run today", "शून्य से अधिक मान दर्ज करें या “आज नहीं हुआ” चुनें")); }
@@ -3190,8 +3194,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         root.innerHTML = `<div class="scr">${barH(state.lang === "hi" ? test.nameHi : test.nameEn, esc(athlete.name))}
  <main class="main" style="gap:14px;padding-top:32px"><span style="color:var(--muted)">${IC.camOff}</span><h2 style="font-size:1.5rem;line-height:1.25;font-weight:700">${d ? t("Camera access is off", "कैमरा एक्सेस बंद है") : t("No camera found", "कैमरा नहीं मिला")}</h2><p class="sub" style="font-size:1rem">${d ? t("To measure with AI, allow the camera for this app.", "AI से मापने के लिए इस ऐप को कैमरा अनुमति दें।") : t("You can still enter results measured with a tape or stopwatch. They will be marked Manual.", "टेप या स्टॉपवॉच से मापे परिणाम फिर भी दर्ज कर सकते हैं। वे मैन्युअल चिह्नित होंगे।")}</p>
  ${d ? `<div class="note">${IC.info}<span>${t("iPhone: Settings › Safari › Camera › Allow. Android: Site settings › Camera › Allow.", "iPhone: Settings › Safari › Camera › Allow। Android: Site settings › Camera › Allow।")}</span></div>` : ""}</main>
- <div class="bb" style="flex-direction:column;gap:4px">${d ? `<button class="btn p" id="btnCamRetry">${t("Try again", "फिर कोशिश करें")}</button>` : ""}<button class="btn ${d ? "q" : "p"}" id="btnCamManual">${t("Enter result manually", "परिणाम मैन्युअल दर्ज करें")}</button></div></div>`;
-        document.getElementById("btnCamManual").onclick = () => { VW.capFail = null; openManual(athlete.id, test.key, "cell"); };
+ <div class="bb" style="flex-direction:column;gap:4px">${d ? `<button class="btn p" id="btnCamRetry">${t("Try again", "फिर कोशिश करें")}</button>` : ""}<button class="btn ${d ? "q" : "p"}" id="btnCamManual">${canManual(dT(TKEY[test.key])) ? t("Enter result manually", "परिणाम मैन्युअल दर्ज करें") : t("Back to the test", "टेस्ट पर वापस")}</button></div></div>`;
+        document.getElementById("btnCamManual").onclick = () => { VW.capFail = null; if (canManual(dT(TKEY[test.key]))) openManual(athlete.id, test.key, "cell"); else nav("cell"); };
         const rb = document.getElementById("btnCamRetry"); if (rb) rb.onclick = () => { VW.capFail = null; render(); };
         return;
       }
@@ -4257,7 +4261,7 @@ function shareModal(k) {
       list: el => { VW.list = el.dataset.v; if (state.session?.mode !== "INDIVIDUAL") state.sequencing = VW.list === "athletes" ? "ATHLETE_WISE" : "TEST_WISE"; render(); },
       liststations: () => { VW.list = "stations"; render(); },
       open: el => { const a = ATH.find(x => x.id === Number(el.dataset.a)), te = TESTS.find(x => x.key === el.dataset.t); if (a && te) openTest(a, te); },
-      manualfromcell: () => openManual(state.selectedAthleteId, state.selectedTestKey, "cell"),
+      manualfromcell: () => { if (canManual(dT(TKEY[state.selectedTestKey]))) openManual(state.selectedAthleteId, state.selectedTestKey, "cell"); },
       savemanual: saveManual,
       sheet: el => overlay("sheet", el.dataset.t),
       modal: el => overlay("modal", el.dataset.v),
