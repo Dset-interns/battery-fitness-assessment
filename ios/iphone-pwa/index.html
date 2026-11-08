@@ -320,6 +320,14 @@ svg{flex:none}
 .rec-don .dn{width:92px;height:92px;flex:none}
 .rec-don ul{list-style:none;display:flex;flex-direction:column;gap:5px;font-size:.8125rem;color:var(--ink-2)}
 .rec-don li{display:flex;align-items:center;gap:7px}.rec-don li b{font-family:var(--font-num);color:var(--ink);margin-left:2px}
+.bmi{border:1.5px solid var(--line-strong);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.bmi-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.bmi-h .l{font-size:.6875rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.bmi-h b{font-family:var(--font-num);font-size:1.5rem;line-height:1;font-variant-numeric:tabular-nums}
+.bmi-h .u{font-size:.8125rem;color:var(--ink-2)}
+.bmi-h .bd{margin-left:auto;font-weight:700;font-size:.875rem}
+.bmi svg{width:100%;height:auto;display:block}
+.bmi p{font-size:.75rem;color:var(--ink-2);line-height:1.4}
 .rec-sum{border:1.5px solid var(--ink);border-radius:10px;padding:10px 12px;font-weight:600;font-size:.9375rem;line-height:1.35}
 .rec-h{display:none}
 .rec-g{font-size:.6875rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 0 6px;border-bottom:1.5px solid var(--ink)}
@@ -354,6 +362,7 @@ button.rec-r:active{background:var(--surface-2)}
 .page .rec-det span{font-size:6.8pt}.page .rec-det b{font-size:9.6pt}.page .rec-det .nm b{font-size:14pt}
 .page .rec-don{gap:3.5mm}.page .rec-don .dn{width:25mm;height:25mm}
 .page .rec-don ul{font-size:7.4pt;gap:1mm}
+.page .bmi{border-color:#0B0F14;border-width:1pt;border-radius:2mm;padding:1.6mm 3.5mm;gap:.6mm}.page .bmi-h b{font-size:12pt}.page .bmi-h .l{font-size:6.8pt}.page .bmi-h .u{font-size:7.6pt}.page .bmi-h .bd{font-size:8.4pt}.page .bmi svg{height:9mm}.page .bmi p{font-size:6.8pt;line-height:1.3}
 .page .rec-sum{font-size:9.6pt;padding:1.8mm 3.5mm;border-width:1pt;border-radius:2mm}
 .page .rec-h,.page .rec-r{grid-template-columns:5mm 1.45fr .8fr .85fr 1.55fr 1.5fr;grid-template-areas:"n t v c a m";gap:0 2.2mm;align-items:center}
 .page .rec-h{display:grid;font-size:6.8pt;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#3D4A59;padding-bottom:1.2mm;border-bottom:1pt solid #0B0F14}
@@ -4194,6 +4203,29 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
 
 
 const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attempts || []).forEach(x => { if (x.video && x.video.sizeBytes) { n++; if (x.video.decl) d++; } })); return { n, d }; };
+    // BMI from the recorded height (cm) and weight (kg). Ruling C44 allows the universal scale next to the score.
+    // The standard adult bands are applied only from 18; for under-18s only the number is shown, because their
+    // classification needs an age-and-sex reference that has not been confirmed with the organisers.
+    function bmiOf(a) {
+      const h = a.r.height, w = a.r.weight;
+      if (!h || !w || h.status !== "rec" || w.status !== "rec") return null;
+      const hc = +h.best, wk = +w.best;
+      if (!(hc >= 100 && hc <= 220 && wk >= 15 && wk <= 200)) return { bad: true };
+      return { v: Math.round(wk / ((hc / 100) ** 2) * 10) / 10, est: bandOf(a, "height") === "A" };
+    }
+    function bmiH(a) {
+      const b = bmiOf(a); if (!b) return "";
+      if (b.bad) return `<div class="bmi"><p>${t("BMI is not shown: check the recorded height and weight.", "BMI नहीं दिखाया गया: दर्ज ऊँचाई और वज़न जाँचें।")}</p></div>`;
+      const adult = a.age >= 18, v = b.v;
+      const bands = [[14, 18.5, t("Underweight", "कम वज़न")], [18.5, 25, t("Normal", "सामान्य")], [25, 30, t("Overweight", "अधिक वज़न")], [30, 36, t("Obese", "मोटापा")]];
+      const cur = bands.find(x => v < x[1]) || bands[3];
+      const X = q => 6 + (Math.min(36, Math.max(14, q)) - 14) / 22 * 288;
+      const scale = adult ? `<svg viewBox="0 0 300 40" role="img" aria-label="BMI ${v} ${cur[2]}">${bands.map(x => `<rect x="${X(x[0]).toFixed(1)}" y="16" width="${(X(x[1]) - X(x[0])).toFixed(1)}" height="9" fill="${x === cur ? "var(--primary)" : "var(--surface-2)"}" stroke="var(--line-strong)" stroke-width=".6"/><text x="${((X(x[0]) + X(x[1])) / 2).toFixed(1)}" y="36" text-anchor="middle" font-size="7" fill="var(--ink-2)">${x[2]}</text>`).join("")}${[18.5, 25, 30].map(q => `<text x="${X(q).toFixed(1)}" y="13" text-anchor="middle" font-size="6.5" fill="var(--muted)">${q}</text>`).join("")}<path d="M${X(v).toFixed(1)} 26 l-4 -7 h8 z" fill="var(--ink)"/></svg>` : "";
+      const note = adult
+        ? t("Standard adult BMI bands. Indicative only, not a diagnosis.", "मानक वयस्क BMI श्रेणियाँ। केवल संकेतात्मक, निदान नहीं।")
+        : t("For athletes under 18 the classification needs an age and sex based reference, which has not been applied. The number is shown for information.", "18 वर्ष से कम के एथलीट के लिए वर्गीकरण हेतु आयु और लिंग आधारित संदर्भ चाहिए, जो लागू नहीं किया गया। संख्या केवल जानकारी के लिए है।");
+      return `<div class="bmi"><div class="bmi-h"><span class="l">BMI</span><b>${b.est ? "≈ " : ""}${v.toFixed(1)}</b><span class="u">kg/m²</span>${adult ? `<span class="bd">${cur[2]}</span>` : ""}</div>${scale}<p>${note}${b.est ? " " + t("Based on an estimated height.", "अनुमानित ऊँचाई पर आधारित।") : ""}</p></div>`;
+    }
     const parH = a => { const f = (c, sr) => c ? `${c} cm (${sr === "measured" ? t("measured", "मापी") : t("self-reported", "स्वयं बताई")})` : t("not recorded", "दर्ज नहीं"); return `${t("Mother", "माँ")} ${f(a.motherCm, a.motherSrc)} · ${t("Father", "पिता")} ${f(a.fatherCm, a.fatherSrc)}`; };
     function donutH(sm) {
       const segs = [[sm.g, "var(--green)"], [sm.am, "var(--amber)"], [sm.rj, "var(--red)"], [sm.nr, "var(--line-strong)"]];
@@ -4242,6 +4274,7 @@ const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attemp
   <div class="rec-don">${donutH(sm)}<ul>${leg.map(([b, n, l]) => `<li>${shape(b, 12)}<span>${l}<b>${n}</b></span></li>`).join("")}</ul></div>
  </div>
  <div class="rec-sum">${headline(sm)}</div>
+ ${bmiH(a)}
  <div class="rec-tbl">
   <div class="rec-h"><span>#</span><span>${t("Test", "टेस्ट")}</span><span>${t("Result", "परिणाम")}</span><span>${t("Confidence", "विश्वसनीयता")}</span><span>${t("Attempts", "प्रयास")}</span><span>${t("How it was measured", "कैसे मापा गया")}</span></div>
   ${GROUPS.map(g => `<div class="rec-g">${t(g.n[0], g.n[1])}</div>` + g.ids.map(id => recRow(a, dT(id), live)).join("")).join("")}
