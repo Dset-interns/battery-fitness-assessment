@@ -2719,6 +2719,7 @@ body.cam .rotate{display:none!important}
     // Offline readiness: the service worker is registered and the app plus the pose files are in its cache.
     async function checkOfflineReady() {
       try {
+        if (window.AndroidBridge) return true;      // the Android app carries the page and the pose-AI files in its assets
         if (!("serviceWorker" in navigator) || !("caches" in window) || !(await navigator.serviceWorker.getRegistration())) return false;
         for (const u of ["index.html", "vendor/mediapipe/vision_bundle.mjs", "vendor/mediapipe/wasm/vision_wasm_internal.wasm", "vendor/mediapipe/pose_landmarker_full.task"])
           if (!(await caches.match(new URL(u, location.href).href, { ignoreSearch: true }))) return false;
@@ -2726,6 +2727,7 @@ body.cam .rotate{display:none!important}
       } catch (e) { return false; }
     }
     const VW = {
+      offlineReady: !!window.AndroidBridge,   // the Android app carries everything in its assets
       sheet: null, modal: null, toast: null, genstep: 0, list: state.sequencing === "ATHLETE_WISE" ? "athletes" : "stations",
       mode: state.session?.mode === "INDIVIDUAL" ? "indiv" : "coach", picked: null,
       reg: { name: "", age: "", g: "", school: "", idType: "none", idNo: "", date: todayISO(), motherCm: "", motherSrc: "", fatherCm: "", fatherSrc: "" },
@@ -3142,12 +3144,22 @@ body.cam .rotate{display:none!important}
       const beyond = m > 1.6 * L.refM, sparse = k < 4 || (b.i - a.i) > 2;
       return { m, landT, xLand, frameMs, airPoints: k, beyond, sparse, amber: beyond || sparse || frameMs > 45 };
     }
+    // Inside the Android app the page is shown in a WebView, which cannot print or download by itself; the app offers
+    // window.AndroidBridge for both. In a browser these fall through to the browser's own print and download.
+    const printPage = () => { if (window.AndroidBridge && window.AndroidBridge.print) window.AndroidBridge.print(); else window.print(); };
     const fmtMB = b => (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + " MB";
     const safeName = v => String(v).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
     async function downloadMedia(key, fname) {
       try {
         const rec = await VDB.get(key);
         if (!rec || !rec.blob) return toast(t("This file is not stored on this phone", "यह फ़ाइल इस फ़ोन पर सहेजी नहीं है"));
+        if (window.AndroidBridge && window.AndroidBridge.saveFile) {
+          if (rec.blob.size > 60 * 1048576) return toast(t("This file is too large to save from the app. Use Sync to send it.", "यह फ़ाइल ऐप से सहेजने के लिए बहुत बड़ी है। भेजने के लिए सिंक करें।"));
+          const ext = rec.mime && rec.mime.includes("mp4") ? ".mp4" : rec.mime && rec.mime.includes("webm") ? ".webm" : rec.mime && rec.mime.includes("jpeg") ? ".jpg" : rec.mime && rec.mime.includes("png") ? ".png" : "";
+          const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(rec.blob); });
+          if (!window.AndroidBridge.saveFile(fname + ext, rec.mime || "", b64)) toast(t("Could not save the file", "फ़ाइल सहेजी नहीं जा सकी"));
+          return;
+        }
         const url = URL.createObjectURL(rec.blob), a = document.createElement("a");
         a.href = url; a.download = fname + (rec.mime && rec.mime.includes("mp4") ? ".mp4" : rec.mime && rec.mime.includes("webm") ? ".webm" : rec.mime && rec.mime.includes("jpeg") ? ".jpg" : "");
         document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -5033,7 +5045,7 @@ const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attemp
         let url = "";
         try { const rec = await VDB.get(a.consent.sigKey); if (rec && rec.blob) url = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(rec.blob); }); } catch (e) { }
         document.getElementById("print-root").innerHTML = consentPage(a, url);
-        setTimeout(() => window.print(), 80);
+        setTimeout(printPage, 80);
       },
       synctest: async () => {
         const url = syncUrl(); if (!url) return setSyncMsg(t("Enter the server address first", "पहले सर्वर का पता लिखें"), true);
@@ -5085,7 +5097,7 @@ const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attemp
         const pr = document.getElementById("print-root"), k = el.dataset.k;
         pr.innerHTML = k === "roster" ? pdfRoster() : k === "all" ? ATH.map((a, i) => pdfAthlete(a, i + 1, ATH.length + 1)).join("") + pdfRoster(ATH.length + 1, ATH.length + 1) : pdfAthlete(curA(), 1, 1);
         if (VW.modal) { VW.modal = null; render(); }
-        setTimeout(() => window.print(), 50);
+        setTimeout(printPage, 50);
       }
     };
     document.addEventListener("click", e => { const el = e.target.closest("[data-act]"); if (!el || el.disabled) return; e.preventDefault(); ACT[el.dataset.act] && ACT[el.dataset.act](el); });
@@ -5119,6 +5131,7 @@ const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attemp
     // Offline support: HTTPS or localhost only; a certificate the browser does not trust cannot register a service worker.
     (function () {
       const check = () => checkOfflineReady().then(v => { if (v !== VW.offlineReady) { VW.offlineReady = v; if (state.route === "home") render(); } });
+      if (window.AndroidBridge) { VW.offlineReady = true; return; }
       if (!("serviceWorker" in navigator) || !(location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))) return;
       navigator.serviceWorker.register("sw.js").then(() => { check(); setTimeout(check, 4000); setTimeout(check, 15000); }).catch(() => { });
     })();

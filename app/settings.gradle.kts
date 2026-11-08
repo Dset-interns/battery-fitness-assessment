@@ -21,4 +21,8 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "BatteryFitness"
-include(":app")
+// The shipping Android build: the same web app as the iPhone and Android browser versions, in a WebView shell.
+include(":webapp")
+// The earlier native Compose app. It predates the revised handbook, does not compile at the moment, and is kept for
+// reference only. Build it with  ./gradlew -PlegacyApp :app:assembleDebug  once it has been brought up to date.
+if (providers.gradleProperty("legacyApp").isPresent) include(":app")

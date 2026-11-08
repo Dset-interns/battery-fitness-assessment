@@ -45,6 +45,8 @@ captures/
 *.apk
 *.aab
 *.keystore
+*.jks
+app/keystore.properties
 !debug.keystore
 
 # --- Models (large; fetched by script per Submission §3.4) ---
