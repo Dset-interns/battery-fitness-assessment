@@ -17,6 +17,9 @@
 # App resources are source, not athlete media
 !app/**/src/main/res/**/*.png
 !app/**/src/main/res/**/*.webp
+# DSeT logo shipped with the web app
+!ios/iphone-pwa/dset_logo.png
+!ios/iphone-pwa/sai-logo.png
 lab/clips/
 lab/out/
 **/footage/

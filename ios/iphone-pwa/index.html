@@ -2,290 +2,452 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0B1A33" />
+  <meta name="color-scheme" content="light dark" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Battery Fitness" />
   <link rel="manifest" href="manifest.json" />
-  <title>Battery Assessment — AthleteIQ™ (iOS)</title>
+  <title>Battery Fitness Assessment · SAI</title>
   <style>
-    :root {
-      --bg: #FAF8F5;
-      --card: #FFFFFF;
-      --card-muted: #F3EFEA;
-      --primary: #0F6E56;
-      --primary-light: #E1F5EE;
-      --text: #1B1B1F;
-      --text-sub: #5E5E66;
-      --border: #E2DDD5;
-      --amber-bg: #FFF3D6;
-      --amber-fg: #8A5A00;
-      --red-bg: #FDE8E8;
-      --red-fg: #B42318;
-      --green-bg: #E1F5EE;
-      --green-fg: #0F6E56;
-      --safe-top: env(safe-area-inset-top, 16px);
-      --safe-bottom: env(safe-area-inset-bottom, 16px);
-    }
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding-top: var(--safe-top);
-      padding-bottom: calc(var(--safe-bottom) + 24px);
-    }
-    .app-shell {
-      max-width: 480px;
-      margin: 0 auto;
-      padding: 16px;
-    }
-    .topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-      gap: 8px;
-    }
-    .topbar h1 {
-      font-size: 20px;
-      font-weight: 700;
-      margin: 0;
-      letter-spacing: -0.3px;
-    }
-    .topbar .sub {
-      font-size: 12px;
-      color: var(--text-sub);
-      margin-top: 2px;
-    }
-    .lang-btn, .back-btn {
-      border: 1px solid var(--border);
-      background: var(--card);
-      color: var(--text);
-      border-radius: 999px;
-      padding: 6px 12px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .hero-btn {
-      width: 100%;
-      background: var(--primary);
-      color: #fff;
-      border: none;
-      border-radius: 16px;
-      padding: 18px 20px;
-      text-align: left;
-      cursor: pointer;
-      margin-bottom: 12px;
-      box-shadow: 0 2px 8px rgba(15, 110, 86, 0.18);
-    }
-    .hero-btn .title { font-size: 17px; font-weight: 700; }
-    .hero-btn .desc { font-size: 13px; opacity: 0.9; margin-top: 3px; }
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-    .stat-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
-      cursor: pointer;
-    }
-    .stat-card .num { font-size: 24px; font-weight: 700; }
-    .stat-card .lbl { font-size: 13px; font-weight: 600; margin-top: 2px; }
-    .stat-card .sub { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
-    .section-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text);
-      margin: 18px 0 6px;
-    }
-    .section-sub {
-      font-size: 12px;
-      color: var(--text-sub);
-      margin-bottom: 10px;
-    }
-    .test-row {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-    }
-    .test-row .left { display: flex; align-items: center; gap: 10px; }
-    .test-row .idx {
-      width: 24px;
-      font-weight: 700;
-      color: var(--text-sub);
-      font-size: 14px;
-    }
-    .test-row .t-name { font-size: 14px; font-weight: 600; }
-    .test-row .t-meta { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
-    .badge {
-      font-size: 11px;
-      font-weight: 700;
-      padding: 4px 9px;
-      border-radius: 8px;
-      white-space: nowrap;
-    }
-    .badge.ai { background: var(--green-bg); color: var(--green-fg); }
-    .badge.planned { background: var(--amber-bg); color: var(--amber-fg); }
-    .badge.manual { background: var(--card-muted); color: var(--text-sub); }
-    .badge.green { background: var(--green-bg); color: var(--green-fg); }
-    .badge.amber { background: var(--amber-bg); color: var(--amber-fg); }
-    .badge.red { background: var(--red-bg); color: var(--red-fg); }
-    .seg-bar {
-      display: flex;
-      background: var(--card-muted);
-      border-radius: 10px;
-      padding: 3px;
-      margin-bottom: 12px;
-    }
-    .seg-bar button {
-      flex: 1;
-      border: none;
-      background: transparent;
-      padding: 8px 10px;
-      font-size: 13px;
-      font-weight: 600;
-      border-radius: 8px;
-      cursor: pointer;
-      color: var(--text-sub);
-    }
-    .seg-bar button.active {
-      background: var(--card);
-      color: var(--text);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
-      margin-bottom: 12px;
-    }
-    .input-row { margin-bottom: 10px; }
-    .input-row label { display: block; font-size: 12px; font-weight: 600; color: var(--text-sub); margin-bottom: 4px; }
-    .input-row input, .input-row select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      font-size: 15px;
-      background: #fff;
-    }
-    .btn {
-      width: 100%;
-      padding: 13px 16px;
-      border-radius: 12px;
-      border: none;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      margin-top: 6px;
-    }
-    .btn.primary { background: var(--primary); color: #fff; }
-    .btn.secondary { background: var(--card-muted); color: var(--text); border: 1px solid var(--border); }
-    .btn.danger { background: var(--red-bg); color: var(--red-fg); border: 1px solid #f5c2c7; }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    .cam-wrap {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 9 / 16;
-      max-height: 68vh;
-      background: #111;
-      border-radius: 16px;
-      overflow: hidden;
-      margin-bottom: 10px;
-    }
-    .cam-wrap video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-    .cam-wrap canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      pointer-events: none;
-    }
-    .cam-hud-top {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      right: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 6px;
-    }
-    .hud-pill {
-      background: rgba(0, 0, 0, 0.72);
-      color: #fff;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      backdrop-filter: blur(6px);
-    }
-    .hud-live-metric {
-      position: absolute;
-      top: 46px;
-      left: 10px;
-      right: 10px;
-      background: rgba(15, 110, 86, 0.88);
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 700;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      backdrop-filter: blur(6px);
-    }
-    .hud-live-metric.bad {
-      background: rgba(180, 35, 24, 0.88);
-    }
-    .cam-hud-bottom {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.78);
-      color: #fff;
-      padding: 10px 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      line-height: 1.35;
-      backdrop-filter: blur(6px);
-    }
-    .audit-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-      margin-top: 8px;
-    }
-    .audit-table th, .audit-table td {
-      border-bottom: 1px solid var(--border);
-      padding: 6px 4px;
-      text-align: left;
-    }
+/* ============ 1. TOKENS ============ */
+:root{
+  --font:"Roboto Flex",Roboto,system-ui,-apple-system,"Segoe UI","Noto Sans","Noto Sans Devanagari","Kohinoor Devanagari",sans-serif;
+  --font-num:"Roboto Condensed","sans-serif-condensed","Avenir Next Condensed","Arial Narrow",Roboto,system-ui,-apple-system,sans-serif;
+  --bg:#F4F3EF;--surface:#FFFFFF;--surface-2:#EEEDE8;--sunken:#E6E4DE;
+  --ink:#12161F;--ink-2:#454B57;--muted:#5E6471;--line:#E3E1DB;--line-strong:#8B909A;
+  --hero:#0B1A33;--hero-2:#15294D;--on-hero:#FFFFFF;--on-hero-2:#BAC5DA;--hero-line:rgba(255,255,255,.14);
+  --primary:#1D3FA6;--primary-press:#152F80;--on-primary:#FFFFFF;--primary-soft:#E7ECF8;
+  --saffron:#F08A24;--india-green:#138808;
+  --green:#13704A;--green-bg:#E2F1E9;
+  --amber:#8C4F00;--amber-bg:#FBEED8;--amber-line:#D3953A;
+  --red:#B0261E;--red-bg:#FAE6E3;
+  --r-sm:10px;--r-md:14px;--r-lg:20px;--r-xl:28px;
+  --touch:48px;--touch-lg:56px;
+  --e1:0 1px 2px rgba(16,24,40,.05),0 0 0 1px var(--line);
+  --e2:0 6px 20px -6px rgba(11,26,51,.18),0 0 0 1px var(--line);
+  --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  color-scheme:light;
+}
+:root[data-theme=dark]{
+  --bg:#0A0E15;--surface:#131922;--surface-2:#1B222D;--sunken:#0F141B;
+  --ink:#EEF1F6;--ink-2:#B7BFCC;--muted:#9AA3B1;--line:#242D3A;--line-strong:#677284;
+  --hero:#0F2140;--hero-2:#18305A;
+  --primary:#94B0FF;--primary-press:#7C9BF2;--on-primary:#0A1633;--primary-soft:#1A2A4D;
+  --green:#62D59E;--green-bg:#0F2A1E;--amber:#FFC266;--amber-bg:#33260E;--amber-line:#B9802A;--red:#FF8E85;--red-bg:#3A1614;
+  --e1:0 0 0 1px var(--line);--e2:0 0 0 1px var(--line);
+  color-scheme:dark;
+}
+
+/* ============ 2. BASE ============ */
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-family:var(--font);font-size:100%;-webkit-text-size-adjust:100%;background:var(--bg);color:var(--ink)}
+body{min-height:100dvh;font-size:1rem;line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer;text-align:inherit;-webkit-user-select:none;user-select:none}
+a{color:var(--primary)}
+:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
+svg{flex:none}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+
+/* ============ 3. LAYOUT + COMPONENTS ============ */
+.scr{min-height:100dvh;display:flex;flex-direction:column}
+.enter{animation:enter .22s var(--ease)}
+@keyframes enter{from{opacity:0;transform:translateX(14px)}}
+@media (prefers-reduced-motion:reduce){.enter,.sheet,.pop{animation:none!important}}
+.bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:2px;min-height:calc(var(--st) + 60px);padding:var(--st) 6px 0 4px;background:var(--bg)}
+.bar h1{flex:1;min-width:0;font-size:1.25rem;font-weight:600;letter-spacing:-.005em;line-height:1.2;padding:0 6px}
+.bar h1 small{display:block;font-size:.875rem;font-weight:500;color:var(--ink-2);letter-spacing:0}
+.bar.dk{background:var(--hero);color:var(--on-hero)}
+.bar.dk h1 small{color:var(--on-hero-2)}
+.bar.dk .ib{color:var(--on-hero)}
+.ib{width:var(--touch);height:var(--touch);border-radius:50%;display:grid;place-items:center;color:var(--ink);transition:background .15s}
+.ib:active{background:rgba(127,127,127,.18)}
+.main{flex:1;padding:8px 16px 28px;display:flex;flex-direction:column;gap:20px}
+.bb{position:sticky;bottom:0;z-index:6;margin-top:auto;padding:12px 16px calc(12px + var(--sb));background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex;gap:10px;align-items:stretch}
+.btn{min-height:var(--touch-lg);border-radius:var(--r-md);padding:8px 20px;font-weight:600;font-size:1rem;letter-spacing:.005em;line-height:1.2;display:flex;align-items:center;justify-content:center;gap:10px;flex:1;text-align:center;transition:transform .12s var(--ease),background .15s}
+.btn:active{transform:scale(.98)}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.p:active{background:var(--primary-press)}
+.btn.s{background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+.btn.q{color:var(--primary);min-height:var(--touch)}
+.btn.sq{flex:0 0 var(--touch-lg);padding:0}
+.btn[disabled]{opacity:.4}
+.card{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--e1);padding:16px}
+.eyebrow{font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.h2{font-size:1.0625rem;font-weight:600;line-height:1.3}
+.sub{font-size:.9375rem;color:var(--ink-2);line-height:1.45}
+.small{font-size:.875rem;color:var(--ink-2)}
+.stack{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;align-items:center;gap:12px}
+.grow{flex:1;min-width:0}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:0 4px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--sunken);border-radius:var(--r-md);padding:4px;gap:4px}
+.seg button{min-height:var(--touch);border-radius:11px;font-weight:600;color:var(--ink-2);padding:6px;line-height:1.2;text-align:center;font-size:.9375rem;transition:background .15s,color .15s}
+.seg button small{display:block;font-weight:400;font-size:.8125rem;margin-top:2px}
+.seg button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(16,24,40,.12)}
+.list{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--e1);overflow:hidden}
+.li{display:flex;align-items:center;gap:14px;min-height:64px;padding:10px 12px 10px 16px;width:100%;position:relative;transition:background .12s}
+.li+.li:before{content:"";position:absolute;top:0;left:16px;right:0;height:1px;background:var(--line)}
+.li:active{background:var(--surface-2)}
+.li .t{display:block;font-weight:600;line-height:1.3}
+.li .d{display:block;font-size:.875rem;color:var(--ink-2);line-height:1.4}
+.li .chev{color:var(--line-strong)}
+.ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary);flex:none}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label,.field .lab{font-size:.875rem;font-weight:600;color:var(--ink-2)}
+.field input{width:100%;min-height:54px;border:0;box-shadow:inset 0 0 0 1.5px var(--line-strong);border-radius:12px;padding:0 14px;font-size:1.0625rem;background:var(--surface);color:var(--ink)}
+.field input:focus{outline:none;box-shadow:inset 0 0 0 2px var(--primary),0 0 0 4px var(--primary-soft)}
+.hint{font-size:.875rem;color:var(--ink-2)}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:2px 10px 2px 8px;border-radius:999px;font-weight:600;font-size:.8125rem;line-height:1.2;white-space:nowrap;flex:none}
+.chip.G{background:var(--green-bg);color:var(--green)}
+.chip.A{background:var(--amber-bg);color:var(--amber);box-shadow:inset 0 0 0 1.5px var(--amber-line)}
+.chip.R{background:var(--red-bg);color:var(--red)}
+.chip.P,.chip.N{background:var(--surface-2);color:var(--muted)}
+.sh.G{color:var(--green)}.sh.A{color:var(--amber)}.sh.R{color:var(--red)}.sh.P,.sh.N{color:var(--muted)}
+.tag{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:6px;font-size:.75rem;font-weight:700;letter-spacing:.02em;background:var(--surface-2);color:var(--ink-2)}
+.tag.ai{background:var(--primary-soft);color:var(--primary)}
+.tri{display:inline-flex;height:3px;width:28px;border-radius:2px;overflow:hidden}
+.tri i{flex:1;background:var(--saffron)}.tri i+i{background:#fff}.tri i+i+i{background:var(--india-green)}
+.prog{height:8px;border-radius:4px;background:var(--sunken);overflow:hidden;display:flex;gap:2px}
+.prog i{background:var(--green);border-radius:2px}.prog i.a{background:var(--amber)}.prog i.r{background:var(--red)}
+.dk .prog{background:rgba(255,255,255,.14)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8125rem;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend b{font-family:var(--font-num);font-variant-numeric:tabular-nums;color:var(--ink)}
+/* logos (placeholders: swap LOGO.* in section 9 for official artwork) */
+.sai{display:flex;align-items:center;gap:10px}
+.sai .lg{display:flex;align-items:center;flex:none;padding-right:12px;border-right:1px solid var(--line)}
+.sai .lg img{height:34px;width:auto;display:block}
+.dk .sai .lg,:root[data-theme=dark] .sai .lg{background:#fff;border:0;border-radius:10px;padding:5px 8px}
+.dk .sai .lg img,:root[data-theme=dark] .sai .lg img{height:28px}
+.sai b{display:block;font-size:.875rem;line-height:1.2;font-weight:600}
+.sai span{display:block;font-size:.75rem;line-height:1.2;color:var(--ink-2)}
+.dk .sai span{color:var(--on-hero-2)}
+.dset{display:inline-flex;align-items:center;gap:8px;font-size:.8125rem;color:var(--ink-2)}
+.dset .mk{width:26px;height:26px;border-radius:7px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-weight:800;font-size:.5625rem;letter-spacing:-.02em}
+/* hero */
+.hero{background:var(--hero);color:var(--on-hero);border-radius:var(--r-xl);padding:20px;display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:50%;background:radial-gradient(closest-side,rgba(120,150,255,.22),transparent)}
+.hero .sub,.hero .small{color:var(--on-hero-2)}
+.hero .eyebrow{color:var(--on-hero-2)}
+/* result values */
+.val{display:flex;align-items:baseline;justify-content:flex-end;gap:3px;white-space:nowrap}
+.val .v{font-family:var(--font-num);font-size:1.875rem;font-weight:700;line-height:1;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.val .u{font-size:.875rem;font-weight:500;color:var(--ink-2)}
+.val.est .v{font-weight:400;color:var(--ink-2)}
+.val.est .ap{font-family:var(--font-num);font-size:1.5rem;color:var(--amber)}
+.val .w{font-size:1rem;font-weight:700;line-height:1.2}
+.val.rej .w{color:var(--red)}.val.nr .w{color:var(--muted);font-weight:600}
+.val.big .v{font-size:3.25rem}.val.big .ap{font-size:2.25rem}.val.big .u{font-size:1.125rem}.val.big .w{font-size:1.5rem}
+/* result row */
+.rr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;width:100%;min-height:76px;padding:14px 14px 14px 16px;position:relative;transition:background .12s}
+.rr+.rr:before{content:"";position:absolute;top:0;left:16px;right:0;height:1px;background:var(--line)}
+.rr:active{background:var(--surface-2)}
+.rr .nm{font-weight:600;line-height:1.3}
+.rr .nm small{font-weight:400;color:var(--ink-2);font-size:.8125rem}
+.rr .why{font-size:.8125rem;color:var(--ink-2);line-height:1.35;margin-top:3px}
+.rr .rt{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.rr .st{display:inline-flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;letter-spacing:.02em}
+.rr.A{background:repeating-linear-gradient(135deg,transparent 0 10px,color-mix(in srgb,var(--amber-bg) 55%,transparent) 10px 20px)}
+/* strip */
+.strip{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
+.strip button{min-height:50px;border-radius:10px;background:var(--surface-2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-family:var(--font-num);font-size:.8125rem;font-weight:700;color:var(--ink-2)}
+.strip button.A{background:var(--amber-bg)}.strip button.G{background:var(--green-bg)}.strip button.R{background:var(--red-bg)}
+/* sheet */
+.scrim{position:fixed;inset:0;z-index:30;background:rgba(6,12,24,.48);animation:fade .2s}
+@keyframes fade{from{opacity:0}}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:31;max-height:90dvh;display:flex;flex-direction:column;background:var(--surface);border-radius:var(--r-xl) var(--r-xl) 0 0;box-shadow:0 -10px 40px rgba(0,0,0,.25);animation:up .28s var(--ease)}
+@keyframes up{from{transform:translateY(100%)}}
+.sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--line-strong);opacity:.6;margin:10px auto 0;flex:none}
+.sheet .shd{display:flex;align-items:flex-start;gap:8px;padding:6px 6px 0 20px}
+.sheet .sbody{overflow:auto;padding:8px 20px 20px;display:flex;flex-direction:column;gap:20px;overscroll-behavior:contain}
+.sheet .bb{position:static;background:var(--surface)}
+.sec{display:flex;flex-direction:column;gap:8px}
+.att{display:flex;align-items:center;gap:10px;min-height:46px;border-top:1px solid var(--line);font-size:.9375rem}
+.att:first-child{border-top:0}
+.att .k{width:84px;color:var(--ink-2)}
+.att .v{font-family:var(--font-num);font-weight:700;font-size:1.0625rem;font-variant-numeric:tabular-nums}
+.tl .ev{display:grid;grid-template-columns:62px 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:.9375rem}
+.tl .ev:first-child{border-top:0}
+.tl .rp{font-family:var(--font-num);font-weight:700;color:var(--red)}
+.note{display:flex;gap:12px;padding:14px;border-radius:var(--r-md);background:var(--surface-2);font-size:.9375rem;line-height:1.45}
+.note.am{background:var(--amber-bg)}
+.note.gr{background:var(--green-bg)}
+/* roster */
+.rt-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--r-lg);background:var(--surface);box-shadow:var(--e1)}
+.rtb{border-collapse:separate;border-spacing:0;min-width:100%}
+.rtb th,.rtb td{border-bottom:1px solid var(--line);text-align:center;padding:0}
+.rtb tr:last-child td{border-bottom:0}
+.rtb thead th{font-family:var(--font-num);font-size:.8125rem;font-weight:700;color:var(--muted);height:42px;min-width:42px;background:var(--surface)}
+.rtb .stk{position:sticky;left:0;z-index:2;background:var(--surface);text-align:left;box-shadow:1px 0 0 var(--line);min-width:128px}
+.rtb td.stk button{display:block;width:100%;min-height:58px;padding:8px 10px 8px 14px;font-weight:600;line-height:1.25;font-size:.9375rem}
+.rtb td.stk small{display:block;font-weight:400;color:var(--ink-2);font-size:.8125rem}
+.rtb td.c button{width:42px;min-height:58px;display:grid;place-items:center}
+.rtb td.n{font-family:var(--font-num);font-weight:700;padding:0 14px}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stat{background:var(--surface);border-radius:var(--r-md);box-shadow:var(--e1);padding:12px}
+.stat b{display:block;font-family:var(--font-num);font-size:1.75rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat b small{font-size:1rem;color:var(--muted);font-weight:500}
+.stat span{font-size:.8125rem;color:var(--ink-2);line-height:1.3;display:block;margin-top:2px}
+/* toast */
+.toast{position:fixed;left:16px;right:16px;bottom:calc(92px + var(--sb));z-index:40;background:var(--ink);color:var(--bg);padding:14px 16px;border-radius:var(--r-md);font-weight:500;animation:pop .2s var(--ease);display:flex;gap:10px;align-items:center}
+@keyframes pop{from{opacity:0;transform:translateY(8px)}}
+/* generating */
+.gen-row{display:flex;align-items:center;gap:14px;min-height:60px}
+.spin{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--sunken);border-top-color:var(--primary);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.okdot{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;animation:pop .2s var(--ease)}
+.wait{width:22px;height:22px;border-radius:50%;border:2px dashed var(--line-strong)}
+/* keypad entry */
+.kv{display:flex;align-items:baseline;justify-content:center;gap:6px;padding:20px 0 8px}
+.kv input{width:2.6ch;border:0;background:none;text-align:center;font-family:var(--font-num);font-size:4.5rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;color:var(--ink);border-bottom:3px solid var(--line-strong);padding:0 0 4px}
+.kv input:focus{outline:none;border-color:var(--primary)}
+.kv span{font-family:var(--font-num);font-size:3.5rem;font-weight:700;color:var(--muted)}
+.kv label{display:block;text-align:center;font-size:.8125rem;font-weight:600;color:var(--muted);margin-top:6px}
+.rotate{display:none}
+@media (orientation:landscape) and (max-height:500px){body:not(.cam) .rotate{display:flex;position:fixed;inset:0;z-index:100;background:var(--bg);align-items:center;justify-content:center;flex-direction:column;gap:12px;font-weight:600}}
+
+/* ============ 4. CAPTURE ============ */
+.cap{position:fixed;inset:0;background:#05080C;color:#fff;overflow:hidden}
+.cap .feed{position:absolute;inset:0;background:radial-gradient(120% 80% at 50% 35%,#29323C 0%,#141A21 55%,#080B0F 100%)}
+.cap .top{position:absolute;top:0;left:0;right:0;padding:calc(var(--st) + 6px) 8px 10px;display:flex;align-items:center;gap:6px;background:linear-gradient(rgba(0,0,0,.7),rgba(0,0,0,0))}
+.cap .top .ib{color:#fff;background:rgba(0,0,0,.4)}
+.cap .ttl{flex:1;min-width:0;line-height:1.25}
+.cap .ttl b{display:block;font-size:1.0625rem;font-weight:600}
+.cap .ttl span{font-size:.8125rem;color:#CBD4DE}
+.cap .timer{font-family:var(--font-num);font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums;background:rgba(0,0,0,.5);border-radius:12px;padding:4px 12px}
+.cap .zone{position:absolute;left:14%;right:14%;top:calc(var(--st) + 132px);bottom:calc(var(--sb) + 214px);border:3px solid #3BE08A;border-radius:24px}
+.cap .zone.out{border-color:#FF5A4E;border-style:dashed}
+.cap .zl{position:absolute;top:-15px;left:50%;transform:translateX(-50%);white-space:nowrap;background:#3BE08A;color:#03220F;font-weight:700;font-size:.8125rem;padding:4px 12px;border-radius:999px}
+.cap .zone.out .zl{background:#FF5A4E;color:#2A0300}
+.cap .skel{position:absolute;inset:6% 0 2%;width:100%;height:92%}
+.cap .wall{position:absolute;left:-28px;top:4%;bottom:2%;width:16px;display:flex;flex-direction:column;justify-content:space-between}
+.cap .wall i{display:block;height:2px;width:9px;background:rgba(255,255,255,.65)}.cap .wall i:nth-child(5n+1){width:16px}
+.cap .guide{position:absolute;left:16px;right:16px;top:calc(var(--st) + 70px);text-align:center;pointer-events:none}
+.cap .guide b{display:inline-block;font-size:1.375rem;font-weight:700;background:rgba(0,0,0,.6);padding:6px 16px;border-radius:14px}
+.cap .guide.out b{background:#FF5A4E;color:#2A0300}
+.cap .bot{position:absolute;left:0;right:0;bottom:0;padding:16px 16px calc(var(--sb) + 14px);background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.82) 35%);display:flex;flex-direction:column;align-items:center;gap:14px}
+.cap .gate{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+.cap .gate span{display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:2px 10px;border-radius:999px;background:rgba(0,0,0,.5);font-size:.8125rem;font-weight:500;box-shadow:inset 0 0 0 1.5px rgba(59,224,138,.75)}
+.cap .gate span.x{box-shadow:inset 0 0 0 1.5px #FF5A4E}
+.cap .rec{display:flex;flex-direction:column;align-items:center;gap:6px;font-weight:600;font-size:.9375rem}
+.cap .rec i{width:84px;height:84px;border-radius:50%;border:4px solid #fff;display:grid;place-items:center}
+.cap .rec i:after{content:"";width:62px;height:62px;border-radius:50%;background:#FF3B30;transition:all .2s var(--ease)}
+.cap .rec.stop i:after{width:30px;height:30px;border-radius:8px}
+.cap .rec[disabled] i{border-color:#7E8894}
+.cap .rec[disabled] i:after{background:#7E8894;width:24px;height:28px;border-radius:3px;-webkit-mask:linear-gradient(90deg,#000 0 35%,transparent 35% 65%,#000 65%);mask:linear-gradient(90deg,#000 0 35%,transparent 35% 65%,#000 65%)}
+@media (orientation:landscape){
+  .cap .zone{left:22%;right:160px;top:72px;bottom:20px}
+  .cap .bot{left:auto;top:0;width:160px;padding:72px 12px 16px;justify-content:center;background:linear-gradient(90deg,rgba(0,0,0,0),rgba(0,0,0,.82) 30%)}
+  .cap .gate{flex-direction:column}
+  .cap .guide{top:auto;bottom:16px;right:180px}
+}
+
+/* ============ 5. PDF / PRINT ============ */
+#print-root{display:none}
+.pdfview{background:#8F98A3;min-height:100vh}
+.page{width:210mm;height:297mm;background:#fff;color:#0B0F14;font-family:var(--font);padding:0;display:flex;flex-direction:column;font-size:9.5pt;line-height:1.35;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page .ph{display:flex;align-items:center;gap:4mm;padding:6mm 13mm 3.5mm;border-bottom:1.2pt solid #0B0F14}
+.page .ph .lg{height:13mm;width:auto;display:block;padding-right:4mm;border-right:.6pt solid #BFC6CE}
+.page .ph .org b{display:block;font-size:13pt;line-height:1.15}.page .ph .org span{font-size:8.5pt;color:#3D4A59}
+.page .ph .ti{margin-left:auto;text-align:right}
+.page .ph .ti b{display:block;font-size:16pt;line-height:1.15;letter-spacing:-.01em}
+.page .ph .ti span{font-size:8.5pt;color:#3D4A59}
+.page .ptri{display:flex;height:2pt;width:24mm;margin:1.5mm 0 0 auto}.page .ptri i{flex:1;background:#F08A24}.page .ptri i+i{background:#fff;box-shadow:inset 0 0 0 .4pt #999}.page .ptri i+i+i{background:#138808}
+.page .pb{flex:1;padding:4mm 13mm 0;display:flex;flex-direction:column;gap:2.8mm}
+.page .det{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:2.2mm 6mm}
+.page .det span{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:.07em;color:#3D4A59;font-weight:700}
+.page .det b{font-size:10.5pt;font-weight:600}
+.page .det .nm b{font-size:15pt;font-weight:700;letter-spacing:-.01em}
+.page .sum{display:flex;align-items:center;gap:4mm;padding:2.5mm 4mm;border:1pt solid #0B0F14;border-radius:2mm}
+.page .sum b{font-size:11pt;flex:1}
+.page table{width:100%;border-collapse:collapse}
+.page th{font-size:7.5pt;text-transform:uppercase;letter-spacing:.06em;text-align:left;color:#3D4A59;padding:0 1.6mm 1.4mm;border-bottom:1pt solid #0B0F14}
+.page td{padding:1.1mm 1.6mm;border-bottom:.5pt solid #BFC6CE;vertical-align:top}
+.page tr.grp td{padding-top:1.8mm;font-size:7.5pt;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:#3D4A59;border-bottom:.5pt solid #0B0F14}
+.page td.rv{font-family:var(--font-num);font-weight:700;font-size:11.5pt;white-space:nowrap;font-variant-numeric:tabular-nums}
+.page td.rv.est{font-weight:400;font-style:italic}
+.page td.rv small{font-family:var(--font);font-size:8pt;font-weight:500;font-style:normal}
+.page td.rv .w{font-family:var(--font);font-size:9pt;font-weight:700}
+.page .cf{display:inline-flex;align-items:center;gap:1.4mm;font-weight:700;white-space:nowrap}
+.page .two{display:grid;grid-template-columns:1fr 1fr;gap:6mm}
+.page h3{font-size:7.5pt;text-transform:uppercase;letter-spacing:.07em;margin-bottom:1.5mm;color:#0B0F14}
+.page ul{list-style:none;display:flex;flex-direction:column;gap:1.1mm}
+.page .nb{font-size:8.5pt;color:#3D4A59}
+.page .pf{margin-top:auto;padding:2mm 13mm 6mm;display:flex;flex-direction:column;gap:2mm}
+.page .sig{display:grid;grid-template-columns:1fr 1fr;gap:10mm;padding-top:6mm}
+.page .sig div{border-top:1pt solid #0B0F14;padding-top:1.4mm;font-size:8.5pt}
+.page .sig div span{display:block;color:#3D4A59}
+.page .fl{display:flex;justify-content:space-between;align-items:center;gap:6mm;font-size:7.5pt;color:#3D4A59;border-top:.5pt solid #BFC6CE;padding-top:2.5mm}
+.page .fl .ds{display:inline-flex;align-items:center;gap:1.5mm;white-space:nowrap;font-weight:600;color:#0B0F14}
+.page .fl .ds i{width:5mm;height:5mm;border-radius:1.2mm;background:#0B0F14;color:#fff;display:grid;place-items:center;font-style:normal;font-size:4.5pt;font-weight:800}
+.page .rtp td,.page .rtp th{text-align:center;padding:2mm 1mm}
+.page .rtp td:first-child,.page .rtp th:first-child{text-align:left}
+.page .rtp .cv{display:flex;flex-direction:column;align-items:center;gap:.8mm;font-family:var(--font-num);font-size:9pt;font-weight:700}
+.page .key{display:grid;grid-template-columns:repeat(2,1fr);gap:1mm 6mm;font-size:8.5pt}
+
+/* ============ 5b. SPLASH + REPORT RECORD (4b layout) ============ */
+#splash{position:fixed;inset:0;z-index:200;background:#0B1A33;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px;transition:opacity .35s var(--ease)}
+#splash.out{opacity:0;pointer-events:none}
+#splash .sp-card{background:#fff;border-radius:26px;padding:20px 28px;box-shadow:0 18px 50px rgba(0,0,0,.35);animation:spin-in .6s var(--ease)}
+#splash .sp-card img{height:84px;width:auto;display:block}
+#splash h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em;line-height:1.2;animation:rise .6s .15s var(--ease) both}
+#splash p{color:#BAC5DA;font-size:.9375rem;animation:rise .6s .25s var(--ease) both}
+#splash .tri{width:44px;height:4px}
+#splash .sp-by{position:absolute;left:0;right:0;bottom:calc(24px + var(--sb));font-size:.8125rem;color:#BAC5DA;display:flex;justify-content:center;align-items:center;gap:8px}
+#splash .sp-by img{height:22px;width:auto;border-radius:5px}
+@keyframes spin-in{from{opacity:0;transform:scale(.9)}}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+@media (prefers-reduced-motion:reduce){#splash .sp-card,#splash h1,#splash p{animation:none}#splash{transition:none}}
+@media print{#splash{display:none!important}}
+.cf{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:.8125rem;white-space:nowrap}
+.cf.G{color:var(--green)}.cf.A{color:var(--amber)}.cf.R{color:var(--red)}.cf.P,.cf.N{color:var(--muted)}
+.recsheet{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--e1);padding:16px;display:flex;flex-direction:column;gap:16px}
+.rec-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:12px;border-bottom:3px solid var(--ink)}
+.rec-ti{text-align:right}.rec-ti b{display:block;font-size:1rem;line-height:1.2;letter-spacing:-.005em}.rec-ti .tri{margin-top:5px}
+.rec-by{padding-top:4px}
+.rec{display:flex;flex-direction:column;gap:14px;color:var(--ink)}
+.rec-ath{display:flex;flex-direction:column;gap:12px}
+.rec-det{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.rec-det .nm{grid-column:1/-1}
+.rec-det span{display:block;font-size:.6875rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.rec-det b{font-weight:600;font-size:.9375rem}
+.rec-det .nm b{font-size:1.5rem;letter-spacing:-.015em;font-weight:700}
+.rec-don{display:flex;align-items:center;gap:16px}
+.rec-don .dn{width:92px;height:92px;flex:none}
+.rec-don ul{list-style:none;display:flex;flex-direction:column;gap:5px;font-size:.8125rem;color:var(--ink-2)}
+.rec-don li{display:flex;align-items:center;gap:7px}.rec-don li b{font-family:var(--font-num);color:var(--ink);margin-left:2px}
+.rec-sum{border:1.5px solid var(--ink);border-radius:10px;padding:10px 12px;font-weight:600;font-size:.9375rem;line-height:1.35}
+.rec-h{display:none}
+.rec-g{font-size:.6875rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 0 6px;border-bottom:1.5px solid var(--ink)}
+.rec-r{display:grid;grid-template-columns:22px minmax(0,1fr) auto;grid-template-areas:"n t v" ". c c" ". a a" ". m m";gap:5px 10px;width:100%;padding:12px 4px 12px 0;border-bottom:1px solid var(--line);text-align:left;position:relative;transition:background .12s}
+button.rec-r:active{background:var(--surface-2)}
+.rec-r.A{background:repeating-linear-gradient(135deg,transparent 0 9px,color-mix(in srgb,var(--amber-bg) 70%,transparent) 9px 18px)}
+.rec-r .n{grid-area:n;font-family:var(--font-num);color:var(--muted);font-weight:700}
+.rec-r .t{grid-area:t;line-height:1.3}.rec-r .t b{font-weight:600}.rec-r .t small{display:block;color:var(--ink-2);font-size:.8125rem}
+.rec-r .v{grid-area:v}
+.rec-r .c{grid-area:c}
+.rec-r .a{grid-area:a;display:flex;flex-direction:column;gap:2px}
+.rec-r .a .ac{width:100%;max-width:280px;height:auto}
+.rec-r .a em{font-style:normal;font-size:.75rem;color:var(--ink-2)}
+.rec-r .m{grid-area:m;font-size:.8125rem;color:var(--ink-2);line-height:1.4}
+.rec-two{display:grid;grid-template-columns:1fr;gap:10px}
+.rec-box{border:1.5px solid var(--line-strong);border-radius:10px;padding:12px}
+.rec-box h3{font-size:.6875rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;color:var(--ink)}
+.rec-box ul{list-style:none;display:flex;flex-direction:column;gap:6px;font-size:.875rem}
+.rec-box li b{font-weight:700}.rec-box li .rp{font-family:var(--font-num);color:var(--red);font-weight:700;margin-right:6px}
+.rec .nb{font-size:.8125rem;color:var(--ink-2);line-height:1.45}
+/* A4 layout of the same record markup */
+.page{--green:#13704A;--amber:#8C4F00;--amber-bg:#FBEED8;--red:#B0261E;--ink:#0B0F14;--ink-2:#3D4A59;--muted:#5E6471;--line:#BFC6CE;--line-strong:#8B909A;--primary:#1D3FA6;--primary-soft:#E7ECF8;--surface:#fff;--surface-2:#EEEDE8}
+.page .rec{gap:2.2mm;font-size:8.8pt}
+.page .rec-ath{flex-direction:row;justify-content:space-between;align-items:center;gap:6mm}
+.page .rec-det{flex:1;grid-template-columns:1.15fr .9fr 1.35fr;gap:1.5mm 4mm}
+.page .rec-det .nm{grid-column:auto}
+.page .rec-det span{font-size:6.8pt}.page .rec-det b{font-size:9.6pt}.page .rec-det .nm b{font-size:14pt}
+.page .rec-don{gap:3.5mm}.page .rec-don .dn{width:25mm;height:25mm}
+.page .rec-don ul{font-size:7.4pt;gap:1mm}
+.page .rec-sum{font-size:9.6pt;padding:1.8mm 3.5mm;border-width:1pt;border-radius:2mm}
+.page .rec-h,.page .rec-r{grid-template-columns:5mm 1.45fr .8fr .85fr 1.55fr 1.5fr;grid-template-areas:"n t v c a m";gap:0 2.2mm;align-items:center}
+.page .rec-h{display:grid;font-size:6.8pt;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#3D4A59;padding-bottom:1.2mm;border-bottom:1pt solid #0B0F14}
+.page .rec-g{padding:1.4mm 0 .6mm;font-size:6.8pt;border-bottom-width:.5pt}
+.page .rec-r{padding:.7mm 0;border-bottom:.5pt solid #BFC6CE}
+.page .rec-r .t small{font-size:6.8pt}.page .rec-r .t b{font-size:8.8pt}
+.page .rec-r .m{font-size:6.9pt;line-height:1.3}
+.page .rec-r .a{gap:0}.page .rec-r .a em{font-size:6.4pt}
+.page .rec-r .a .ac{max-width:none}
+.page .rec-r .cf{font-size:7.6pt;gap:1.2mm}
+.page .rec-r .val{justify-content:flex-start}
+.page .rec-r .val .v{font-size:12pt}.page .rec-r .val .u{font-size:7.6pt}.page .rec-r .val.est .ap{font-size:11pt}.page .rec-r .val .w{font-size:8.6pt}
+.page .rec-two{grid-template-columns:1fr 1fr;gap:5mm}
+.page .rec-box{border-width:1pt;border-color:#0B0F14;border-radius:2mm;padding:2mm 3mm}
+.page .rec-box h3{font-size:6.8pt;margin-bottom:1.4mm}.page .rec-box ul{font-size:7.8pt;gap:.9mm}
+.page .rec .nb{font-size:7.4pt}
+@media screen{.pdfview .page{margin:0 auto}}
+@media print{
+  @page{size:A4 portrait;margin:0}
+  html,body{background:#fff!important}
+  #app,.rotate,.toast{display:none!important}
+  #print-root{display:block}
+  .page{break-after:page;page-break-after:always}
+  .page:last-child{break-after:auto;page-break-after:auto}
+}
+
+/* ===== legacy aliases so engine-owned markup (calibration panels, photo editor) inherits the v2 tokens ===== */
+:root{--card:var(--surface);--card-muted:var(--surface-2);--text:var(--ink);--text-sub:var(--ink-2);--border:var(--line);--green-fg:var(--green);--red-fg:var(--red);--amber-fg:var(--amber);--primary-light:var(--primary-soft)}
+.btn{width:100%}
+.bb .btn{width:auto}
+.card .btn,.card .lang-btn{margin-top:6px}
+.btn.primary{background:var(--primary);color:var(--on-primary)}
+.btn.primary:active{background:var(--primary-press)}
+.btn.secondary{background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+.btn.danger{background:var(--red-bg);color:var(--red)}
+.lang-btn{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:4px 12px;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--line-strong);font-weight:600;font-size:.875rem;color:var(--ink)}
+.input-row{margin-bottom:10px}
+.input-row label{display:block;font-size:.875rem;font-weight:600;color:var(--ink-2);margin-bottom:4px}
+.input-row input,.input-row select,.card input[type=number]{border:0;box-shadow:inset 0 0 0 1.5px var(--line-strong);border-radius:10px;padding:8px 12px;font-size:1rem;background:var(--surface);color:var(--ink)}
+.input-row input{width:100%;min-height:48px}
+.badge{display:inline-flex;align-items:center;font-size:.75rem;font-weight:700;padding:3px 9px;border-radius:8px;white-space:nowrap}
+.badge.ai,.badge.green{background:var(--green-bg);color:var(--green)}
+.badge.planned,.badge.amber{background:var(--amber-bg);color:var(--amber)}
+.badge.manual{background:var(--surface-2);color:var(--muted)}
+.badge.red{background:var(--red-bg);color:var(--red)}
+.audit-table{width:100%;border-collapse:collapse;font-size:.8125rem;margin-top:8px}
+.audit-table th,.audit-table td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+details>summary{cursor:pointer;min-height:var(--touch);display:flex;align-items:center;font-weight:600}
+/* camera surface (engine-owned canvas + HUD) restyled to the v2 capture look */
+.cam-wrap{position:relative;width:100%;aspect-ratio:9/16;max-height:68dvh;background:radial-gradient(120% 80% at 50% 35%,#29323C 0%,#141A21 55%,#080B0F 100%);border-radius:var(--r-xl);overflow:hidden}
+.cam-wrap video{width:100%;height:100%;object-fit:contain}
+.cam-wrap canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
+.cam-wrap .capzone{position:absolute;left:8%;right:8%;top:20%;bottom:16%;border:3px solid transparent;border-radius:24px;pointer-events:none;transition:border-color .15s}
+.cam-wrap.ok .capzone{border-color:#3BE08A}
+.cam-wrap.out .capzone{border-color:#FF5A4E;border-style:dashed}
+.cam-wrap .capzone .zl{position:absolute;top:-15px;left:50%;transform:translateX(-50%);white-space:nowrap;background:#3BE08A;color:#03220F;font-weight:700;font-size:.8125rem;padding:4px 12px;border-radius:999px;display:none}
+.cam-wrap.out .capzone .zl{background:#FF5A4E;color:#2A0300}
+.cam-wrap.ok .capzone .zl,.cam-wrap.out .capzone .zl{display:block}
+.cam-hud-top{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.hud-pill{background:rgba(0,0,0,.6);color:#fff;padding:5px 10px;border-radius:999px;font-size:.75rem;font-weight:600;backdrop-filter:blur(6px)}
+#hudTimer{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:1.125rem;font-weight:700;border-radius:12px;padding:4px 12px}
+.hud-live-metric{position:absolute;top:52px;left:12px;right:12px;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;background:rgba(0,0,0,.6);color:#fff;padding:8px 14px;border-radius:14px;font-size:.875rem;font-weight:700;backdrop-filter:blur(6px)}
+.hud-live-metric.bad{background:#FF5A4E;color:#2A0300}
+#hudMetricVal{font-size:1.125rem}
+.cam-hud-bottom{position:absolute;bottom:10px;left:10px;right:10px;background:rgba(0,0,0,.66);color:#fff;padding:10px 12px;border-radius:12px;font-size:.8125rem;line-height:1.35;backdrop-filter:blur(6px)}
+#btnRecToggle{min-height:84px;background:#E5372B;color:#fff;font-size:1.0625rem;border-radius:var(--r-lg)}
+#btnRecToggle[disabled]{background:#7E8894}
+.capbar{display:flex;flex-direction:column;gap:12px}
+body.cam .rotate{display:none!important}
+.saved-wrap{background:#05080C;min-height:100dvh}
+.pdfview{display:none}
+/* desktop preview framing */
+@media (min-width:560px){body{background:var(--sunken)}#app{max-width:480px;margin:0 auto;background:var(--bg);min-height:100dvh;box-shadow:0 0 0 1px var(--line)}.sheet{max-width:480px;margin:0 auto}.toast{max-width:448px;margin:0 auto}}
+:root[data-theme=dark] .sai .lg img{background:#fff}
+.dset img{height:26px;width:auto;border-radius:5px;display:block}
+.page .fl .ds img{height:5mm;width:auto;display:block}
+@media print{html[data-theme=dark]{color-scheme:light}}
+
+
+/* tighter A4 rhythm so the footer (signatures, DSeT, page number) always fits, even with long re-test notes */
+.page .pb{gap:2.2mm;padding-top:3mm}
+.page td{padding:.8mm 1.6mm}
+.page tr.grp td{padding-top:1.4mm}
+.page .pf{padding:3mm 13mm 6mm;gap:2mm}
+.page .sig{padding-top:3mm}
+.page .ph{padding:6mm 13mm 3.5mm}
   </style>
 </head>
 <body>
-  <div class="app-shell" id="app"></div>
+  <div id="splash" role="presentation" aria-hidden="true">
+    <div class="sp-card"><img src="sai-logo.png" alt="Sports Authority of India"></div>
+    <h1>Battery Fitness Assessment</h1>
+    <p>Sports Authority of India</p>
+    <span class="tri" aria-hidden="true"><i></i><i></i><i></i></span>
+    <div class="sp-by"><img src="dset_logo.png" alt="">Built by DSeT Consulting</div>
+  </div>
+  <div id="app"></div>
+  <div id="print-root"></div>
+  <div class="rotate" id="rotate"></div>
 
   <script type="module">
     const BATTERY_TESTS = [
@@ -399,22 +561,31 @@
     }
 
     function t(en, hi) {
-      return state.lang === "hi" ? hi : en;
+      return state.lang === "hi" && hi ? hi : en;
     }
 
     function cellKey(athleteId, testKey) {
       return `${athleteId}:${testKey}`;
     }
 
+    // The roster for the running session. Falls back to every registered athlete
+    // until a session has been started from Session Setup.
+    function rosterAthletes() {
+      const ids = state.session?.athleteIds;
+      const list = ids?.length ? state.athletes.filter(a => ids.includes(a.id)) : state.athletes;
+      return list.length ? list : state.athletes;
+    }
+
     function getTraversal() {
       const cells = [];
+      const roster = rosterAthletes();
       if (state.sequencing === "ATHLETE_WISE") {
-        for (const a of state.athletes) {
+        for (const a of roster) {
           for (const test of BATTERY_TESTS) cells.push({ athleteId: a.id, testKey: test.key });
         }
       } else {
         for (const test of BATTERY_TESTS) {
-          for (const a of state.athletes) cells.push({ athleteId: a.id, testKey: test.key });
+          for (const a of roster) cells.push({ athleteId: a.id, testKey: test.key });
         }
       }
       return cells;
@@ -2342,420 +2513,416 @@
     // =========================================================================
     // View Renderer
     // =========================================================================
-    function render() {
-      persist();
-      const root = document.getElementById("app");
-      if (state.route === "home") renderHome(root);
-      else if (state.route === "athletes") renderAthletes(root);
-      else if (state.route === "setup") renderSessionSetup(root);
-      else if (state.route === "session") renderSession(root);
-      else if (state.route === "cell") renderCell(root);
-      else if (state.route === "capture") renderCapture(root);
-      else if (state.route === "report") renderReport(root);
+    // =========================================================================
+    // UI layer — Claude Design v2 (SAI / DSeT). Real state and the real engine
+    // sit underneath; nothing here invents a number. Design ids (sitreach, vjump…)
+    // are mapped onto the engine's test keys by TKEY.
+    // =========================================================================
+    const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+    if (!state.theme) state.theme = "auto";
+    if (state.assessor === undefined) state.assessor = "";
+    if (state.centre === undefined) state.centre = "";
+    if (!["home", "login", "register", "setup", "session", "cell", "manual", "saved", "reports", "report", "roster"].includes(state.route)) state.route = "home";
+    if (state.session && !state.session.date) state.session.date = todayISO();
+    state.athletes.forEach(a => { if (!a.date) a.date = todayISO(); });
+
+    // Ephemeral UI state (never persisted)
+    const VW = {
+      sheet: null, modal: null, toast: null, genstep: 0, list: state.sequencing === "ATHLETE_WISE" ? "athletes" : "stations",
+      mode: state.session?.mode === "INDIVIDUAL" ? "indiv" : "coach", picked: null,
+      reg: { name: "", age: "", g: "", school: "", idType: "none", idNo: "", date: todayISO() },
+      entry: { m: "", s: "", val: "" }, manualFrom: "session", capFail: null
+    };
+
+    const TKEY = { height: "height", weight: "weight", sit_and_reach: "sitreach", vertical_jump: "vjump", broad_jump: "bjump", medicine_ball_throw: "mball", sprint_30m: "sprint", shuttle_run: "shuttle", sit_ups: "situps", endurance_run: "run" };
+    const TESTS = BATTERY_TESTS.map(b => ({ id: TKEY[b.key], key: b.key, n: b.number, en: b.nameEn, hi: b.nameHi, u: b.unit, m: b.mode === "AI" ? "ai" : b.mode === "Planned" ? "planned" : "manual", b }));
+    const GROUPS = [
+      { k: "body", n: ["Body measures", "शरीर माप"], ids: ["height", "weight"] },
+      { k: "flex", n: ["Flexibility", "लचीलापन"], ids: ["sitreach"] },
+      { k: "pow", n: ["Strength and power", "शक्ति और पावर"], ids: ["vjump", "bjump", "mball"] },
+      { k: "spd", n: ["Speed and agility", "गति और चपलता"], ids: ["sprint", "shuttle"] },
+      { k: "end", n: ["Core and endurance", "कोर और सहनशक्ति"], ids: ["situps", "run"] }
+    ];
+    const TX = {
+      limFps: ["At 30 fps the top of the jump can fall between frames, so the result may be a few cm low. A re-test will not change this.", "30 fps पर कूद का शिखर फ़्रेमों के बीच छूट सकता है, इसलिए परिणाम कुछ cm कम हो सकता है। दोबारा टेस्ट से यह नहीं बदलेगा।"],
+      limHair: ["Untied hair can add 1–4 cm to the reading.", "खुले बाल रीडिंग में 1–4 cm जोड़ सकते हैं।"],
+      notRun: ["Not yet run in this session", "इस सत्र में अभी नहीं हुआ"],
+      plan: ["AI timing is not available in this version yet", "AI टाइमिंग इस संस्करण में अभी उपलब्ध नहीं"],
+      measured: ["Measured against a physical reference in the frame", "फ़्रेम में भौतिक संदर्भ के विरुद्ध मापा गया"],
+      estimate: ["Estimated without a physical reference in the frame", "फ़्रेम में भौतिक संदर्भ के बिना अनुमानित"],
+      reps: ["Each rep checked against the Handbook rules", "हर रेप हैंडबुक नियमों से जाँचा गया"],
+      scale: ["Entered by coach from a scale", "कोच ने मशीन से देखकर दर्ज किया"],
+      tape: ["Measured with a tape by the coach", "कोच ने टेप से मापा"],
+      watch: ["Timed by the coach with a stopwatch", "कोच ने स्टॉपवॉच से समय लिया"],
+      manual: ["Entered manually by the assessor", "मूल्यांकनकर्ता ने मैन्युअल दर्ज किया"]
+    };
+    const X = k => t(TX[k][0], TX[k][1]);
+    const BW = () => ({ G: t("Green", "हरा"), A: t("Amber", "पीला"), R: t("Rejected", "अस्वीकृत"), P: t("Not recorded", "दर्ज नहीं"), N: t("Not available yet", "अभी उपलब्ध नहीं") });
+    const UNIT = { cm: "cm", kg: "kg", s: "s", reps: "reps" };
+    const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const tN = te => state.lang === "hi" ? te.hi : te.en;
+
+    // ---- Data adapter: real result objects -> design shape --------------------
+    function shortWhy(x) {
+      let s = (x && x.audit && x.audit[0] && x.audit[0].detail) || (x && x.method) || "Rejected";
+      s = String(s).replace(/^[^A-Za-z0-9ऀ-ॿ]+/, "").replace(/^FOUL\s*[—–-]\s*/i, "");
+      return s.length > 170 ? s.slice(0, 167) + "…" : s;
     }
-
-    function renderHome(root) {
-      const prog = getProgress();
-      root.innerHTML = `
-        <div class="topbar">
-          <div>
-            <h1>${t("Battery Assessment", "बैटरी फिटनेस मूल्यांकन")}</h1>
-            <div class="sub">${t("Offline · Stored on this iPhone", "ऑफ़लाइन · इस आईफोन पर सुरक्षित")}</div>
-          </div>
-          <button class="lang-btn" id="toggleLang">${state.lang === "en" ? "हिन्दी" : "English"}</button>
-        </div>
-
-        <button class="hero-btn" id="btnNewSession">
-          <div class="title">${t("New session", "नया सत्र शुरू करें")}</div>
-          <div class="desc">${t("Select athletes and choose athlete-wise or test-wise order", "एथलीट चुनें और एथलीट-वार या टेस्ट-वार क्रम चुनें")}</div>
-        </button>
-
-        <div class="grid-2">
-          <div class="stat-card" id="cardAthletes">
-            <div class="num">${state.athletes.length}</div>
-            <div class="lbl">${t("Athletes", "एथलीट")}</div>
-            <div class="sub">${t("Register or view", "पंजीकरण या सूची देखें")}</div>
-          </div>
-          <div class="stat-card" id="cardAssessments">
-            <div class="num">${prog.done}/${prog.total}</div>
-            <div class="lbl">${t("Assessments", "मूल्यांकन")}</div>
-            <div class="sub">${t("Resume or view reports", "जारी रखें या रिपोर्ट देखें")}</div>
-          </div>
-        </div>
-
-        <div class="section-title">${t("10-Test Battery Reference", "10-टेस्ट बैटरी संदर्भ")}</div>
-        <div class="section-sub">${t("4 Measured on-device by AI; 3 AI Planned; 3 Manual entry.", "4 AI द्वारा मापे गए; 3 प्रस्तावित AI; 3 मैनुअल प्रविष्टि।")}</div>
-
-        <div id="testList">
-          ${BATTERY_TESTS.map(test => {
-            const badgeClass = test.mode === "AI" ? "ai" : (test.mode === "Planned" ? "planned" : "manual");
-            const meta = test.isPhoto
-              ? `${t("Photo", "फोटो")} · ${test.attempts} ${t("attempt", "प्रयास")} · ${test.unit}`
-              : `${test.minSec}–${test.maxSec} s · ${test.attempts} ${t("attempt(s)", "प्रयास")} · ${test.unit}`;
-            return `
-              <div class="test-row" data-test="${test.key}">
-                <div class="left">
-                  <div class="idx">${test.number}</div>
-                  <div>
-                    <div class="t-name">${state.lang === "hi" ? test.nameHi : test.nameEn}</div>
-                    <div class="t-meta">${meta}</div>
-                  </div>
-                </div>
-                <span class="badge ${badgeClass}">${test.mode}</span>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      `;
-
-      document.getElementById("toggleLang").onclick = () => { state.lang = state.lang === "en" ? "hi" : "en"; render(); };
-      document.getElementById("btnNewSession").onclick = () => { state.route = "setup"; render(); };
-      document.getElementById("cardAthletes").onclick = () => { state.route = "athletes"; render(); };
-      document.getElementById("cardAssessments").onclick = () => { state.route = "session"; render(); };
-      root.querySelectorAll(".test-row").forEach(el => {
-        el.onclick = () => {
-          state.selectedTestKey = el.dataset.test;
-          state.route = "cell";
-          render();
+    const isManualEntry = x => x && (x.method === "Assessor Protocol Entry" || x.method === "Rung 5 Manual Override");
+    function adaptResult(a, te) {
+      if (te.m === "planned") return { status: "notrec", reason: X("plan"), method: X("plan"), attempts: [] };
+      const r = state.results[cellKey(a.id, te.key)];
+      if (!r) return { status: "notrec", reason: X("notRun"), method: "", attempts: [] };
+      const hist = r.attemptsHistory?.length ? r.attemptsHistory : [r];
+      const attempts = hist.map(x => (x.valid && x.value !== null) ? { v: x.value, ok: 1 } : { ok: 0, why: shortWhy(x) });
+      if (!(r.valid && r.value !== null)) {
+        const why = shortWhy(r);
+        return { status: "rejected", band: "R", reason: hist.length > 1 ? `${t("All", "सभी")} ${hist.length} ${t("attempts rejected", "प्रयास अस्वीकृत")}: ${why}` : why, method: r.method || "", attempts, retest: `${why}. ${t("Fix this, then re-test.", "इसे ठीक करके दोबारा टेस्ट करें।")}` };
+      }
+      const manual = isManualEntry(r);
+      const band = (!manual && r.confidence === "GREEN") || (manual && te.m === "manual") ? "G" : "A";
+      let reason, limit, retest;
+      if (manual) reason = te.id === "weight" ? X("scale") : te.id === "mball" ? X("tape") : te.id === "run" ? X("watch") : X("manual");
+      else if (te.id === "situps") reason = X("reps");
+      else reason = band === "G" ? X("measured") : X("estimate");
+      if (te.id === "height" && !manual) limit = X("limHair");
+      if (te.id === "vjump" && !manual && band === "A") limit = X("limFps");
+      if (band === "A" && te.m === "ai" && !manual && te.id !== "vjump" && te.id !== "situps") {
+        retest = te.id === "height" ? t("Lock a wall reference photo, then re-measure for a measured result", "दीवार संदर्भ फोटो लॉक करें, फिर मापें")
+          : t("Place a physical reference (floor tape or box scale) in frame, then re-test for a measured result", "फ़्रेम में भौतिक संदर्भ (फ़र्श टेप / बॉक्स स्केल) रखकर दोबारा टेस्ट करें");
+      }
+      const out = { status: "rec", band, best: r.value, reason, method: r.method || "", limit, retest, attempts };
+      if (te.id === "situps") {
+        out.fouls = (r.audit || []).filter(x => x.valid === false).map(x => {
+          const rep = parseInt((String(x.label).match(/#?(\d+)/) || [])[1], 10);
+          const rule = (String(x.detail).match(/Rule\s*([0-9a-z/]+)/i) || [])[1] || "";
+          const text = String(x.detail).replace(/^[^A-Za-z0-9ऀ-ॿ]+/, "").replace(/^FOUL\s*[—–-]\s*/i, "").replace(/^Rule\s*[0-9a-z/]+\s*:\s*/i, "");
+          return { rep: isNaN(rep) ? "?" : rep, rule, t: text };
+        });
+      }
+      return out;
+    }
+    let ATH = [];
+    function buildAth() {
+      ATH = rosterAthletes().map(a => {
+        const o = {
+          id: a.id, raw: a, name: a.name, age: a.age, g: a.gender === "F" ? t("Female", "महिला") : a.gender === "M" ? t("Male", "पुरुष") : t("Other", "अन्य"),
+          school: a.school || "", idType: (a.idType && a.idType !== "LOCAL") ? a.idType : "none", idNo: a.externalId || "", date: a.date || todayISO(), r: {}
         };
+        TESTS.forEach(te => { o.r[te.id] = adaptResult(a, te); });
+        return o;
       });
     }
-
-    function renderAthletes(root) {
-      root.innerHTML = `
-        <div class="topbar">
-          <button class="back-btn" id="btnBack">← ${t("Back", "वापस")}</button>
-          <h1>${t("Athletes Roster", "एथलीट सूची")}</h1>
-          <span></span>
-        </div>
-
-        <div class="card">
-          <div style="font-weight:700;margin-bottom:10px;">${t("Register Athlete", "नया एथलीट जोड़ें")}</div>
-          <div class="input-row">
-            <label>${t("Full Name", "पूरा नाम")}</label>
-            <input id="inpName" placeholder="e.g. Riya Aggarwal" />
-          </div>
-          <div class="grid-2" style="margin-bottom:0;">
-            <div class="input-row">
-              <label>${t("Age (yrs)", "आयु (वर्ष)")}</label>
-              <input id="inpAge" type="number" value="20" min="6" max="40" />
-            </div>
-            <div class="input-row">
-              <label>${t("Gender", "लिंग")}</label>
-              <select id="inpGender">
-                <option value="F">${t("Female", "महिला")}</option>
-                <option value="M">${t("Male", "पुरुष")}</option>
-              </select>
-            </div>
-          </div>
-          <button class="btn primary" id="btnAddAthlete">${t("Save Athlete", "एथलीट सहेजें")}</button>
-        </div>
-
-        <div class="section-title">${t("Registered Athletes", "पंजीकृत एथलीट")} (${state.athletes.length})</div>
-        ${state.athletes.map(a => `
-          <div class="test-row" data-aid="${a.id}">
-            <div>
-              <div class="t-name">${a.name}</div>
-              <div class="t-meta">${t("Age", "आयु")}: ${a.age} · ${a.gender}</div>
-            </div>
-            <span class="badge ai">${t("Select", "चुनें")} →</span>
-          </div>
-        `).join("")}
-      `;
-
-      document.getElementById("btnBack").onclick = () => { state.route = "home"; render(); };
-      document.getElementById("btnAddAthlete").onclick = () => {
-        const name = document.getElementById("inpName").value.trim();
-        const age = parseInt(document.getElementById("inpAge").value, 10) || 18;
-        const gender = document.getElementById("inpGender").value;
-        if (!name) return;
-        const id = Date.now();
-        state.athletes.push({ id, name, age, gender });
-        state.selectedAthleteId = id;
-        render();
-      };
-      root.querySelectorAll(".test-row").forEach(el => {
-        el.onclick = () => {
-          state.selectedAthleteId = Number(el.dataset.aid);
-          state.route = "session";
-          render();
-        };
+    const dT = id => TESTS.find(x => x.id === id);
+    const curA = () => ATH.find(a => a.id === state.selectedAthleteId) || ATH[0];
+    const u12 = a => a.age < 12;
+    const ageGrp = a => u12(a) ? t("Under 12", "12 से कम") : t("12 and above", "12 और ऊपर");
+    function bandOf(a, tid) { const r = a.r[tid], te = dT(tid); if (te.m === "planned") return "N"; if (r.status === "rejected") return "R"; if (r.status === "notrec") return "P"; return r.band; }
+    function tname(a, te) { if (te.id === "run") return u12(a) ? t("800 m Run", "800 मी दौड़") : t("1.6 km Run", "1.6 किमी दौड़"); return tN(te); }
+    function tsub(a, te) { if (te.id === "situps") return (u12(a) ? 30 : 45) + " s " + t("window", "समय"); if (te.id === "mball") return (u12(a) ? 1 : 2) + " kg " + t("ball", "बॉल"); return ""; }
+    function fmtV(te, v) {
+      if (v == null) return { v: "", u: "" };
+      if (te.id === "run") { const s = Math.round(v); return { v: Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"), u: "min" }; }
+      if (te.id === "situps") return { v: String(Math.round(v)), u: UNIT.reps };
+      const n = +v;
+      return { v: (te.id === "height" || te.id === "weight" || !Number.isInteger(n)) ? n.toFixed(1) : String(n), u: UNIT[te.u] || te.u };
+    }
+    const fmtS = (te, v) => { const f = fmtV(te, v); return f.v + " " + f.u; };
+    function athSummary(a) { let rec = 0, ai = 0, g = 0, am = 0, rj = 0, nr = 0; const rt = [], lim = []; TESTS.forEach(te => { const r = a.r[te.id], b = bandOf(a, te.id); if (r.status === "rec") { rec++; if (te.m === "ai") ai++; if (b === "G") g++; if (b === "A") am++; } if (b === "R") rj++; if (b === "P" || b === "N") nr++; if (r.retest) rt.push(te); if (r.limit && !r.retest) lim.push(te); }); return { rec, ai, g, am, rj, nr, rt, lim }; }
+    function spreadOf(te, r) { const v = r.attempts.filter(x => x.ok).map(x => x.v); return v.length < 2 ? null : Math.max(...v) - Math.min(...v); }
+    function sess() { let att = 0, tot = 0, g = 0, am = 0, rj = 0, pe = 0; ATH.forEach(a => TESTS.forEach(te => { if (te.m === "planned") return; tot++; const b = bandOf(a, te.id); if (b !== "P") att++; if (b === "G") g++; if (b === "A") am++; if (b === "R") rj++; if (b === "P") pe++; })); return { att, tot, g, am, rj, pe }; }
+    function pendingList() {
+      const q = [];
+      getTraversal().forEach(c => {
+        const te = TESTS.find(x => x.key === c.testKey), a = ATH.find(x => x.id === c.athleteId);
+        if (!te || !a || te.m === "planned") return;
+        if (bandOf(a, te.id) === "P") q.push({ a, te });
       });
+      return q;
+    }
+    function retestList() { const q = []; TESTS.forEach(te => ATH.forEach(a => { const r = a.r[te.id]; if (r.retest) q.push({ a, te, why: r.retest }); })); return q; }
+    const fmtDate = d => new Date(d + "T00:00").toLocaleDateString(state.lang === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" });
+    const idStr = a => a.idType === "none" ? t("ID not provided", "ID उपलब्ध नहीं") : `${a.idType} · ${a.idNo || "—"}`;
+    const headline = sm => `${sm.rec} ${t("of 10 tests recorded", "/10 टेस्ट दर्ज")} · ${sm.ai} ${t("measured by AI", "AI द्वारा मापे")} · ` + (sm.rt.length ? `${sm.rt.length} ${t("to re-test", "दोबारा टेस्ट")}` : t("nothing to re-test", "दोबारा टेस्ट नहीं"));
+    const sessDate = () => state.session?.date || todayISO();
+
+    // ---- Icons, shapes, logos -----------------------------------------------
+    const sv = (p, s = 24, w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+    const IC = {
+      back: sv('<path d="M19 12H5M11 18l-6-6 6-6"/>'), close: sv('<path d="M6 6l12 12M18 6L6 18"/>'), chev: sv('<path d="M9 6l6 6-6 6"/>', 20), chevL: sv('<path d="M15 6l-6 6 6 6"/>', 22),
+      cam: sv('<path d="M3 8h3.5l2-3h7l2 3H21v11H3z"/><circle cx="12" cy="13" r="3.6"/>', 22), camOff: sv('<path d="M3 8h3.5l2-3h7l2 3H21v11H3z"/><circle cx="12" cy="13" r="3.6"/><path d="M3 3l18 18"/>', 40, 1.6),
+      user: sv('<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/>', 22), grid: sv('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>', 22),
+      doc: sv('<path d="M6 2.5h8l4.5 4.5v14.5H6z"/><path d="M14 2.5V7h4.5M9 12h6M9 16h6"/>', 22),
+      share: sv('<path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M5 13v7h14v-7"/>', 22), print: sv('<path d="M7 8V3h10v5M7 17H4V9h16v8h-3"/><path d="M7 14h10v7H7z"/>', 22),
+      shield: sv('<path d="M12 2.5l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10v-6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>', 22),
+      tick: sv('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 14, 3.2), tickL: sv('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 28, 3),
+      plus: sv('<path d="M12 5v14M5 12h14"/>', 22), info: sv('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>', 22),
+      box: sv('<rect x="4" y="4" width="16" height="16" rx="4"/>', 24), boxOn: '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="currentColor"/><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="var(--on-primary)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      stopwatch: sv('<circle cx="12" cy="14" r="7.5"/><path d="M12 10v4l2.5 2M10 2.5h4M12 2.5v4"/>', 22), flag: sv('<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>', 22),
+      theme: sv('<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2L6 6M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8L6 18M18 6l1.8-1.8"/>', 22),
+      flip: sv('<path d="M4 12a8 8 0 0113.7-5.6L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 01-13.7 5.6L4 15.5M4 20v-4.5h4.5"/>', 22)
+    };
+    function shape(b, s = 16) {
+      const v = `width="${s}" height="${s}" viewBox="0 0 16 16" class="sh ${b}" aria-hidden="true"`;
+      if (b === "G") return `<svg ${v}><circle cx="8" cy="8" r="6.5" fill="currentColor"/></svg>`;
+      if (b === "A") return `<svg ${v}><path d="M8 1.2l7 12.6H1z" fill="currentColor"/></svg>`;
+      if (b === "R") return `<svg ${v}><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`;
+      if (b === "N") return `<svg ${v}><path d="M3.5 8h9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+      return `<svg ${v}><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2.6 2.1"/></svg>`;
+    }
+    const chipH = (b, label) => `<span class="chip ${b}">${shape(b, 13)}${label || BW()[b]}</span>`;
+    const triH = '<span class="tri" aria-hidden="true"><i></i><i></i><i></i></span>';
+    const LOGO = {
+      sai: (sub) => `<div class="sai"><span class="lg"><img src="sai-logo.png" alt="SAI"></span><div><b>Sports Authority of India</b><span>${sub || t("Battery Fitness Assessment", "बैटरी फिटनेस मूल्यांकन")}</span></div></div>`,
+      dset: (txt) => `<span class="dset"><img src="dset_logo.png" alt="DSeT Consulting">${txt || t("Built by DSeT Consulting", "DSeT Consulting द्वारा निर्मित")}</span>`
+    };
+    const barH = (title, sub, right = "", cls = "") => `<header class="bar ${cls}"><button class="ib" data-act="back" aria-label="${t("Back", "वापस")}">${IC.back}</button><h1>${title}${sub ? `<small>${sub}</small>` : ""}</h1>${right}</header>`;
+    const icoH = (i, bg) => `<span class="ico" ${bg ? `style="background:${bg}"` : ""}>${i}</span>`;
+    function valH(a, te, cls = "") {
+      const r = a.r[te.id], b = bandOf(a, te.id);
+      if (b === "R") return `<div class="val rej ${cls}"><span class="w">${t("Rejected", "अस्वीकृत")}</span></div>`;
+      if (b === "P" || b === "N") return `<div class="val nr ${cls}"><span class="w">${b === "N" ? t("Not available yet", "अभी उपलब्ध नहीं") : t("Not recorded", "दर्ज नहीं")}</span></div>`;
+      const f = fmtV(te, r.best);
+      if (b === "A") return `<div class="val est ${cls}"><span class="ap">≈</span><span class="v">${f.v}</span><span class="u">${f.u}</span></div>`;
+      return `<div class="val ${cls}"><span class="v">${f.v}</span><span class="u">${f.u}</span></div>`;
     }
 
-    function renderSessionSetup(root) {
-      root.innerHTML = `
-        <div class="topbar">
-          <button class="back-btn" id="btnBack">← ${t("Back", "वापस")}</button>
-          <h1>${t("Session Setup", "सत्र सेटअप")}</h1>
-          <span></span>
-        </div>
-
-        <div class="card">
-          <div style="font-weight:700;margin-bottom:6px;">${t("Sequencing Mode (Concept Note §6.1)", "परीक्षण क्रम (§6.1)")}</div>
-          <div class="section-sub">${t("Both modes produce identical, properly indexed results.", "दोनों क्रम समान और सही रूप से इंडेक्स किए गए परिणाम देते हैं।")}</div>
-          <div class="seg-bar">
-            <button id="seqAthlete" class="${state.sequencing === "ATHLETE_WISE" ? "active" : ""}">
-              ${t("Athlete-wise", "एथलीट-वार")}
-            </button>
-            <button id="seqTest" class="${state.sequencing === "TEST_WISE" ? "active" : ""}">
-              ${t("Test-wise (Station)", "टेस्ट-वार (स्टेशन)")}
-            </button>
-          </div>
-        </div>
-
-        <button class="btn primary" id="btnStartSession">${t("Open Assessment Session", "मूल्यांकन सत्र खोलें")} →</button>
-      `;
-
-      document.getElementById("btnBack").onclick = () => { state.route = "home"; render(); };
-      document.getElementById("seqAthlete").onclick = () => { state.sequencing = "ATHLETE_WISE"; render(); };
-      document.getElementById("seqTest").onclick = () => { state.sequencing = "TEST_WISE"; render(); };
-      document.getElementById("btnStartSession").onclick = () => { state.route = "session"; render(); };
+    // ---- Navigation + history (Android back button / iOS swipe-back) ----------
+    const PARENT = { login: "home", register: "home", setup: "home", session: "home", cell: "session", manual: "cell", capture: "cell", saved: "session", reports: "session", report: "reports", roster: "reports" };
+    let _lastKey = null, _popping = false, _replaceNext = false, _lastRoute = null;
+    function nav(route, extra = {}, replace = false) {
+      if (extra.aid != null) state.selectedAthleteId = Number(extra.aid);
+      if (extra.key) state.selectedTestKey = extra.key;
+      state.route = route; VW.sheet = VW.modal = null; _replaceNext = replace;
+      render(); window.scrollTo(0, 0);
     }
-
-    function renderSession(root) {
-      const prog = getProgress();
-      const currentAthlete = state.athletes.find(a => a.id === state.selectedAthleteId) || state.athletes[0];
-
-      root.innerHTML = `
-        <div class="topbar">
-          <button class="back-btn" id="btnBack">← ${t("Home", "होम")}</button>
-          <div>
-            <h1>${t("Assessment Session", "मूल्यांकन सत्र")}</h1>
-            <div class="sub">${prog.done}/${prog.total} ${t("completed", "पूर्ण")}</div>
-          </div>
-          <button class="lang-btn" id="btnReport">${t("Report Card", "रिपोर्ट कार्ड")}</button>
-        </div>
-
-        <div class="seg-bar">
-          <button id="modeAthlete" class="${state.sequencing === "ATHLETE_WISE" ? "active" : ""}">
-            ${t("Athlete-wise", "एथलीट-वार")}
-          </button>
-          <button id="modeTest" class="${state.sequencing === "TEST_WISE" ? "active" : ""}">
-            ${t("Test-wise", "टेस्ट-वार")}
-          </button>
-        </div>
-
-        <div class="card" style="padding:10px 12px;">
-          <label style="font-size:11px;font-weight:700;color:var(--text-sub);">${t("ACTIVE ATHLETE", "सक्रिय एथलीट")}</label>
-          <select id="selAthlete" style="width:100%;border:none;font-size:15px;font-weight:700;background:transparent;margin-top:4px;">
-            ${state.athletes.map(a => `<option value="${a.id}" ${a.id === currentAthlete.id ? "selected" : ""}>${a.name} (${a.age}y, ${a.gender})</option>`).join("")}
-          </select>
-        </div>
-
-        ${BATTERY_TESTS.map(test => {
-          const res = state.results[cellKey(currentAthlete.id, test.key)];
-          const badgeClass = test.mode === "AI" ? "ai" : (test.mode === "Planned" ? "planned" : "manual");
-          const attemptsDone = res?.attemptsHistory?.length || 0;
-          return `
-            <div class="test-row" data-test="${test.key}">
-              <div class="left">
-                <div class="idx">${test.number}</div>
-                <div>
-                  <div class="t-name">${state.lang === "hi" ? test.nameHi : test.nameEn}</div>
-                  <div class="t-meta">
-                    ${res && res.valid && res.value !== null
-                      ? `<strong style="color:var(--primary);">${res.value} ${res.unit}</strong> · <span class="badge ${res.confidence.toLowerCase()}" style="padding:1px 6px;">${res.confidence}</span> (${attemptsDone}/${test.attempts} att)`
-                      : res && !res.valid
-                      ? `<strong style="color:var(--red-fg);">REJECTED / FOUL</strong> · (${attemptsDone}/${test.attempts} att)`
-                      : `${t("Pending", "लंबित")} · ${test.attempts} ${t("attempt(s)", "प्रयास")}`}
-                  </div>
-                </div>
-              </div>
-              <span class="badge ${badgeClass}">${test.mode}</span>
-            </div>
-          `;
-        }).join("")}
-      `;
-
-      document.getElementById("btnBack").onclick = () => { state.route = "home"; render(); };
-      document.getElementById("btnReport").onclick = () => { state.route = "report"; render(); };
-      document.getElementById("modeAthlete").onclick = () => { state.sequencing = "ATHLETE_WISE"; render(); };
-      document.getElementById("modeTest").onclick = () => { state.sequencing = "TEST_WISE"; render(); };
-      document.getElementById("selAthlete").onchange = (e) => {
-        state.selectedAthleteId = Number(e.target.value);
-        render();
-      };
-      root.querySelectorAll(".test-row").forEach(el => {
-        el.onclick = () => {
-          state.selectedTestKey = el.dataset.test;
-          state.route = "cell";
-          render();
-        };
-      });
+    function overlay(k, v) { VW[k] = v; render(); }
+    function goBack() {
+      if (VW.sheet || VW.modal) { history.back(); return; }
+      const par = state.route === "manual" ? (VW.manualFrom || "session") : (state.route === "report" && ATH.length === 1) ? "session" : (PARENT[state.route] || "home");
+      if (history.state && history.state.prev === par) history.back(); else nav(par, {}, true);
     }
+    function syncHistory() {
+      const key = `${state.route}|${VW.sheet || ""}|${VW.modal || ""}`;
+      const snap = (d, prev) => ({ route: state.route, sheet: VW.sheet, modal: VW.modal, d, prev });
+      if (_lastKey === null) history.replaceState(snap(0, null), "");
+      else if (key !== _lastKey && !_popping) {
+        const d = (history.state && history.state.d) || 0;
+        if (_replaceNext) history.replaceState(snap(d, history.state && history.state.prev), "");
+        else history.pushState(snap(d + 1, history.state && history.state.route), "");
+      }
+      _replaceNext = false; _lastKey = key;
+    }
+    addEventListener("popstate", e => {
+      const s = e.state; if (!s) return;
+      if (state.route === "capture") stopCamera();
+      _popping = true;
+      state.route = s.route === "capture" ? "cell" : s.route; VW.sheet = s.sheet || null; VW.modal = s.modal || null;
+      render(); _popping = false;
+    });
 
-    function renderCell(root) {
-      const athlete = state.athletes.find(a => a.id === state.selectedAthleteId) || state.athletes[0];
-      const test = BATTERY_TESTS.find(x => x.key === state.selectedTestKey) || BATTERY_TESTS[0];
-      const key = cellKey(athlete.id, test.key);
-      const existing = state.results[key];
-      const history = existing?.attemptsHistory || [];
+    // ---- Screens ---------------------------------------------------------------
+    const SCR = {};
+IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
+    SCR.home = () => {
+      const s = sess(), has = !!state.session;
+      const signed = !!state.assessor.trim();
+      const status = !has ? t("No assessment running", "कोई मूल्यांकन नहीं चल रहा") : s.pe === 0 ? t("All tests attempted", "सभी टेस्ट हो गए") : t("Assessment in progress", "मूल्यांकन जारी");
+      const themeLabel = { auto: t("Auto", "ऑटो"), light: t("Light", "लाइट"), dark: t("Dark", "डार्क") }[state.theme];
+      const tagOf = te => te.m === "ai" ? `<span class="tag ai">AI</span>` : te.m === "manual" ? `<span class="tag">${t("Manual", "मैन्युअल")}</span>` : `<span class="tag">${t("Planned", "प्रस्तावित")}</span>`;
+      return `<div class="scr">
+<header class="bar" style="padding-left:16px;padding-right:8px;min-height:calc(var(--st) + 72px)"><div class="grow">${LOGO.sai()}</div>${triH}<button class="ib" data-act="theme" aria-label="${t("Theme", "थीम")}: ${themeLabel}" title="${themeLabel}">${IC.theme}</button><button class="lang-btn" data-act="lang" style="margin:0 4px">${state.lang === "en" ? "हिन्दी" : "English"}</button></header>
+<main class="main" style="gap:16px">
+ <section class="hero dk">
+  <div class="stack" style="gap:6px;position:relative;z-index:1"><span class="eyebrow">${t("Battery Fitness Assessment", "बैटरी फिटनेस मूल्यांकन")}</span><h1 style="font-size:1.75rem;line-height:1.15;font-weight:700;letter-spacing:-.015em;text-wrap:balance">${t("Ten field tests, one phone.", "दस फ़ील्ड टेस्ट, एक फ़ोन।")}</h1><p class="sub">${t("Measure, record and report the SAI battery on this phone, even with no internet.", "इसी फ़ोन पर SAI बैटरी मापें, दर्ज करें और रिपोर्ट बनाएँ, बिना इंटरनेट के भी।")}</p></div>
+  <div class="row" style="justify-content:space-between;align-items:baseline;padding-top:12px;border-top:1px solid var(--hero-line);position:relative;z-index:1"><span style="font-weight:600">${status}</span>${has ? `<span class="num" style="font-size:1.0625rem;font-weight:700">${s.att}<span style="color:var(--on-hero-2);font-weight:500">/${s.tot}</span></span>` : `<span class="small">${state.athletes.length} ${t("athletes registered", "एथलीट पंजीकृत")}</span>`}</div>
+ </section>
+ <div class="stack" style="gap:10px">
+  <button class="btn p" data-act="startflow">${has ? t("Continue assessment", "मूल्यांकन जारी रखें") : t("Start assessment", "मूल्यांकन शुरू करें")}${IC.chev}</button>
+  ${has ? `<button class="btn s" data-act="newsession">${IC.flag}${t("New assessment", "नया मूल्यांकन")}</button>` : ""}
+  <button class="btn s" data-act="go" data-s="login">${IC.user}${signed ? `${t("Signed in", "साइन इन")}: ${esc(state.assessor)}` : t("Login", "लॉगिन")}</button>
+ </div>
+ <nav class="list">
+  <button class="li" data-act="go" data-s="register">${icoH(IC.plus)}<span class="grow"><span class="t">${t("New athlete? Register", "नया एथलीट? पंजीकरण करें")}</span><span class="d">${t("Name, age, school and ID", "नाम, आयु, स्कूल और ID")}</span></span><span class="chev">${IC.chev}</span></button>
+  <button class="li" data-act="viewreport">${icoH(IC.doc)}<span class="grow"><span class="t">${t("Report card", "रिपोर्ट कार्ड")}</span><span class="d">${has && s.att ? t("View and download the report", "रिपोर्ट देखें और डाउनलोड करें") : t("Available after you record a test", "टेस्ट दर्ज होने के बाद उपलब्ध")}</span></span><span class="chev">${IC.chev}</span></button>
+ </nav>
+ <section class="stack" style="gap:8px"><div class="sec-h"><span class="eyebrow">${t("The ten tests", "दस टेस्ट")}</span><span class="small num">${TESTS.filter(x => x.m === "ai").length} ${t("measured by AI", "AI से मापे")}</span></div>
+  <div class="list">${TESTS.map(te => `<div class="li" style="min-height:52px"><span class="num" style="font-weight:700;color:var(--muted);min-width:1.3em">${te.n}</span><span class="grow"><span class="t" ${te.m === "planned" ? 'style="color:var(--ink-2)"' : ""}>${tN(te)}</span></span>${tagOf(te)}</div>`).join("")}</div></section>
+ <div class="note gr" style="align-items:flex-start"><span style="color:var(--green)">${IC.shield}</span><span><b style="color:var(--green)">${t("Works offline.", "ऑफ़लाइन काम करता है।")}</b> ${t("Video is processed on this phone and never uploaded.", "वीडियो इसी फ़ोन पर प्रोसेस होता है और कभी अपलोड नहीं होता।")}</span></div>
+ <div class="stack" style="gap:8px;padding:4px 4px 0">${LOGO.dset()}<span class="small" style="font-size:.75rem;line-height:1.45">${t("National Hackathon on AI-Powered Battery Fitness Assessment · NeGD · MeitY · MYAS", "AI-संचालित बैटरी फिटनेस मूल्यांकन पर राष्ट्रीय हैकथॉन · NeGD · MeitY · MYAS")}</span></div>
+</main></div>`;
+    };
 
-      root.innerHTML = `
-        <div class="topbar">
-          <button class="back-btn" id="btnBack">← ${t("Session", "सत्र")}</button>
-          <div>
-            <h1>${state.lang === "hi" ? test.nameHi : test.nameEn}</h1>
-            <div class="sub">${athlete.name} · ${t("Test", "टेस्ट")} ${test.number} of 10</div>
-          </div>
-          <span class="badge ${test.mode === "AI" ? "ai" : (test.mode === "Planned" ? "planned" : "manual")}">${test.mode}</span>
-        </div>
+    SCR.login = () => {
+      const signed = !!state.assessor.trim();
+      return `<div class="scr">${barH(t("Login", "लॉगिन"), t("Assessor sign-in", "मूल्यांकनकर्ता साइन-इन"))}
+<main class="main">
+ <div class="field"><label for="f-an">${t("Assessor name", "मूल्यांकनकर्ता का नाम")}</label><input id="f-an" data-f3="assessor" value="${esc(state.assessor)}" autocomplete="name" placeholder="${t("Printed on every report", "हर रिपोर्ट पर छपेगा")}"></div>
+ <div class="field"><label for="f-ac">${t("School or centre", "स्कूल या केंद्र")}</label><input id="f-ac" data-f3="centre" value="${esc(state.centre)}"><span class="hint">${t("Optional", "वैकल्पिक")}</span></div>
+ <div class="note">${IC.shield}<span>${t("Saved on this phone only. There is no account or password, and no internet is needed. Your name is printed on the signature line of each report.", "केवल इसी फ़ोन पर सहेजा जाता है। कोई खाता या पासवर्ड नहीं, इंटरनेट की ज़रूरत नहीं। आपका नाम हर रिपोर्ट की हस्ताक्षर रेखा पर छपता है।")}</span></div>
+ ${signed ? `<button class="btn q" data-act="logout" style="color:var(--red)">${t("Sign out", "साइन आउट")}</button>` : ""}
+</main>
+<div class="bb"><button class="btn p" id="btnLogin" data-act="dologin" ${signed ? "" : "disabled"}>${t("Login", "लॉगिन")}</button></div></div>`;
+    };
 
-        <div class="card" style="background:var(--card-muted);">
-          <div style="font-size:13px;font-weight:700;">
-            ${existing && existing.valid && existing.value !== null
-              ? `${t("Best Valid Score", "सर्वश्रेष्ठ वैध स्कोर")}: ${existing.value} ${existing.unit} (${history.length}/${test.attempts} attempts recorded)`
-              : existing && !existing.valid
-              ? `${t("Last Attempt Rejected / Foul", "अंतिम प्रयास अमान्य / फाउल")} (${history.length}/${test.attempts} attempts)`
-              : `${t("Attempt 1 · pending", "प्रयास 1 · लंबित")}`}
-          </div>
-          <div style="font-size:12px;color:var(--text-sub);margin-top:4px;">
-            ${test.attempts} ${t("attempt(s) permitted by the Handbook", "प्रयास हैंडबुक द्वारा अनुमत")}
-          </div>
-        </div>
+    function ageRule(age) {
+      if (!age) return `<div class="note">${IC.info}<span>${t("Enter age to set the test rules for this athlete.", "टेस्ट नियम तय करने के लिए आयु दर्ज करें।")}</span></div>`;
+      const u = +age < 12;
+      return `<div class="card" style="background:var(--primary-soft);box-shadow:none;display:flex;flex-direction:column;gap:8px"><span class="eyebrow" style="color:var(--primary)">${t("Age group", "आयु वर्ग")} · ${u ? t("Under 12", "12 से कम") : t("12 and above", "12 और ऊपर")}</span><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">${[[u ? "30 s" : "45 s", t("Sit-ups", "सिट-अप")], [u ? "1 kg" : "2 kg", t("Ball throw", "बॉल थ्रो")], [u ? "800 m" : "1.6 km", t("Run", "दौड़")]].map(([v, k]) => `<div><b class="num" style="display:block;font-size:1.375rem;line-height:1.1">${v}</b><span class="small">${k}</span></div>`).join("")}</div></div>`;
+    }
+    const regOK = () => { const R = VW.reg, n = parseInt(R.age, 10); return R.name.trim() && n >= 5 && n <= 25 && R.g; };
+    SCR.register = () => {
+      const R = VW.reg;
+      return `<div class="scr">${barH(t("Register athlete", "एथलीट पंजीकरण"), t("New athlete", "नया एथलीट"))}
+<main class="main">
+ <div class="field"><label for="f-name">${t("Full name", "पूरा नाम")}</label><input id="f-name" data-f="name" value="${esc(R.name)}" autocomplete="name" placeholder="${t("As on school records", "स्कूल रिकॉर्ड के अनुसार")}"></div>
+ <div class="row" style="gap:12px;align-items:flex-start"><div class="field" style="width:120px"><label for="f-age">${t("Age", "आयु")}</label><input id="f-age" data-f="age" value="${esc(R.age)}" inputmode="numeric" pattern="[0-9]*" placeholder="${t("Years (5–25)", "वर्ष (5–25)")}"></div>
+ <div class="field grow"><label for="f-date">${t("Assessment date", "मूल्यांकन तिथि")}</label><input id="f-date" type="date" data-f="date" value="${esc(R.date)}"></div></div>
+ <div id="agerule">${ageRule(R.age)}</div>
+ <div class="field"><span class="lab">${t("Gender", "लिंग")}</span><div class="seg">${[["Female", t("Female", "महिला")], ["Male", t("Male", "पुरुष")], ["Other", t("Other", "अन्य")]].map(([g, l]) => `<button aria-pressed="${R.g === g}" data-act="reg" data-k="g" data-v="${g}">${l}</button>`).join("")}</div></div>
+ <div class="field"><label for="f-sch">${t("School or club", "स्कूल या क्लब")}</label><input id="f-sch" data-f="school" value="${esc(R.school)}"></div>
+ <div class="field"><span class="lab">${t("Programme ID", "कार्यक्रम ID")}</span><div class="seg">${["APAAR", "Aadhaar", "NSRS", "none"].map(g => `<button aria-pressed="${R.idType === g}" data-act="reg" data-k="idType" data-v="${g}">${g === "none" ? t("None", "कोई नहीं") : g}</button>`).join("")}</div>
+  ${R.idType === "none" ? `<span class="hint">${t('The report will show "ID not provided".', 'रिपोर्ट में "ID उपलब्ध नहीं" दिखेगा।')}</span>` : `<input aria-label="${t("ID number", "ID संख्या")}" placeholder="${R.idType} ${t("number", "संख्या")}" data-f="idNo" value="${esc(R.idNo)}" inputmode="numeric" style="width:100%;min-height:54px;border:0;box-shadow:inset 0 0 0 1.5px var(--line-strong);border-radius:12px;padding:0 14px;font-size:1.0625rem;background:var(--surface);color:var(--ink)">${R.idType === "Aadhaar" ? `<span class="hint">${t("Only the last 4 digits are saved and printed.", "केवल अंतिम 4 अंक सहेजे और छापे जाते हैं।")}</span>` : ""}`}</div>
+</main>
+<div class="bb"><button class="btn p" id="btnSaveAth" data-act="saveath" ${regOK() ? "" : "disabled"}>${t("Save and continue", "सहेजें और आगे बढ़ें")}</button></div></div>`;
+    };
 
-        <div class="card">
-          <div style="font-size:13px;font-weight:700;margin-bottom:6px;">${t("SAI Protocol & Posture Gate", "SAI प्रोटोकॉल और पोस्चर गेट")}</div>
-          <div style="font-size:13px;color:var(--text-sub);line-height:1.45;">
-            ${state.lang === "hi" ? test.guideHi : test.guideEn}
-          </div>
-        </div>
+    function pickedMap() {
+      if (!VW.picked) { VW.picked = {}; const ids = state.session?.athleteIds; state.athletes.forEach(a => { VW.picked[a.id] = ids ? ids.includes(a.id) : true; }); if (VW.mode === "indiv") { const f = state.athletes.find(a => VW.picked[a.id]); VW.picked = {}; if (f) VW.picked[f.id] = true; } }
+      return VW.picked;
+    }
+    SCR.setup = () => {
+      const P = pickedMap(), n = state.athletes.filter(a => P[a.id]).length;
+      const order = state.sequencing === "TEST_WISE" ? "test" : "ath";
+      const lbl = a => `${a.age} · ${a.gender === "F" ? t("Female", "महिला") : a.gender === "M" ? t("Male", "पुरुष") : t("Other", "अन्य")} · ${u12(a) ? t("Under 12", "12 से कम") : t("12 and above", "12 और ऊपर")}`;
+      return `<div class="scr">${barH(t("Start assessment", "मूल्यांकन शुरू करें"), t("Choose mode and roster", "मोड और सूची चुनें"))}
+<main class="main">
+ <div class="stack" style="gap:8px"><span class="eyebrow">${t("Who is assessing", "कौन मूल्यांकन कर रहा है")}</span><div class="seg"><button aria-pressed="${VW.mode === "coach"}" data-act="mode" data-v="coach">${t("Coach", "कोच")}<small>${t("Many athletes", "कई एथलीट")}</small></button><button aria-pressed="${VW.mode === "indiv"}" data-act="mode" data-v="indiv">${t("Individual", "व्यक्तिगत")}<small>${t("One athlete", "एक एथलीट")}</small></button></div></div>
+ ${VW.mode === "coach" ? `<div class="stack" style="gap:8px"><span class="eyebrow">${t("Run the session", "सत्र का क्रम")}</span><div class="seg"><button aria-pressed="${order === "test"}" data-act="order" data-v="TEST_WISE">${t("By test", "टेस्ट के अनुसार")}<small>${t("One station, everyone", "एक स्टेशन, सब एथलीट")}</small></button><button aria-pressed="${order === "ath"}" data-act="order" data-v="ATHLETE_WISE">${t("By athlete", "एथलीट के अनुसार")}<small>${t("One athlete, all tests", "एक एथलीट, सभी टेस्ट")}</small></button></div></div>` : ""}
+ <div class="stack" style="gap:8px"><div class="sec-h"><span class="eyebrow">${t("Roster", "सूची")}</span><span class="small num">${n} ${t("selected", "चुने गए")}</span></div>
+ <div class="list">${state.athletes.map(a => `<button class="li" data-act="pick" data-a="${a.id}" role="checkbox" aria-checked="${!!P[a.id]}"><span class="grow"><span class="t">${esc(a.name)}</span><span class="d">${lbl(a)}</span></span><span style="color:var(--primary)">${P[a.id] ? IC.boxOn : IC.box}</span></button>`).join("")}
+ <button class="li" data-act="addath" style="color:var(--primary);font-weight:600">${IC.plus}<span>${t("Add athlete", "एथलीट जोड़ें")}</span></button></div></div>
+ <div class="note">${IC.info}<span>${TESTS.filter(x => x.m !== "planned").length} ${t("of 10 tests are ready. 30 m Sprint and Shuttle Run are planned and will show “Not available yet” on reports.", "/10 टेस्ट तैयार हैं। 30 मी स्प्रिंट और शटल रन प्रस्तावित हैं और रिपोर्ट में “अभी उपलब्ध नहीं” दिखेंगे।")}</span></div>
+</main>
+<div class="bb"><button class="btn p" data-act="startsession" ${n ? "" : "disabled"}>${t("Start assessment", "मूल्यांकन शुरू करें")} · ${n} ${t("athletes", "एथलीट")}</button></div></div>`;
+    };
 
-        ${history.length > 0 ? `
-          <div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-              <div style="font-size:13px;font-weight:700;">${t("Attempt History & AI Audit", "प्रयास इतिहास और AI ऑडिट")}</div>
-              <button class="lang-btn" id="btnClearAttempts" style="font-size:11px;padding:3px 8px;color:var(--red-fg);">Reset Attempts</button>
-            </div>
-            <table class="audit-table">
-              <thead><tr><th>Attempt</th><th>Result</th><th>Posture / Rule Audit</th></tr></thead>
-              <tbody>
-                ${history.map((att, idx) => `
-                  <tr>
-                    <td><strong>#${idx + 1}</strong></td>
-                    <td>
-                      <span class="badge ${att.valid ? "green" : "red"}">
-                        ${att.valid && att.value !== null ? `${att.value} ${att.unit}` : "REJECTED"}
-                      </span>
-                    </td>
-                    <td style="color:${att.valid ? "var(--text)" : "var(--red-fg)"};">
-                      ${att.audit?.[0]?.detail || att.method}
-                    </td>
-                  </tr>
-                `).join("")}
-              </tbody>
-            </table>
-          </div>
-        ` : ""}
+    function openTest(a, te) { if (te.m === "manual") { VW.manualFrom = "session"; openManual(a.id, te.key, "session"); } else nav("cell", { aid: a.id, key: te.key }); }
+    function openManual(aid, key, from) {
+      const r = state.results[cellKey(aid, key)], te = TESTS.find(x => x.key === key);
+      VW.manualFrom = from || "cell";
+      VW.entry = { m: "", s: "", val: "" };
+      if (r && r.valid && r.value != null) { if (te.id === "run") { VW.entry.m = String(Math.floor(r.value / 60)); VW.entry.s = String(Math.round(r.value % 60)); } else VW.entry.val = String(r.value); }
+      nav("manual", { aid, key });
+    }
+    SCR.session = () => {
+      const s = sess(), pq = pendingList(), rq = retestList(), nx = pq[0], done = !nx;
+      const w = x => (s.tot ? x / s.tot * 100 : 0).toFixed(2) + "%";
+      const stations = TESTS.map(te => {
+        const pl = te.m === "planned", d = ATH.filter(a => bandOf(a, te.id) !== "P").length;
+        const tgt = ATH.find(a => bandOf(a, te.id) === "P") || ATH[0];
+        return `<button class="li" ${pl ? "disabled" : `data-act="open" data-a="${tgt.id}" data-t="${te.key}"`}><span class="num" style="font-weight:700;color:var(--muted);min-width:1.3em">${te.n}</span><span class="grow"><span class="t" ${pl ? 'style="color:var(--ink-2)"' : ""}>${tN(te)}</span><span class="d row" style="gap:6px;margin-top:3px"><span class="tag ${te.m === "ai" ? "ai" : ""}">${te.m === "ai" ? "AI" : te.m === "manual" ? t("Manual", "मैन्युअल") : t("Planned", "प्रस्तावित")}</span>${pl ? t("Not available yet", "अभी उपलब्ध नहीं") : ATH.map(a => shape(bandOf(a, te.id), 14)).join("")}</span></span>${pl ? "" : `<span class="num" style="font-weight:700;${d === ATH.length ? "color:var(--green)" : ""}">${d}/${ATH.length}</span>`}</button>`;
+      }).join("");
+      const nAvail = TESTS.filter(x => x.m !== "planned").length;
+      const aths = ATH.map(a => {
+        const att = TESTS.filter(te => te.m !== "planned" && bandOf(a, te.id) !== "P").length;
+        const nxt = TESTS.find(te => te.m !== "planned" && bandOf(a, te.id) === "P");
+        return `<button class="li" ${nxt ? `data-act="open" data-a="${a.id}" data-t="${nxt.key}"` : `data-act="liststations"`}><span class="grow"><span class="t">${esc(a.name)}</span><span class="d">${a.age} · ${ageGrp(a)}</span><span style="display:flex;gap:4px;margin-top:6px">${TESTS.map(te => shape(bandOf(a, te.id), 14)).join("")}</span></span><span class="num" style="font-weight:700;${att === nAvail ? "color:var(--green)" : ""}">${att}/${nAvail}</span></button>`;
+      }).join("");
+      const single = ATH.length === 1;
+      const sub = single ? `${esc(ATH[0].name)} · ${fmtDate(sessDate())}` : `${fmtDate(sessDate())} · ${ATH.length} ${t("athletes", "एथलीट")}`;
+      return `<div class="scr">${barH(t("Session", "सत्र"), sub)}
+<main class="main" style="gap:16px">
+ ${done ? `<section class="hero" style="background:var(--green);gap:10px"><div class="row" style="gap:12px;position:relative;z-index:1"><span style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.18);display:grid;place-items:center">${IC.tickL}</span><div><div style="font-size:1.25rem;font-weight:700;line-height:1.2">${t(`All ${s.tot} tests attempted`, `सभी ${s.tot} टेस्ट हो गए`)}</div><div style="font-size:.9375rem;opacity:.9">${t("Ready to view the report", "रिपोर्ट देखने के लिए तैयार")}</div></div></div>${rq.length ? `<div style="font-size:.9375rem;padding-top:10px;border-top:1px solid rgba(255,255,255,.2);position:relative;z-index:1">${rq.length} ${t("re-tests are suggested. You can run them now or note them on the reports.", "दोबारा टेस्ट सुझाए गए हैं। अभी चला सकते हैं या रिपोर्ट में दर्ज रहने दें।")}</div>` : ""}</section>`
+          : `<section class="hero dk"><div class="row" style="justify-content:space-between;position:relative;z-index:1"><span class="eyebrow">${t("Next up", "अगला")}</span><span class="small num">${s.pe} ${t("tests left", "टेस्ट बाकी")}</span></div>
+  <div style="position:relative;z-index:1"><div style="font-size:1.625rem;font-weight:700;line-height:1.15;letter-spacing:-.01em">${tname(nx.a, nx.te)}</div><div style="font-size:1rem;margin-top:4px">${esc(nx.a.name)} <span style="color:var(--on-hero-2)">· ${nx.a.age} · ${ageGrp(nx.a)}</span></div></div>
+  <div class="row" style="gap:8px;position:relative;z-index:1"><span class="tag" style="background:rgba(255,255,255,.12);color:#fff">${nx.te.m === "ai" ? "AI" : t("Manual", "मैन्युअल")}</span><span class="small">${nx.te.m === "manual" ? t("Measure, then enter the result", "मापें, फिर परिणाम दर्ज करें") : t("Camera capture", "कैमरा कैप्चर")}</span></div></section>`}
+ <section class="card stack" style="gap:10px"><div class="row" style="justify-content:space-between;align-items:baseline"><span class="h2">${s.att} ${t("of", "/")} ${s.tot} ${t("attempted", "हो चुके")}</span><span class="small">${nAvail} ${t("tests", "टेस्ट")} × ${ATH.length} ${t("athletes", "एथलीट")}</span></div>
+  <div class="prog" role="progressbar" aria-valuenow="${s.att}" aria-valuemax="${s.tot}"><i style="width:${w(s.g)}"></i><i class="a" style="width:${w(s.am)}"></i><i class="r" style="width:${w(s.rj)}"></i></div>
+  <div class="legend"><span>${shape("G", 12)}${BW().G} <b>${s.g}</b></span><span>${shape("A", 12)}${BW().A} <b>${s.am}</b></span><span>${shape("R", 12)}${BW().R} <b>${s.rj}</b></span><span>${shape("P", 12)}${t("Pending", "लंबित")} <b>${s.pe}</b></span></div></section>
+ ${single ? "" : `<div class="seg"><button aria-pressed="${VW.list === "stations"}" data-act="list" data-v="stations">${t("Stations", "स्टेशन")}</button><button aria-pressed="${VW.list === "athletes"}" data-act="list" data-v="athletes">${t("Athletes", "एथलीट")}</button></div>`}
+ <div class="list">${single || VW.list === "stations" ? stations : aths}</div>
+ <section class="card stack" style="gap:10px"><div><span class="h2">${t("Report", "रिपोर्ट")}</span><div class="small" style="margin-top:2px">${s.att} ${t("of", "/")} ${s.tot} ${t("tests recorded. Tests not yet done show as Not recorded.", "टेस्ट दर्ज। जो टेस्ट नहीं हुए वे “दर्ज नहीं” दिखेंगे।")}</div></div><button class="btn s" data-act="viewreport" ${s.att ? "" : "disabled"}>${IC.doc}${t("View report", "रिपोर्ट देखें")}</button></section>
+</main>
+<div class="bb">${done ? `<button class="btn p" data-act="viewreport">${IC.doc}${t("View report", "रिपोर्ट देखें")}</button>` : `<button class="btn p" data-act="open" data-a="${nx.a.id}" data-t="${nx.te.key}">${nx.te.m === "manual" ? IC.stopwatch + t("Enter result", "परिणाम दर्ज करें") : IC.cam + t("Start capture", "कैप्चर शुरू करें")} · ${tname(nx.a, nx.te)}</button>`}</div></div>`;
+    };
 
-        ${test.key === "height" ? `
-          <div class="card" id="cellHeightRefCard" style="border:2px solid ${state.calib?.height?.method === "sticky150" ? "var(--green-fg, #137333)" : "var(--border)"};">
-            ${state.calib?.height?.method === "sticky150" ? `
-              <div style="display:flex;gap:10px;align-items:center;">
-                ${state.calib.height.thumbDataUrl ? `<img src="${state.calib.height.thumbDataUrl}" alt="Saved Wall Reference" style="width:58px;height:102px;object-fit:cover;border-radius:6px;border:2px solid #00E6A8;flex-shrink:0;" />` : ""}
-                <div style="flex:1;">
-                  <div style="font-size:13px;font-weight:800;color:var(--green-fg, #137333);">
-                    ✅ ${t("Saved Reference Photo Active", "सहेजी गई संदर्भ फोटो सक्रिय")}: ${state.calib.height.refLabel || ((state.calib.height.markCm || 150) + " cm")}
-                  </div>
-                  <div style="font-size:11px;color:var(--text-sub);margin-top:3px;line-height:1.35;">
-                    ${t("Automatically reused for every height attempt & athlete — no need to upload again unless you move the mark.", "हर प्रयास और एथलीट के लिए स्वतः उपयोग किया जाएगा — दोबारा अपलोड करने की आवश्यकता नहीं है।")}
-                  </div>
-                  <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-                    <input type="file" id="inpCellRefPhoto" accept="image/*" style="display:none;" />
-                    <button class="lang-btn" id="btnCellUploadRef" style="font-size:11px;padding:4px 8px;font-weight:700;">🔄 ${t("Change Reference Photo", "संदर्भ फोटो बदलें")}</button>
-                    <button class="lang-btn" id="btnCellClearRef" style="font-size:11px;padding:4px 8px;color:var(--red-fg);">🗑️ ${t("Clear Reference", "संदर्भ हटाएँ")}</button>
-                  </div>
-                </div>
-              </div>
-            ` : `
-              <div style="font-size:13px;font-weight:800;margin-bottom:4px;">
-                📌 ${t("Wall Reference Photo (Set Once — Reused Automatically)", "दीवार संदर्भ फोटो (एक बार सेट करें — हर बार स्वतः उपयोग)")}
-              </div>
-              <div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;line-height:1.4;">
-                ${t("Upload a photo of your wall sticky note, A4 sheet, or written wall mark (e.g. 150 cm or 100 cm) once. It stays saved for all measurements until you change it.", "अपने स्टिकी नोट, A4 शीट, या दीवार के निशान (जैसे 150 cm या 100 cm) की फोटो एक बार अपलोड करें। यह अगले सभी मापों के लिए सहेजी रहेगी।")}
-              </div>
-              <input type="file" id="inpCellRefPhoto" accept="image/*" style="display:none;" />
-              <button class="btn secondary" id="btnCellUploadRef" style="margin-top:0;font-weight:800;">📸 ${t("Upload Reference Photo Once (Sticky Note / A4 / Wall Mark)", "संदर्भ फोटो एक बार अपलोड करें")}</button>
-            `}
-            <div id="cellRefPhotoPanel" style="display:none;margin-top:10px;font-size:12px;"></div>
-          </div>
-        ` : ""}
-
-        ${test.mode === "AI" ? `
-          <button class="btn primary" id="btnOpenCamera">
-            📷 ${t(`Record Attempt #${history.length + 1} with Live Pose AI`, `प्रयास #${history.length + 1} AI कैमरे से रिकॉर्ड करें`)}
-          </button>
-        ` : ""}
-
-        <div class="card" style="margin-top:12px;">
-          <div style="font-size:13px;font-weight:700;margin-bottom:6px;">
-            ${test.mode === "AI"
-              ? t("Rung 5 Manual Override / Assessor Entry", "रंग 5 मैनुअल प्रविष्टि / ओवरराइड")
-              : t("Assessor Measurement Entry", "मूल्यांकनकर्ता माप प्रविष्टि")}
-          </div>
-          <div class="input-row">
-            <label>${t("Value", "मान")} (${test.unit})</label>
-            <input id="inpManualVal" type="number" step="0.1" placeholder="Enter ${test.unit}" value="${existing?.value ?? ""}" />
-          </div>
-          <button class="btn secondary" id="btnSaveManual">${t("Save Manual Score", "मैनुअल स्कोर सहेजें")} (${test.unit})</button>
-        </div>
-      `;
-
-      document.getElementById("btnBack").onclick = () => { state.route = "session"; render(); };
+    // Test prep (protocol, wall reference, attempts, manual fallback) before the live camera
+    SCR.cell = () => {
+      const a = curA(), te = dT(TKEY[state.selectedTestKey]) || TESTS[0], bt = te.b;
+      const key = cellKey(a.id, te.key), existing = state.results[key], hist = existing?.attemptsHistory || [];
+      const used = hist.length, left = Math.max(bt.attempts - used, 0);
+      const refCard = te.id === "height" ? `
+ <div class="card" id="cellHeightRefCard" style="${state.calib?.height?.method === "sticky150" ? "box-shadow:inset 0 0 0 2px var(--green)" : ""}">
+  ${state.calib?.height?.method === "sticky150" ? `<div style="display:flex;gap:10px;align-items:center;">${state.calib.height.thumbDataUrl ? `<img src="${state.calib.height.thumbDataUrl}" alt="" style="width:58px;height:102px;object-fit:cover;border-radius:6px;flex-shrink:0;">` : ""}<div style="flex:1;"><div style="font-weight:700;color:var(--green)">${shape("G", 14)} ${t("Saved reference photo active", "सहेजी गई संदर्भ फोटो सक्रिय")}: ${esc(state.calib.height.refLabel || ((state.calib.height.markCm || 150) + " cm"))}</div><div class="small" style="margin-top:3px">${t("Reused for every height attempt and athlete until you change it.", "बदलने तक हर प्रयास और एथलीट के लिए उपयोग होगी।")}</div><div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><input type="file" id="inpCellRefPhoto" accept="image/*" style="display:none;"><button class="lang-btn" id="btnCellUploadRef">${t("Change reference photo", "संदर्भ फोटो बदलें")}</button><button class="lang-btn" id="btnCellClearRef" style="color:var(--red)">${t("Clear", "हटाएँ")}</button></div></div></div>`
+    : `<div class="h2" style="margin-bottom:4px">${t("Wall reference photo", "दीवार संदर्भ फोटो")}</div><div class="small" style="margin-bottom:8px">${t("Upload a photo of your wall sticky note, A4 sheet or written wall mark (e.g. 150 cm) once. It stays saved for all measurements until you change it. Without it, height is an estimate.", "दीवार के स्टिकी नोट, A4 शीट या 150 cm जैसे निशान की फोटो एक बार अपलोड करें। इसके बिना ऊँचाई अनुमानित रहेगी।")}</div><input type="file" id="inpCellRefPhoto" accept="image/*" style="display:none;"><button class="btn s" id="btnCellUploadRef" style="min-height:var(--touch)">${t("Upload reference photo", "संदर्भ फोटो अपलोड करें")}</button>`}
+  <div id="cellRefPhotoPanel" style="display:none;margin-top:10px;font-size:.875rem;"></div></div>` : "";
+      const histRows = hist.length ? `<div class="card"><div class="row" style="justify-content:space-between"><span class="eyebrow">${t("Attempts so far", "अब तक के प्रयास")} · ${used}/${bt.attempts}</span><button class="lang-btn" id="btnClearAttempts" style="color:var(--red);margin:0">${t("Reset", "रीसेट")}</button></div>${hist.map((x, i) => `<div class="att"><span class="k">${t("Attempt", "प्रयास")} ${i + 1}</span>${x.valid && x.value !== null ? `<span class="v">${fmtS(te, x.value)}</span>` : `${shape("R", 14)}<span class="grow"><b style="color:var(--red)">${t("Rejected", "अस्वीकृत")}</b> · ${esc(shortWhy(x))}</span>`}</div>`).join("")}</div>` : "";
+      return `<div class="scr">${barH(tN(te), `${esc(a.name)} · ${t("Test", "टेस्ट")} ${te.n} ${t("of", "/")} 10`, `<span class="tag ${te.m === "ai" ? "ai" : ""}" style="margin-right:12px">${te.m === "ai" ? "AI" : t("Manual", "मैन्युअल")}</span>`)}
+<main class="main" style="gap:14px">
+ <div class="card stack" style="gap:6px"><span class="eyebrow">${t("SAI protocol", "SAI प्रोटोकॉल")} · ${bt.attempts} ${t("attempt(s) permitted", "प्रयास अनुमत")}</span><span class="sub">${state.lang === "hi" ? bt.guideHi : bt.guideEn}</span></div>
+ ${refCard}${histRows}
+ <div class="list"><button class="li" data-act="manualfromcell">${icoH(IC.stopwatch)}<span class="grow"><span class="t">${te.m === "ai" ? t("Enter result manually", "परिणाम मैन्युअल दर्ज करें") : t("Enter result", "परिणाम दर्ज करें")}</span><span class="d">${te.m === "ai" ? t("Rung 5 override · shown as an estimate", "रंग 5 ओवरराइड · अनुमान के रूप में") : t("Measured by the assessor", "मूल्यांकनकर्ता द्वारा मापा")}</span></span><span class="chev">${IC.chev}</span></button></div>
+</main>
+<div class="bb">${te.m === "ai" ? `<button class="btn p" id="btnOpenCamera">${IC.cam}${t("Start capture", "कैप्चर शुरू करें")} · ${used >= bt.attempts ? t("extra attempt", "अतिरिक्त प्रयास") : t("attempt", "प्रयास") + " " + (used + 1)}</button>` : `<button class="btn p" data-act="manualfromcell">${IC.stopwatch}${t("Enter result", "परिणाम दर्ज करें")}</button>`}</div></div>`;
+    };
+    function bindCell() {
+      const a = curA(), te = dT(TKEY[state.selectedTestKey]) || TESTS[0], key = cellKey(a.id, te.key);
       const clearBtn = document.getElementById("btnClearAttempts");
-      if (clearBtn) {
-        clearBtn.onclick = () => {
-          delete state.results[key];
-          persist();
-          render();
-        };
-      }
-      const btnCellUp = document.getElementById("btnCellUploadRef");
-      const inpCellUp = document.getElementById("inpCellRefPhoto");
-      const cellPanel = document.getElementById("cellRefPhotoPanel");
-      if (btnCellUp && inpCellUp && cellPanel) {
-        btnCellUp.onclick = () => inpCellUp.click();
-        inpCellUp.onchange = (e) => {
-          const f = e.target.files?.[0];
-          if (f) {
-            openRefPhotoEditor(f, cellPanel, 720, 1280, (closed) => {
-              if (closed) render();
-            });
-          }
-        };
-      }
-      const btnCellClr = document.getElementById("btnCellClearRef");
-      if (btnCellClr) {
-        btnCellClr.onclick = () => {
-          if (state.calib) delete state.calib.height;
-          _autoStickyCalib = null;
-          persist();
-          render();
-        };
-      }
-      const camBtn = document.getElementById("btnOpenCamera");
-      if (camBtn) {
-        camBtn.onclick = () => { state.route = "capture"; render(); };
-      }
-      document.getElementById("btnSaveManual").onclick = () => {
-        const val = parseFloat(document.getElementById("inpManualVal").value);
-        if (isNaN(val)) return;
-        const entry = {
-          valid: true,
-          value: val,
-          unit: test.unit,
-          confidence: test.mode === "Manual" ? "GREEN" : "AMBER",
-          method: test.mode === "Manual" ? "Assessor Protocol Entry" : "Rung 5 Manual Override",
-          audit: [{ label: "Manual", detail: `Assessor entered ${val} ${test.unit}`, valid: true }]
-        };
-        const prevHist = state.results[key]?.attemptsHistory || [];
-        entry.attemptsHistory = [...prevHist, entry];
-        state.results[key] = entry;
-        state.route = "session";
-        render();
-      };
+      if (clearBtn) clearBtn.onclick = () => { delete state.results[key]; render(); };
+      const up = document.getElementById("btnCellUploadRef"), inp = document.getElementById("inpCellRefPhoto"), panel = document.getElementById("cellRefPhotoPanel");
+      if (up && inp && panel) { up.onclick = () => inp.click(); inp.onchange = e => { const f = e.target.files?.[0]; if (f) openRefPhotoEditor(f, panel, 720, 1280, closed => { if (closed) render(); }); }; }
+      const clr = document.getElementById("btnCellClearRef");
+      if (clr) clr.onclick = () => { if (state.calib) delete state.calib.height; _autoStickyCalib = null; render(); };
+      const cam = document.getElementById("btnOpenCamera");
+      if (cam) cam.onclick = () => nav("capture");
     }
+
+    SCR.manual = () => {
+      const a = curA(), te = dT(TKEY[state.selectedTestKey]) || TESTS[0], isRun = te.id === "run", E = VW.entry;
+      const field = isRun
+        ? `<div class="kv"><div><input data-f2="m" value="${esc(E.m)}" inputmode="numeric" maxlength="2" aria-label="${t("Minutes", "मिनट")}" placeholder="0"><label>${t("min", "मिनट")}</label></div><span>:</span><div><input data-f2="s" value="${esc(E.s)}" inputmode="numeric" maxlength="2" aria-label="${t("Seconds", "सेकंड")}" placeholder="00"><label>${t("sec", "सेकंड")}</label></div></div>`
+        : `<div class="kv"><div><input data-f2="val" value="${esc(E.val)}" inputmode="decimal" style="width:5.2ch" aria-label="${te.u}" placeholder="0"><label>${UNIT[te.u] || te.u}</label></div></div>`;
+      const hint = isRun ? t("Enter the time from the stopwatch.", "स्टॉपवॉच का समय दर्ज करें।") : te.id === "weight" ? t("Enter weight to the nearest 0.1 kg.", "0.1 किग्रा तक वज़न दर्ज करें।") : t(`Enter the measured value in ${te.u}.`, `मापा गया मान ${te.u} में दर्ज करें।`);
+      return `<div class="scr">${barH(tname(a, te), `${esc(a.name)} · ${ageGrp(a)}`)}
+<main class="main" style="gap:18px">
+ <div class="card" style="padding:8px 16px 20px">${field}<p class="sub" style="text-align:center">${hint}</p></div>
+ <div class="list"><div class="li" style="min-height:56px"><span class="grow small">${t("Method", "तरीका")}</span><span class="tag">${t("Manual", "मैन्युअल")}</span></div><div class="li" style="min-height:56px"><span class="grow small">${t("Shown on the report as", "रिपोर्ट में दिखेगा")}</span>${chipH(te.m === "manual" ? "G" : "A", te.m === "manual" ? null : t("Amber · estimate", "पीला · अनुमान"))}</div></div>
+ <div class="note">${IC.info}<span>${t("Manual results are labelled as entered by the assessor. If the test was not done, leave it as Not recorded; nothing is written as zero.", "मैन्युअल परिणाम मूल्यांकनकर्ता द्वारा दर्ज के रूप में दिखते हैं। टेस्ट न हुआ हो तो “दर्ज नहीं” रहने दें; शून्य नहीं लिखा जाता।")}</span></div>
+</main>
+<div class="bb" style="flex-direction:column;gap:4px"><button class="btn p" data-act="savemanual">${t("Save result", "परिणाम सहेजें")}</button><button class="btn q" data-act="back">${t("Not run today", "आज नहीं हुआ")}</button></div></div>`;
+    };
+    function saveManual() {
+      const a = curA(), te = dT(TKEY[state.selectedTestKey]) || TESTS[0], E = VW.entry;
+      let val;
+      if (te.id === "run") { const m = parseInt(E.m || "0", 10), s = parseInt(E.s || "0", 10); val = m * 60 + s; if (!(val > 0) || s > 59) return toast(t("Enter a valid time (seconds under 60)", "सही समय दर्ज करें (सेकंड 60 से कम)")); }
+      else { val = parseFloat(String(E.val).replace(",", ".")); if (!(val > 0)) return toast(t("Enter a value above zero, or choose Not run today", "शून्य से अधिक मान दर्ज करें या “आज नहीं हुआ” चुनें")); }
+      const key = cellKey(a.id, te.key);
+      const entry = { valid: true, value: val, unit: te.b.unit, confidence: te.m === "manual" ? "GREEN" : "AMBER", method: te.m === "manual" ? "Assessor Protocol Entry" : "Rung 5 Manual Override", audit: [{ label: "Manual", detail: `Assessor entered ${val} ${te.b.unit}`, valid: true }] };
+      entry.attemptsHistory = [...(state.results[key]?.attemptsHistory || []), { ...entry }];
+      state.results[key] = entry;
+      nav("session", {}, true);
+      toast(`${IC.tick} ${t("Saved", "सहेजा")} · ${tname(a, te)} · ${fmtS(te, val)}`);
+    }
+
+    // Saved result sheet with "Next up" (replaces the old jump back to the test screen)
+    SCR.saved = () => {
+      const a = curA(), te = dT(TKEY[state.selectedTestKey]) || TESTS[0], r = a.r[te.id], b = bandOf(a, te.id);
+      const nx = pendingList()[0], used = (state.results[cellKey(a.id, te.key)]?.attemptsHistory || []).length;
+      return `<div class="saved-wrap"><div class="scrim" style="background:rgba(0,0,0,.35)"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="${t("Saved", "सहेजा")}"><div class="grab"></div><div class="sbody" style="padding-top:14px;gap:10px">
+  <div class="row" style="justify-content:space-between"><span class="eyebrow">${b === "R" ? t("Attempt rejected", "प्रयास अस्वीकृत") : t("Saved", "सहेजा")} · ${tN(te)}</span>${chipH(b, b === "A" ? t("Amber · estimate", "पीला · अनुमान") : null)}</div>
+  ${b === "R" ? `<div class="val rej big" style="justify-content:flex-start"><span class="w">${t("Rejected", "अस्वीकृत")}</span></div>` : valH(a, te, "big").replace('class="val', 'style="justify-content:flex-start" class="val')}
+  <div class="sub">${esc(r.reason)}</div>${r.limit ? `<div class="note am"><span>${shape("A", 18)}</span><span>${esc(r.limit)}</span></div>` : ""}</div>
+  <div class="bb" style="flex-direction:column;gap:4px">${nx ? `<button class="btn p" data-act="open" data-a="${nx.a.id}" data-t="${nx.te.key}" style="justify-content:space-between;padding:8px 16px 8px 20px"><span style="text-align:left"><span style="display:block;font-size:.75rem;font-weight:600;opacity:.8;letter-spacing:.06em;text-transform:uppercase">${t("Next up", "अगला")}</span>${tname(nx.a, nx.te)} · ${esc(nx.a.name.split(" ")[0])}</span>${IC.chev}</button>` : `<button class="btn p" data-act="go" data-s="session">${t("Back to session", "सत्र पर वापस")}</button>`}${used < te.b.attempts ? `<button class="btn q" data-act="go" data-s="capture">${t("Re-take", "फिर से लें")}</button>` : `<button class="btn q" data-act="go" data-s="session">${t("Back to session", "सत्र पर वापस")}</button>`}</div></div></div>`;
+    };
+
+SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर्ट कार्ड"), `${t("Session of", "सत्र")} ${fmtDate(sessDate())}`)}
+<main class="main" style="gap:16px">
+ <div class="note gr" style="align-items:center"><span class="okdot" style="flex:none;animation:none">${IC.tick}</span><span><b>${ATH.length} ${t("report cards and a roster summary", "रिपोर्ट कार्ड और एक सूची सारांश")}</b> ${t("are ready. Open one to see it, or download them all as a PDF.", "तैयार हैं। एक खोलकर देखें, या सभी PDF में डाउनलोड करें।")}</span></div>
+ <div class="list">${ATH.map(a => { const sm = athSummary(a); return `<button class="li" data-act="go" data-s="report" data-a="${a.id}" style="align-items:flex-start;padding-top:14px;padding-bottom:14px">${icoH(`<b class="num" style="font-size:.9375rem">${esc(a.name.split(" ").map(x => x[0]).join("").slice(0, 2))}</b>`)}<span class="grow"><span class="t">${esc(a.name)}</span><span class="d">${sm.rec} ${t("of 10 recorded", "/10 दर्ज")} · ${sm.ai} ${t("by AI", "AI से")}${sm.rt.length ? ` · ${sm.rt.length} ${t("re-test", "दोबारा टेस्ट")}` : ""}</span><span style="display:flex;gap:4px;margin-top:8px">${TESTS.map(te => shape(bandOf(a, te.id), 14)).join("")}</span></span><span class="chev">${IC.chev}</span></button>`; }).join("")}</div>
+ <div class="list"><button class="li" data-act="go" data-s="roster">${icoH(IC.grid)}<span class="grow"><span class="t">${t("Roster summary", "सूची सारांश")}</span><span class="d">${ATH.length} ${t("athletes × 10 tests · one page", "एथलीट × 10 टेस्ट · एक पृष्ठ")}</span></span><span class="chev">${IC.chev}</span></button></div>
+</main>
+<div class="bb"><button class="btn p" data-act="modal" data-v="shareall">${IC.dl}${t("Download all as PDF", "सभी PDF डाउनलोड करें")} · ${ATH.length + 1} ${t("pages", "पृष्ठ")}</button></div></div>`;
 
     function openRefPhotoEditor(file, targetPanel, W0, H0, onSaved) {
       if (!file || !targetPanel) return;
@@ -2934,6 +3101,16 @@
     async function renderCapture(root) {
       const athlete = state.athletes.find(a => a.id === state.selectedAthleteId) || state.athletes[0];
       const test = BATTERY_TESTS.find(x => x.key === state.selectedTestKey) || BATTERY_TESTS[0];
+      if (VW.capFail) {
+        const d = VW.capFail === "denied";
+        root.innerHTML = `<div class="scr">${barH(state.lang === "hi" ? test.nameHi : test.nameEn, esc(athlete.name))}
+ <main class="main" style="gap:14px;padding-top:32px"><span style="color:var(--muted)">${IC.camOff}</span><h2 style="font-size:1.5rem;line-height:1.25;font-weight:700">${d ? t("Camera access is off", "कैमरा एक्सेस बंद है") : t("No camera found", "कैमरा नहीं मिला")}</h2><p class="sub" style="font-size:1rem">${d ? t("To measure with AI, allow the camera for this app.", "AI से मापने के लिए इस ऐप को कैमरा अनुमति दें।") : t("You can still enter results measured with a tape or stopwatch. They will be marked Manual.", "टेप या स्टॉपवॉच से मापे परिणाम फिर भी दर्ज कर सकते हैं। वे मैन्युअल चिह्नित होंगे।")}</p>
+ ${d ? `<div class="note">${IC.info}<span>${t("iPhone: Settings › Safari › Camera › Allow. Android: Site settings › Camera › Allow.", "iPhone: Settings › Safari › Camera › Allow। Android: Site settings › Camera › Allow।")}</span></div>` : ""}</main>
+ <div class="bb" style="flex-direction:column;gap:4px">${d ? `<button class="btn p" id="btnCamRetry">${t("Try again", "फिर कोशिश करें")}</button>` : ""}<button class="btn ${d ? "q" : "p"}" id="btnCamManual">${t("Enter result manually", "परिणाम मैन्युअल दर्ज करें")}</button></div></div>`;
+        document.getElementById("btnCamManual").onclick = () => { VW.capFail = null; openManual(athlete.id, test.key, "cell"); };
+        const rb = document.getElementById("btnCamRetry"); if (rb) rb.onclick = () => { VW.capFail = null; render(); };
+        return;
+      }
       captureElapsed = 0;
       const recordedFrames = [];
       let fps = 30;
@@ -2944,20 +3121,16 @@
       let latestValidEv = null;
 
       root.innerHTML = `
-        <div class="topbar">
-          <button class="back-btn" id="btnCancelCam">✕ ${t("Cancel", "रद्द करें")}</button>
-          <div>
-            <h1>${state.lang === "hi" ? test.nameHi : test.nameEn}</h1>
-            <div class="sub">${t("Real-Time Pose Gate", "लाइव पोस्चर गेट")}</div>
-          </div>
-          <button class="lang-btn" id="btnFlipCam">🔄 ${t("Flip", "कैमरा बदलें")}</button>
-        </div>
+        <div class="scr">
+        <header class="bar dk"><button class="ib" id="btnCancelCam" aria-label="${t("Close camera", "कैमरा बंद करें")}">${IC.close}</button><h1>${state.lang === "hi" ? test.nameHi : test.nameEn}<small>${esc(athlete.name)} · ${((state.results[cellKey(athlete.id, test.key)]?.attemptsHistory?.length || 0) + 1) > test.attempts ? t("Extra attempt", "अतिरिक्त प्रयास") : t("Attempt", "प्रयास") + " " + ((state.results[cellKey(athlete.id, test.key)]?.attemptsHistory?.length || 0) + 1) + " " + t("of", "/") + " " + test.attempts}</small></h1><button class="ib" id="btnFlipCam" aria-label="${t("Flip camera", "कैमरा बदलें")}">${IC.flip}</button></header>
+        <main class="main" style="gap:14px">
 
         ${supportsCalib ? `
-          <div class="card" style="padding:10px 12px;margin-bottom:8px;">
+          <details class="card" style="padding:4px 14px 12px;" ${(state.calib?.[test.key] && state.calib[test.key].cmPerPx) ? "" : "open"}>
+            <summary>${t("Setup and calibration", "सेटअप और कैलिब्रेशन")}</summary>
             <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-              <div style="font-size:12px;font-weight:700;" id="calStatus"></div>
-              <button class="lang-btn" id="btnCalClear" style="font-size:11px;padding:3px 8px;">${t("Reset Scale", "स्केल रीसेट")}</button>
+              <div style="font-size:.875rem;font-weight:700;" id="calStatus"></div>
+              <button class="lang-btn" id="btnCalClear" style="font-size:.75rem;">${t("Reset Scale", "स्केल रीसेट")}</button>
             </div>
             ${test.key === "height" ? `
               <div id="savedRefBanner" style="display:${state.calib?.height?.method === "sticky150" ? "flex" : "none"};gap:8px;align-items:center;margin-top:6px;padding:6px 8px;border-radius:8px;background:rgba(0,230,168,0.12);border:1px solid #00E6A8;">
@@ -3008,12 +3181,13 @@
                 <input id="inpBoxZero" type="number" step="0.5" value="${state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0}" style="width:70px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);" />
               </div>` : ""}
             <div id="calPanel" style="display:none;margin-top:8px;font-size:12px;"></div>
-          </div>
+          </details>
         ` : ""}
 
         <div class="cam-wrap">
           <video id="camVideo" playsinline muted autoplay></video>
           <canvas id="camCanvas"></canvas>
+          <div class="capzone"><span class="zl" id="capZoneLbl"></span></div>
           <div class="cam-hud-top">
             <span class="hud-pill" id="hudTimer">00:00 / min ${test.minSec}s</span>
             <span class="hud-pill" id="hudTilt">—</span>
@@ -3027,6 +3201,7 @@
         </div>
 
         <button class="btn primary" id="btnRecToggle">● ${t("Start Recording Attempt", "प्रयास रिकॉर्डिंग शुरू करें")}</button>
+        </main></div>
       `;
 
       const videoEl = document.getElementById("camVideo");
@@ -3373,7 +3548,8 @@
           videoEl.srcObject = mediaStream;
           await videoEl.play();
         } catch (err) {
-          hudLive.textContent = t("Camera blocked: open the https:// link in Safari and allow camera access.", "कैमरा ब्लॉक: Safari में https:// लिंक खोलें और अनुमति दें।");
+          VW.capFail = (err && (err.name === "NotFoundError" || err.name === "OverconstrainedError")) ? "nocam" : "denied";
+          if (token === captureToken && state.route === "capture") render();
           return;
         }
         try {
@@ -3640,6 +3816,8 @@
         const isFoul = !ev.postureOk || ev.kneeBentOk === false || ev.kneeOk === false;
         hudFps.textContent = `${Math.round(fps)} fps · ${!isFoul ? t("POSE VALID", "पोज़ मान्य") : t("FOUL / GATE BLOCKED", "फाउल / गेट अवरुद्ध")}`;
         hudMetric.className = `hud-live-metric ${!isFoul ? "" : "bad"}`;
+        const camWrapEl = document.querySelector(".cam-wrap");
+        if (camWrapEl) { camWrapEl.classList.toggle("ok", !isFoul); camWrapEl.classList.toggle("out", isFoul); const zl = document.getElementById("capZoneLbl"); if (zl) zl.textContent = isFoul ? t("Out of zone", "ज़ोन से बाहर") : t("In position", "सही स्थिति"); }
         hudMetricTitle.textContent = !isFoul ? t("LIVE AI READOUT:", "लाइव AI रीडआउट:") : t("🚫 FOUL / ADJUST POSITION:", "🚫 फाउल / स्थिति सुधारें:");
         hudMetricVal.textContent = ev.liveMetric;
         hudLive.textContent = ev.reason;
@@ -3735,14 +3913,12 @@
         } else {
           state.results[key] = { ...attemptOut, attemptsHistory: newHistory };
         }
-        state.route = "cell";
-        render();
+        nav("saved", {}, true);
       }
 
       document.getElementById("btnCancelCam").onclick = () => {
         stopCamera();
-        state.route = "cell";
-        render();
+        nav("cell", {}, true);
       };
       document.getElementById("btnFlipCam").onclick = () => {
         facingMode = facingMode === "environment" ? "user" : "environment";
@@ -3802,52 +3978,247 @@
       startStream();
     }
 
-    function renderReport(root) {
-      const athlete = state.athletes.find(a => a.id === state.selectedAthleteId) || state.athletes[0];
-      root.innerHTML = `
-        <div class="topbar">
-          <button class="back-btn" id="btnBack">← ${t("Session", "सत्र")}</button>
-          <div>
-            <h1>${t("SAI Report Card", "SAI रिपोर्ट कार्ड")}</h1>
-            <div class="sub">${athlete.name} · ${athlete.age}y (${athlete.gender})</div>
-          </div>
-          <span></span>
-        </div>
 
-        ${BATTERY_TESTS.map(test => {
-          const r = state.results[cellKey(athlete.id, test.key)];
-          return `
-            <div class="test-row" data-test="${test.key}">
-              <div class="left">
-                <div class="idx">${test.number}</div>
-                <div>
-                  <div class="t-name">${state.lang === "hi" ? test.nameHi : test.nameEn}</div>
-                  <div class="t-meta">${r ? r.method : t("Not recorded yet", "अभी दर्ज नहीं किया गया")}</div>
-                </div>
-              </div>
-              <div>
-                ${r && r.valid && r.value !== null
-                  ? `<span class="badge ${r.confidence.toLowerCase()}">${r.value} ${r.unit}</span>`
-                  : r && !r.valid
-                  ? `<span class="badge red">REJECTED</span>`
-                  : `<span class="badge manual">—</span>`}
-              </div>
-            </div>
-          `;
-        }).join("")}
-      `;
+function donutH(sm) {
+      const segs = [[sm.g, "var(--green)"], [sm.am, "var(--amber)"], [sm.rj, "var(--red)"], [sm.nr, "var(--line-strong)"]];
+      let off = 25;
+      const arcs = segs.filter(x => x[0] > 0).map(([n, c]) => { const L = n / 10 * 100, d = Math.max(L - 1, .1); const e = `<circle cx="21" cy="21" r="15.9155" fill="none" stroke="${c}" stroke-width="5" stroke-dasharray="${d} ${100 - d}" stroke-dashoffset="${off}"/>`; off -= L; return e; }).join("");
+      return `<svg viewBox="0 0 42 42" class="dn" role="img" aria-label="${sm.rec} ${t("of 10 recorded", "/10 दर्ज")}"><circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--surface-2)" stroke-width="5"/>${arcs}<text x="21" y="22.6" text-anchor="middle" font-family="var(--font-num)" font-weight="700" font-size="10" fill="var(--ink)">${sm.rec}<tspan font-size="5.2" fill="var(--muted)">/10</tspan></text><text x="21" y="28.4" text-anchor="middle" font-size="3.4" fill="var(--muted)">${t("recorded", "दर्ज")}</text></svg>`;
+    }
+    // Attempts mini chart: every attempt on a line, best marked, spread stated. Raw data only.
+    function attH(te, r) {
+      const W = 150, y = 17, dash = `<svg viewBox="0 0 ${W} 28" class="ac" aria-hidden="true"><line x1="4" y1="${y}" x2="${W - 4}" y2="${y}" stroke="var(--line-strong)" stroke-width="1.4" stroke-dasharray="3 3"/></svg>`;
+      if (te.m === "planned" || !r.attempts || !r.attempts.length) return dash;
+      const at = r.attempts;
+      if (te.id === "situps" && r.status === "rec") {
+        const fo = (r.fouls || []).map(f => f.rep), d = Math.max(Math.round(r.best) + fo.length, 1), w = (W - 8) / d;
+        const bars = Array.from({ length: d }, (_, k) => { const f = fo.includes(k + 1); return `<rect x="${(4 + k * w + .3).toFixed(2)}" y="${f ? 2 : 8}" width="${Math.max(w - .8, 1).toFixed(2)}" height="${f ? 24 : 18}" rx=".8" fill="${f ? "var(--red)" : "var(--green)"}"/>`; }).join("");
+        return `<svg viewBox="0 0 ${W} 28" class="ac" aria-hidden="true">${bars}</svg><em>${d} ${t("seen", "मिले")} · ${fo.length} ${t("not counted", "नहीं गिने")}</em>`;
+      }
+      const ok = at.filter(x => x.ok), nrej = at.length - ok.length;
+      if (!ok.length) return `<svg viewBox="0 0 ${W} 28" class="ac" aria-hidden="true">${at.map((x, k) => `<path d="M${36 + k * 16} ${y - 5}l9 9m0-9l-9 9" stroke="var(--red)" stroke-width="2.4" stroke-linecap="round" fill="none"/>`).join("")}</svg><em>${nrej} ${t("of", "/")} ${at.length} ${t("rejected", "अस्वीकृत")}</em>`;
+      const v = ok.map(x => x.v), mn = Math.min(...v), mx = Math.max(...v);
+      const pad = Math.max((mx - mn) * .6, (te.id === "height" || te.id === "weight") ? .5 : 2), lo = mn - pad, hi = mx + pad, span = W - 30 - (nrej ? 16 : 0);
+      const X = q => 15 + (q - lo) / (hi - lo) * span;
+      const band = ok.length > 1 ? `<rect x="${X(mn).toFixed(1)}" y="${y - 4.5}" width="${(X(mx) - X(mn)).toFixed(1)}" height="9" rx="4.5" fill="var(--primary-soft)"/>` : "";
+      const dots = ok.map(x => { const b = x.v === r.best, cx = X(x.v).toFixed(1); return `<circle cx="${cx}" cy="${y}" r="${b ? 4.6 : 3.4}" fill="${b ? "var(--primary)" : "var(--surface)"}" stroke="${b ? "var(--primary)" : "var(--ink-2)"}" stroke-width="1.8"/><text x="${cx}" y="8" text-anchor="middle" font-size="8" font-family="var(--font-num)" font-weight="${b ? 700 : 500}" fill="var(--ink)">${fmtV(te, x.v).v}</text>`; }).join("");
+      const rej = nrej ? `<path d="M${W - 14} ${y - 4}l8 8m0-8l-8 8" stroke="var(--red)" stroke-width="2.2" stroke-linecap="round" fill="none"/>` : "";
+      const cap = ok.length > 1 ? `${at.length} ${t("attempts", "प्रयास")} · ${t("spread", "अंतर")} ${fmtS(te, mx - mn)}` : t("1 reading", "1 रीडिंग");
+      return `<svg viewBox="0 0 ${W} 28" class="ac" aria-hidden="true"><line x1="4" y1="${y}" x2="${W - 4}" y2="${y}" stroke="var(--line)" stroke-width="1.4"/>${band}${dots}${rej}</svg><em>${cap}${nrej ? ` · ${nrej} ${t("rejected", "अस्वीकृत")}` : ""}</em>`;
+    }
+    function recRow(a, te, live) {
+      const r = a.r[te.id], b = bandOf(a, te.id), bw = BW(), sub = tsub(a, te);
+      const lbl = b === "N" ? t("Planned", "प्रस्तावित") : bw[b];
+      const inner = `<span class="n">${te.n}</span><span class="t"><b>${tname(a, te)}</b>${sub ? `<small>${sub}</small>` : ""}</span><span class="v">${valH(a, te)}</span><span class="c"><span class="cf ${b}">${shape(b, 13)}${lbl}</span></span><span class="a">${attH(te, r)}</span><span class="m">${b === "A" ? `<b>${t("Estimate", "अनुमान")}</b> · ` : ""}${esc(r.reason)}</span>`;
+      const al = `${tname(a, te)}: ${b === "G" || b === "A" ? fmtS(te, r.best) : bw[b]}`;
+      return live ? `<button class="rec-r ${b}" id="tc-${te.id}" data-act="sheet" data-t="${te.id}" aria-label="${esc(al)}">${inner}</button>` : `<div class="rec-r ${b}">${inner}</div>`;
+    }
+    function recordBody(a, live) {
+      const sm = athSummary(a), bw = BW(), sit = a.r.situps;
+      const leg = [["G", sm.g, `${bw.G} · ${t("measured", "मापे")}`], ["A", sm.am, `${bw.A} · ${t("estimate", "अनुमान")}`], ["R", sm.rj, bw.R], ["P", sm.nr, t("Not recorded or planned", "दर्ज नहीं या प्रस्तावित")]];
+      const audit = sit.status === "rec"
+        ? (sit.fouls && sit.fouls.length ? sit.fouls.map(f => `<li><span class="rp">${t("Rep", "रेप")} ${f.rep}</span>${esc(f.t)}${f.rule ? ` · ${t("Rule", "नियम")} ${esc(f.rule)}` : ""}</li>`).join("") : `<li>${t("No fouls. Every rep counted.", "कोई फाउल नहीं। हर रेप गिना गया।")}</li>`)
+        : `<li>${t("Sit-ups were not recorded.", "सिट-अप दर्ज नहीं हुए।")}</li>`;
+      const rt = sm.rt.map(te => `<li><b>${tname(a, te)}:</b> ${esc(a.r[te.id].retest)}</li>`).concat(sm.lim.map(te => `<li><b>${tname(a, te)}:</b> ${esc(a.r[te.id].limit)}</li>`));
+      return `<div class="rec">
+ <div class="rec-ath">
+  <div class="rec-det"><div class="nm"><span>${t("Athlete", "एथलीट")}</span><b>${esc(a.name)}</b></div><div><span>${t("Age · Gender", "आयु · लिंग")}</span><b>${a.age} · ${a.g}</b></div><div><span>${t("Age group", "आयु वर्ग")}</span><b>${ageGrp(a)}</b></div><div><span>${t("School", "स्कूल")}</span><b>${esc(a.school) || "—"}</b></div><div><span>${t("Programme ID", "कार्यक्रम ID")}</span><b>${a.idType === "none" ? t("Not provided", "उपलब्ध नहीं") : esc(a.idType + " · " + (a.idNo || "—"))}</b></div><div><span>${t("Assessed", "मूल्यांकन")}</span><b>${fmtDate(a.date)}</b></div></div>
+  <div class="rec-don">${donutH(sm)}<ul>${leg.map(([b, n, l]) => `<li>${shape(b, 12)}<span>${l}<b>${n}</b></span></li>`).join("")}</ul></div>
+ </div>
+ <div class="rec-sum">${headline(sm)}</div>
+ <div class="rec-tbl">
+  <div class="rec-h"><span>#</span><span>${t("Test", "टेस्ट")}</span><span>${t("Result", "परिणाम")}</span><span>${t("Confidence", "विश्वसनीयता")}</span><span>${t("Attempts", "प्रयास")}</span><span>${t("How it was measured", "कैसे मापा गया")}</span></div>
+  ${GROUPS.map(g => `<div class="rec-g">${t(g.n[0], g.n[1])}</div>` + g.ids.map(id => recRow(a, dT(id), live)).join("")).join("")}
+ </div>
+ <div class="rec-two">
+  <div class="rec-box"><h3>${t("Sit-up rule audit", "सिट-अप नियम ऑडिट")}</h3><ul>${audit}</ul></div>
+  <div class="rec-box"><h3>${t("Re-test suggested", "दोबारा टेस्ट सुझाया")}</h3><ul>${rt.length ? rt.join("") : `<li>${t("None", "कोई नहीं")}</li>`}</ul></div>
+ </div>
+ <p class="nb">${t("Raw measurements only. No grades, percentiles or norms are applied, because validated Indian norm data does not exist yet. ≈ marks an estimate. ✕ marks a rejected attempt.", "केवल वास्तविक माप। कोई ग्रेड, पर्सेंटाइल या मानक लागू नहीं, क्योंकि मान्य भारतीय मानक डेटा अभी उपलब्ध नहीं है। ≈ अनुमान दर्शाता है। ✕ अस्वीकृत प्रयास दर्शाता है।")}</p>
+</div>`;
+    }
+    SCR.report = () => {
+      const a = curA(), i = ATH.indexOf(a), multi = ATH.length > 1;
+      const nav2 = multi ? `<button class="ib" data-act="ath" data-d="-1" aria-label="${t("Previous athlete", "पिछला एथलीट")}" ${i ? "" : 'disabled style="opacity:.35"'}>${IC.chevL}</button><button class="ib" data-act="ath" data-d="1" aria-label="${t("Next athlete", "अगला एथलीट")}" ${i < ATH.length - 1 ? "" : 'disabled style="opacity:.35"'}>${IC.chev}</button>` : "";
+      return `<div class="scr">${barH(t("Report card", "रिपोर्ट कार्ड"), `${i + 1} ${t("of", "/")} ${ATH.length}`, nav2)}
+<main class="main" style="gap:12px">
+ <article class="recsheet">
+  <div class="rec-top"><div class="grow">${LOGO.sai(t("National Hackathon on AI-Powered Battery Fitness Assessment", "AI-संचालित बैटरी फिटनेस मूल्यांकन पर राष्ट्रीय हैकथॉन"))}</div></div>
+  <div class="rec-ti" style="text-align:left"><b style="font-size:1.25rem">${t("Battery Fitness Report Card", "बैटरी फिटनेस रिपोर्ट कार्ड")}</b>${triH}</div>
+  ${recordBody(a, true)}
+  <div class="small">${t("Assessor", "मूल्यांकनकर्ता")}: <b style="color:var(--ink)">${esc(state.assessor) || "—"}</b></div>
+  <div class="rec-by">${LOGO.dset(t("Assessment platform by DSeT Consulting", "मूल्यांकन प्लेटफ़ॉर्म: DSeT Consulting"))}</div>
+ </article>
+ <p class="small" style="padding:0 4px">${t("Tap any row for every attempt, the method and the rule audit.", "हर प्रयास, तरीका और नियम ऑडिट देखने के लिए किसी पंक्ति को दबाएँ।")}</p>
+</main>
+<div class="bb"><button class="btn p" data-act="modal" data-v="share">${IC.dl}${t("Download PDF", "PDF डाउनलोड करें")}</button></div></div>`;
+    };
 
-      document.getElementById("btnBack").onclick = () => { state.route = "session"; render(); };
-      root.querySelectorAll(".test-row").forEach(el => {
-        el.onclick = () => {
-          state.selectedTestKey = el.dataset.test;
-          state.route = "cell";
-          render();
-        };
-      });
+        function plot(te, r) {
+      const at = r.attempts.filter(x => x.ok); if (!at.length) return "";
+      const v = at.map(x => x.v), mn = Math.min(...v), mx = Math.max(...v);
+      const pad = Math.max((mx - mn) * .6, te.id === "height" || te.id === "weight" ? .5 : 2), lo = mn - pad, hi = mx + pad;
+      const Xp = x => 24 + (x - lo) / (hi - lo) * 272;
+      return `<svg viewBox="0 0 320 76" width="100%" role="img" aria-label="${t("Attempts on a line", "प्रयास एक रेखा पर")}"><line x1="8" y1="42" x2="312" y2="42" stroke="var(--line)" stroke-width="2" stroke-linecap="round"/>${v.length > 1 ? `<rect x="${Xp(mn)}" y="36" width="${Xp(mx) - Xp(mn)}" height="12" rx="6" fill="var(--primary-soft)"/><line x1="${Xp(mn)}" y1="64" x2="${Xp(mx)}" y2="64" stroke="var(--ink-2)" stroke-width="1.5"/><line x1="${Xp(mn)}" y1="59" x2="${Xp(mn)}" y2="69" stroke="var(--ink-2)" stroke-width="1.5"/><line x1="${Xp(mx)}" y1="59" x2="${Xp(mx)}" y2="69" stroke="var(--ink-2)" stroke-width="1.5"/>` : ""}
+ ${at.map(x => { const b = x.v === r.best; return `<circle cx="${Xp(x.v)}" cy="42" r="${b ? 9 : 6}" fill="${b ? "var(--primary)" : "var(--surface)"}" stroke="${b ? "var(--primary)" : "var(--ink-2)"}" stroke-width="2.5"/><text x="${Xp(x.v)}" y="22" text-anchor="middle" font-size="14" font-family="var(--font-num)" font-weight="${b ? 700 : 500}" fill="var(--ink)">${fmtV(te, x.v).v}</text>`; }).join("")}</svg>`;
+    }
+    function sheetHTML() {
+      const a = curA(), te = dT(VW.sheet), r = a.r[te.id], b = bandOf(a, te.id), sp = spreadOf(te, r), valid = r.attempts.filter(x => x.ok).length, sub = tsub(a, te);
+      const fouls = r.fouls || [];
+      const ticks = te.id === "situps" && r.status === "rec" ? (() => { const d = Math.max(Math.round(r.best) + fouls.length, 1), fr = fouls.map(f => f.rep), w = 300 / d; return `<svg viewBox="0 0 300 30" width="100%" aria-hidden="true">${Array.from({ length: d }, (_, k) => { const f = fr.includes(k + 1); return `<rect x="${k * w + .8}" y="${f ? 0 : 8}" width="${Math.max(w - 1.6, 1.5)}" height="${f ? 30 : 22}" rx="1.5" fill="${f ? "var(--red)" : "var(--green)"}" opacity="${f ? 1 : .85}"/>`; }).join("")}</svg>`; })() : "";
+      const canRetest = r.retest || (r.status === "notrec" && te.m !== "planned");
+      return `<div class="scrim" data-act="back"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="${tname(a, te)}"><div class="grab"></div>
+ <div class="shd"><div class="grow" style="padding-top:8px"><span class="eyebrow">${t("Test", "टेस्ट")} ${te.n} · ${te.m === "ai" ? "AI" : te.m === "manual" ? t("Manual", "मैन्युअल") : t("Planned", "प्रस्तावित")}${sub ? " · " + sub : ""}</span><h2 style="font-size:1.375rem;line-height:1.25;font-weight:700">${tname(a, te)}</h2></div><button class="ib" data-act="back" aria-label="${t("Close", "बंद करें")}">${IC.close}</button></div>
+ <div class="sbody">
+  <div class="stack" style="gap:8px"><div class="row" style="justify-content:space-between;align-items:flex-end">${valH(a, te, "big")}${chipH(b === "N" ? "P" : b, b === "A" ? t("Amber · estimate", "पीला · अनुमान") : null)}</div><div class="sub">${esc(r.reason)}</div></div>
+  ${r.limit ? `<div class="note am"><span>${shape("A", 18)}</span><span>${esc(r.limit)}</span></div>` : ""}
+  ${r.attempts.length ? `<div class="sec"><div class="sec-h" style="padding:0"><span class="eyebrow">${r.attempts.length === 1 ? t("1 attempt", "1 प्रयास") : r.attempts.length + " " + t("attempts", "प्रयास")}</span><span class="small">${valid > 1 ? `${t("Spread", "अंतर")} <b class="num" style="color:var(--ink)">${fmtS(te, sp)}</b>` : valid === 1 ? t("One valid attempt", "एक वैध प्रयास") : t("No valid attempt", "कोई वैध प्रयास नहीं")}</span></div>${te.id !== "situps" ? plot(te, r) : ""}
+   <div>${r.attempts.map((x, k) => `<div class="att"><span class="k">${t("Attempt", "प्रयास")} ${k + 1}</span>${x.ok ? `<span class="v">${fmtS(te, x.v)}</span>${x.v === r.best && valid > 1 ? `<span class="tag ai">${t("Best", "सर्वश्रेष्ठ")}</span>` : ""}` : `${shape("R", 14)}<span class="grow"><b style="color:var(--red)">${t("Rejected", "अस्वीकृत")}</b> · ${esc(x.why)}</span>`}</div>`).join("")}</div></div>` : ""}
+  ${te.id === "situps" && r.status === "rec" ? `<div class="sec"><span class="eyebrow">${t("Rule audit", "नियम ऑडिट")}</span><div style="font-weight:600">${Math.round(r.best) + fouls.length} ${t("reps detected", "रेप मिले")} · ${Math.round(r.best)} ${t("counted", "गिने गए")} · ${fouls.length} ${t("not counted", "नहीं गिने")}</div>${ticks}
+   <div class="tl">${fouls.length ? fouls.map(f => `<div class="ev"><span class="rp">${t("Rep", "रेप")} ${f.rep}</span><span>${esc(f.t)}${f.rule ? ` <span class="small">· ${t("Rule", "नियम")} ${esc(f.rule)}</span>` : ""}</span></div>`).join("") : `<div class="small">${t("No fouls", "कोई फाउल नहीं")}</div>`}</div></div>` : ""}
+  ${r.method ? `<div class="sec"><span class="eyebrow">${t("How it was measured", "कैसे मापा गया")}</span><span>${esc(r.method)}</span></div>` : ""}
+ </div>
+ <div class="bb">${canRetest ? `<button class="btn s" data-act="back">${t("Close", "बंद करें")}</button><button class="btn p" data-act="retest" data-t="${te.key}">${t("Re-test now", "अभी दोबारा टेस्ट")}</button>` : `<button class="btn s" data-act="back">${t("Close", "बंद करें")}</button>`}</div></div>`;
     }
 
+    SCR.roster = () => {
+      const s = sess(); let rec = 0, ai = 0; ATH.forEach(a => { const m = athSummary(a); rec += m.rec; ai += m.ai; });
+      const bw = BW();
+      return `<div class="scr">${barH(t("Roster summary", "सूची सारांश"), `${fmtDate(sessDate())} · ${ATH.length} ${t("athletes", "एथलीट")}`)}
+<main class="main" style="gap:16px">
+ <div class="stats"><div class="stat"><b>${rec}<small>/${ATH.length * 10}</small></b><span>${t("Tests recorded", "दर्ज टेस्ट")}</span></div><div class="stat"><b>${ai}</b><span>${t("Measured by AI", "AI द्वारा मापे")}</span></div><div class="stat"><b>${s.rj}</b><span>${bw.R}</span></div></div>
+ <div class="rt-wrap"><table class="rtb"><thead><tr><th class="stk" style="padding-left:14px;font-family:var(--font);text-align:left">${t("Athlete", "एथलीट")}</th>${TESTS.map(te => `<th scope="col" title="${esc(te.en)}">${te.n}</th>`).join("")}<th style="padding:0 14px">${t("Rec.", "दर्ज")}</th></tr></thead>
+ <tbody>${ATH.map(a => `<tr><td class="stk"><button data-act="go" data-s="report" data-a="${a.id}">${esc(a.name)}<small>${a.age} · ${ageGrp(a)}</small></button></td>${TESTS.map(te => { const b = bandOf(a, te.id); return `<td class="c"><button data-act="go" data-s="report" data-a="${a.id}" aria-label="${esc(a.name)}, ${tname(a, te)}: ${bw[b]}">${shape(b, 18)}</button></td>`; }).join("")}<td class="n">${athSummary(a).rec}/10</td></tr>`).join("")}</tbody></table></div>
+ <div class="legend" style="padding:0 4px"><span>${shape("G", 12)}${bw.G}</span><span>${shape("A", 12)}${bw.A}</span><span>${shape("R", 12)}${bw.R}</span><span>${shape("P", 12)}${bw.P}</span><span>${shape("N", 12)}${bw.N}</span></div>
+ <div class="card" style="padding:14px 16px"><div class="small" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;color:var(--ink)">${TESTS.map(te => `<span><b class="num" style="color:var(--muted);margin-right:4px">${te.n}</b>${esc(te.en)}</span>`).join("")}</div></div>
+</main>
+<div class="bb"><button class="btn p" data-act="print" data-k="roster">${IC.print}${t("Export roster PDF", "सूची PDF निर्यात")}</button></div></div>`;
+    };
+
+    // ---- A4 PDF pages (print-root) -----------------------------------------------
+    function pdfHead(title) { return `<div class="ph"><img class="lg" src="sai-logo.png" alt="SAI"><div class="org"><b>Sports Authority of India</b><span>${t("National Hackathon on AI-Powered Battery Fitness Assessment", "AI-संचालित बैटरी फिटनेस मूल्यांकन पर राष्ट्रीय हैकथॉन")}</span></div><div class="ti"><b>${title}</b><div class="ptri"><i></i><i></i><i></i></div></div></div>`; }
+    function pdfFoot(i, n, guardian = true) { return `<div class="pf"><div class="sig"><div>${t("Assessor", "मूल्यांकनकर्ता")}: ${esc(state.assessor) || "&nbsp;"}<span>${t("Signature and date", "हस्ताक्षर और तिथि")}</span></div>${guardian ? `<div>${t("Parent / guardian", "अभिभावक")}<span>${t("Signature and date", "हस्ताक्षर और तिथि")}</span></div>` : '<div style="border:0"></div>'}</div><div class="fl"><span>${t("Video was processed on the assessor's phone and never stored or uploaded. Share only with the athlete, guardian, school and SAI officials.", "वीडियो मूल्यांकनकर्ता के फ़ोन पर प्रोसेस हुआ, न सहेजा गया न अपलोड। केवल एथलीट, अभिभावक, स्कूल और SAI अधिकारियों के साथ साझा करें।")}</span><span class="ds"><img src="dset_logo.png" alt="">DSeT Consulting</span><span style="white-space:nowrap;font-weight:700;color:#0B0F14">${t("Page", "पृष्ठ")} ${i} ${t("of", "/")} ${n}</span></div></div>`; }
+    function pdfAthlete(a, i, n) {
+      return `<section class="page">${pdfHead(t("Battery Fitness Report Card", "बैटरी फिटनेस रिपोर्ट कार्ड"))}<div class="pb">${recordBody(a, false)}</div>${pdfFoot(i, n)}</section>`;
+    }
+        function pdfRoster(i = 1, n = 1) {
+      const s = sess(); let rec = 0, ai = 0; ATH.forEach(a => { const m = athSummary(a); rec += m.rec; ai += m.ai; }); const bw = BW();
+      return `<section class="page">${pdfHead(t("Roster summary", "सूची सारांश"))}<div class="pb">
+ <div class="det"><div class="nm"><span>${t("Session", "सत्र")}</span><b>${fmtDate(sessDate())}</b></div><div><span>${t("Athletes", "एथलीट")}</span><b>${ATH.length}</b></div><div><span>${t("Tests recorded", "दर्ज टेस्ट")}</span><b>${rec} / ${ATH.length * 10} · ${ai} ${t("by AI", "AI से")}</b></div></div>
+ <div class="sum"><b>${bw.G} ${s.g} · ${bw.A} ${s.am} · ${bw.R} ${s.rj}</b><span class="cf">${shape("G", 11)}${bw.G}</span><span class="cf">${shape("A", 11)}${bw.A}</span><span class="cf">${shape("R", 11)}${bw.R}</span><span class="cf">${shape("P", 11)}${bw.P}</span></div>
+ <table class="rtp"><thead><tr><th>${t("Athlete", "एथलीट")}</th>${TESTS.map(te => `<th>${te.n}</th>`).join("")}<th>${t("Rec.", "दर्ज")}</th></tr></thead><tbody>
+ ${ATH.map(a => `<tr><td><b>${esc(a.name)}</b><br><span style="font-size:8.5pt;color:#3D4A59">${a.age} · ${a.g} · ${ageGrp(a)}${a.school ? "<br>" + esc(a.school) : ""}</span></td>${TESTS.map(te => { const b = bandOf(a, te.id), r = a.r[te.id]; return `<td><span class="cv">${shape(b, 11)}<span style="${b === "A" ? "font-style:italic;font-weight:400" : ""}">${b === "G" ? fmtV(te, r.best).v : b === "A" ? "≈" + fmtV(te, r.best).v : "—"}</span></span></td>`; }).join("")}<td><b>${athSummary(a).rec}/10</b></td></tr>`).join("")}
+ </tbody></table>
+ <div><h3>${t("Tests", "टेस्ट")}</h3><div class="key">${TESTS.map(te => `<span><b>${te.n}</b> ${esc(te.en)} (${te.id === "run" ? "min" : UNIT[te.u] || te.u})</span>`).join("")}</div></div>
+ <div><h3>${t("Re-test suggested", "दोबारा टेस्ट सुझाया")}</h3><ul>${retestList().map(x => `<li><b>${esc(x.a.name)} · ${tname(x.a, x.te)}:</b> ${esc(x.why)}</li>`).join("") || `<li>${t("None", "कोई नहीं")}</li>`}</ul></div>
+ <p class="nb">${t("Raw measurements only. No grades, percentiles or norms. ≈ = estimate. — = not recorded or rejected.", "केवल वास्तविक माप। कोई ग्रेड, पर्सेंटाइल या मानक नहीं। ≈ = अनुमान। — = दर्ज नहीं या अस्वीकृत।")}</p>
+ </div>${pdfFoot(i, n, false)}</section>`;
+    }
+function shareModal(k) {
+      const all = k === "all", pages = all ? ATH.length + 1 : 1;
+      return `<div class="scrim" data-act="back"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="shd"><h2 class="grow" style="font-size:1.25rem;padding-top:10px;font-weight:700">${t("Download PDF", "PDF डाउनलोड करें")}</h2><button class="ib" data-act="back" aria-label="${t("Close", "बंद करें")}">${IC.close}</button></div><div class="sbody" style="gap:14px"><div class="note">${IC.doc}<span>${all ? `${ATH.length} ${t("report cards and a roster summary", "रिपोर्ट कार्ड और एक सूची सारांश")}` : esc(curA().name)} · ${pages} ${t("page(s) · A4", "पृष्ठ · A4")}</span></div>
+ <div class="field"><label for="f-as">${t("Assessor name (printed on the signature line)", "मूल्यांकनकर्ता का नाम (हस्ताक्षर रेखा पर छपेगा)")}</label><input id="f-as" data-f3="assessor" value="${esc(state.assessor)}" autocomplete="name"></div>
+ <p class="sub">${t("The print screen opens next. Choose", "प्रिंट स्क्रीन खुलेगी। चुनें")} <b style="color:var(--ink)">${t("Save as PDF", "PDF के रूप में सहेजें")}</b>${t(". On Android the file lands in Downloads. On iPhone, tap the Share button in the print preview and choose Save to Files.", "। Android पर फ़ाइल Downloads में आएगी। iPhone पर प्रिंट पूर्वावलोकन में Share दबाकर Save to Files चुनें।")}</p></div><div class="bb"><button class="btn p" data-act="print" data-k="${all ? "all" : "athlete"}">${IC.dl}${t("Download", "डाउनलोड")}</button></div></div>`;
+    }
+
+        // ---- Theme, render, toast, events -------------------------------------------
+    function applyTheme() {
+      const dark = state.theme === "dark" || (state.theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+      const meta = document.querySelector("meta[name=theme-color]"); if (meta) meta.content = dark ? "#0F2140" : "#0B1A33";
+    }
+    let _lastScreen = null;
+    function render() {
+      persist();
+      buildAth();
+      applyTheme(); syncHistory();
+      const root = document.getElementById("app");
+      const cam = state.route === "capture";
+      document.body.classList.toggle("cam", cam);
+      document.body.style.overflow = (VW.sheet || VW.modal || state.route === "saved") ? "hidden" : "";
+      const enter = _lastScreen !== null && _lastScreen !== state.route && !cam; _lastScreen = state.route;
+      if (cam) { renderCapture(root); return; }
+      const fn = SCR[state.route] || SCR.home;
+      root.innerHTML = fn().replace('class="scr"', `class="scr${enter ? " enter" : ""}"`) + (VW.sheet && state.route === "report" ? sheetHTML() : "") + (VW.modal ? shareModal(VW.modal === "shareall" ? "all" : "athlete") : "") + (VW.toast ? `<div class="toast" role="status">${VW.toast}</div>` : "");
+      document.getElementById("rotate").innerHTML = sv('<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>', 44, 1.6) + `<span>${t("Turn your phone upright", "फ़ोन को सीधा पकड़ें")}</span>`;
+      if (state.route === "cell") bindCell();
+    }
+    function toast(msg) { VW.toast = msg; render(); clearTimeout(toast.t); toast.t = setTimeout(() => { VW.toast = null; if (state.route !== "capture") render(); }, 2200); }
+    const ACT = {
+      back: goBack,
+      go: el => nav(el.dataset.s, el.dataset.a ? { aid: el.dataset.a } : {}),
+      lang: () => { state.lang = state.lang === "en" ? "hi" : "en"; render(); },
+      theme: () => { state.theme = { auto: "light", light: "dark", dark: "auto" }[state.theme] || "auto"; render(); },
+      reg: el => { VW.reg[el.dataset.k] = el.dataset.v; render(); },
+      saveath: () => {
+        const R = VW.reg; if (!regOK()) return;
+        const id = Date.now();
+        state.athletes.push({ id, name: R.name.trim(), age: parseInt(R.age, 10), gender: R.g === "Female" ? "F" : R.g === "Male" ? "M" : "O", school: R.school.trim(), idType: R.idType === "none" ? "LOCAL" : R.idType, externalId: R.idType === "none" ? "" : R.idType === "Aadhaar" ? "XXXX XXXX " + R.idNo.replace(/\D/g, "").slice(-4) : R.idNo.trim(), date: R.date || todayISO() });
+        state.selectedAthleteId = id; if (VW.picked) VW.picked[id] = true;
+        VW.reg = { name: "", age: "", g: "", school: "", idType: "none", idNo: "", date: todayISO() };
+        nav("setup");
+      },
+      addath: () => nav("register"),
+      mode: el => { VW.mode = el.dataset.v; if (VW.mode === "indiv") { const P = pickedMap(); const f = state.athletes.find(a => P[a.id]); VW.picked = {}; if (f) VW.picked[f.id] = true; state.sequencing = "ATHLETE_WISE"; } render(); },
+      order: el => { state.sequencing = el.dataset.v; VW.list = state.sequencing === "ATHLETE_WISE" ? "athletes" : "stations"; render(); },
+      pick: el => { const P = pickedMap(), id = Number(el.dataset.a); if (VW.mode === "indiv") { VW.picked = {}; VW.picked[id] = true; } else P[id] = !P[id]; render(); },
+      startsession: () => {
+        const ids = state.athletes.filter(a => pickedMap()[a.id]).map(a => a.id); if (!ids.length) return;
+        state.session = { mode: VW.mode === "indiv" ? "INDIVIDUAL" : "COACH", athleteIds: ids, startedAt: Date.now(), date: todayISO() };
+        if (VW.mode === "indiv") state.sequencing = "ATHLETE_WISE";
+        state.selectedAthleteId = ids[0]; VW.list = state.sequencing === "ATHLETE_WISE" ? "athletes" : "stations";
+        nav("session");
+      },
+      list: el => { VW.list = el.dataset.v; if (state.session?.mode !== "INDIVIDUAL") state.sequencing = VW.list === "athletes" ? "ATHLETE_WISE" : "TEST_WISE"; render(); },
+      liststations: () => { VW.list = "stations"; render(); },
+      open: el => { const a = ATH.find(x => x.id === Number(el.dataset.a)), te = TESTS.find(x => x.key === el.dataset.t); if (a && te) openTest(a, te); },
+      manualfromcell: () => openManual(state.selectedAthleteId, state.selectedTestKey, "cell"),
+      savemanual: saveManual,
+      sheet: el => overlay("sheet", el.dataset.t),
+      modal: el => overlay("modal", el.dataset.v),
+      retest: el => { const te = TESTS.find(x => x.key === el.dataset.t); VW.sheet = null; if (te.m === "manual") openManual(state.selectedAthleteId, te.key, "report"); else nav("cell", { aid: state.selectedAthleteId, key: te.key }); },
+      startflow: () => { if (state.session) return nav("session"); if (!state.athletes.length) { nav("register"); return toast(t("Register an athlete first", "पहले एथलीट पंजीकृत करें")); } VW.picked = null; nav("setup"); },
+      newsession: () => { VW.picked = null; nav("setup"); },
+      viewreport: () => { if (!sess().att) return toast(t("Record at least one test to view the report", "रिपोर्ट देखने के लिए कम से कम एक टेस्ट दर्ज करें")); if (ATH.length === 1) nav("report", { aid: ATH[0].id }); else nav("reports"); },
+      dologin: () => { if (!state.assessor.trim()) return; state.assessor = state.assessor.trim(); state.centre = (state.centre || "").trim(); nav("home", {}, true); toast(`${t("Signed in as", "साइन इन")} ${state.assessor}`); },
+      logout: () => { state.assessor = ""; state.centre = ""; nav("home", {}, true); },
+      ath: el => { const i = ATH.indexOf(curA()) + (+el.dataset.d); if (ATH[i]) nav("report", { aid: ATH[i].id }, true); },
+      jump: el => { const c = document.getElementById("tc-" + el.dataset.t); if (c) { window.scrollTo({ top: c.getBoundingClientRect().top + scrollY - 90, behavior: "smooth" }); c.focus({ preventScroll: true }); } },
+      print: el => {
+        const pr = document.getElementById("print-root"), k = el.dataset.k;
+        pr.innerHTML = k === "roster" ? pdfRoster() : k === "all" ? ATH.map((a, i) => pdfAthlete(a, i + 1, ATH.length + 1)).join("") + pdfRoster(ATH.length + 1, ATH.length + 1) : pdfAthlete(curA(), 1, 1);
+        if (VW.modal) { VW.modal = null; render(); }
+        setTimeout(() => window.print(), 50);
+      }
+    };
+    document.addEventListener("click", e => { const el = e.target.closest("[data-act]"); if (!el || el.disabled) return; e.preventDefault(); ACT[el.dataset.act] && ACT[el.dataset.act](el); });
+    document.addEventListener("input", e => {
+      const d = e.target.dataset || {};
+      if (d.f) {
+        VW.reg[d.f] = d.f === "age" ? e.target.value.replace(/\D/g, "").slice(0, 2) : e.target.value;
+        if (d.f === "age") { const ar = document.getElementById("agerule"); if (ar) ar.innerHTML = ageRule(VW.reg.age); }
+        const b = document.getElementById("btnSaveAth"); if (b) b.disabled = !regOK();
+      }
+      if (d.f2) VW.entry[d.f2] = d.f2 === "val" ? e.target.value.replace(/[^0-9.,]/g, "") : e.target.value.replace(/\D/g, "");
+      if (d.f3) { state[d.f3] = e.target.value; persist(); if (d.f3 === "assessor") { const lb = document.getElementById("btnLogin"); if (lb) lb.disabled = !e.target.value.trim(); } }
+    });
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && (VW.sheet || VW.modal)) goBack(); });
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => state.theme === "auto" && state.route !== "capture" && render());
+    window.addEventListener("afterprint", () => { const pr = document.getElementById("print-root"); if (pr) pr.innerHTML = ""; });
+
     render();
+
+    // Launch splash: SAI mark first, then the opening page. Once per app launch; tap to skip.
+    (function () {
+      const sp = document.getElementById("splash"); if (!sp) return;
+      let seen = false; try { seen = sessionStorage.getItem("bfa_splash") === "1"; } catch (e) { }
+      if (seen) { sp.remove(); return; }
+      try { sessionStorage.setItem("bfa_splash", "1"); } catch (e) { }
+      const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const hide = () => { if (sp.classList.contains("out")) return; sp.classList.add("out"); setTimeout(() => sp.remove(), reduce ? 0 : 380); };
+      sp.addEventListener("click", hide);
+      setTimeout(hide, reduce ? 700 : 1700);
+    })();
   </script>
 </body>
 </html>
