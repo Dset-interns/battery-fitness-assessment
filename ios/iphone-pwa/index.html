@@ -542,9 +542,9 @@ body.cam .rotate{display:none!important}
         number: 10, key: "endurance_run",
         nameEn: "800 m Endurance Run", nameHi: "800 मीटर एंड्योरेंस रन",
         minSec: 120, maxSec: 1020, minMB: 20, maxMB: 200,
-        attempts: 1, unit: "s", mode: "Manual", isPhoto: false,
-        guideEn: "Standing start at the line. On “ready” and the starting signal, run 800 m as fast as possible. If there is no 200/400 m track, measure exactly 800 m (for example with a measuring wheel). One attempt. Record the time in minutes and seconds.",
-        guideHi: "रेखा पर खड़े होकर शुरुआत। “रेडी” और शुरुआती संकेत पर 800 मीटर पूरी गति से दौड़ें। 200/400 मीटर ट्रैक न हो तो ठीक 800 मीटर नापें (जैसे मेज़रिंग व्हील से)। एक प्रयास। समय मिनट और सेकंड में दर्ज करें।"
+        attempts: 1, unit: "s", mode: "AI", isPhoto: false,
+        guideEn: "Mount the phone on a tripod beside the start and finish line, in landscape, with the line in view, and tap the line on the screen. Choose the lap length: 400 m (2 laps) or 200 m (4 laps); with no track, mark a 400 m or 200 m loop and check it with a measuring wheel. One athlete runs at a time. The athlete stands still behind the line. On “ready” and the starting signal, run 800 m as fast as possible. Timing starts at the first movement and stops when the torso crosses the line after the last lap. One attempt (the assessor may allow a retake). Recording stops by itself 17 minutes after it starts. The time is recorded in minutes and seconds.",
+        guideHi: "फ़ोन को शुरुआती/फ़िनिश रेखा के पास ट्राइपॉड पर लैंडस्केप में लगाएँ, रेखा फ्रेम में हो, और स्क्रीन पर रेखा पर टैप करें। चक्कर की लंबाई चुनें: 400 मीटर (2 चक्कर) या 200 मीटर (4 चक्कर); ट्रैक न हो तो 400 या 200 मीटर का लूप चिह्नित करें और मेज़रिंग व्हील से जाँचें। एक समय में एक एथलीट दौड़े। एथलीट रेखा के पीछे स्थिर खड़ा हो। “रेडी” और शुरुआती संकेत पर 800 मीटर पूरी गति से दौड़ें। पहली हरकत पर समय शुरू, अंतिम चक्कर के बाद धड़ के रेखा पार करने पर रुकेगा। एक प्रयास (मूल्यांकनकर्ता दोबारा की अनुमति दे सकता है)। रिकॉर्डिंग शुरू होने के 17 मिनट बाद अपने आप रुक जाती है। समय मिनट और सेकंड में दर्ज होता है।"
       }
     ];
 
@@ -2082,6 +2082,28 @@ body.cam .rotate{display:none!important}
         };
       }
 
+      // ---------------- TEST 10: 800 M ENDURANCE RUN (video lap timing) ----------------
+      if (test.key === "endurance_run") {
+        const an = enduranceAnalyze(ok, calib && calib.trackLines);
+        const R = (m, d) => rejected(test, m, d);
+        const mmss = x => `${Math.floor(x / 60)}:${String(Math.round(x % 60)).padStart(2, "0")}`;
+        if (an.err === "lines") return R(t("Start and finish line not set", "शुरुआती और फ़िनिश रेखा तय नहीं"), t("Tap the line on the video and choose the lap length before recording.", "रिकॉर्डिंग से पहले वीडियो पर रेखा पर टैप करें और चक्कर की लंबाई चुनें।"));
+        if (an.err === "short") return R(t("Recording too short", "रिकॉर्डिंग बहुत छोटी"), t("Keep recording until the athlete has finished the last lap.", "अंतिम चक्कर पूरा होने तक रिकॉर्डिंग जारी रखें।"));
+        if (an.err === "shake") return R(t("Phone moved", "फ़ोन हिला"), t("The phone was not steady before the start. Fix it on a tripod and record again.", "शुरू से पहले फ़ोन स्थिर नहीं था। ट्राइपॉड पर लगाकर फिर रिकॉर्ड करें।"));
+        if (an.err === "nostart") return R(t("Start not detected", "शुरुआत नहीं मिली"), t("No movement was seen at the line. The athlete stands still behind the line, then runs after recording begins. Keep the line in view.", "रेखा पर कोई हरकत नहीं दिखी। एथलीट रेखा के पीछे स्थिर खड़ा हो और रिकॉर्डिंग शुरू होने के बाद दौड़े। रेखा फ्रेम में रखें।"));
+        if (an.err === "laps") return R(t(`${an.seen} of ${an.laps} laps seen`, `${an.laps} में से ${an.seen} चक्कर दिखे`), t(`The athlete was seen crossing the line ${an.seen} time(s) after the start, ${an.laps} are needed for 800 m. Keep the line in view and record until the athlete finishes (the recording stops itself at 17 minutes).`, `एथलीट शुरुआत के बाद रेखा ${an.seen} बार पार करता दिखा, 800 मीटर के लिए ${an.laps} चाहिए। रेखा फ्रेम में रखें और एथलीट के पूरा करने तक रिकॉर्ड करें (17 मिनट पर रिकॉर्डिंग अपने आप रुकती है)।`));
+        if (an.time < 80 || an.time > 1020) return R(t("Time not realistic", "समय यथार्थ नहीं"), t(`The measured time was ${mmss(an.time)}. Check the lap length, that the line is the start and finish line, and that only the athlete moved.`, `मापा गया समय ${mmss(an.time)} था। चक्कर की लंबाई, कि रेखा शुरुआती और फ़िनिश रेखा है, और केवल एथलीट हिला, यह जाँचें।`));
+        const good = !an.uneven && an.frameMs <= 40 && an.ratio >= 1.5;
+        return {
+          valid: true,
+          value: Number(an.time.toFixed(2)),
+          unit: "s",
+          confidence: good ? "GREEN" : "AMBER",
+          method: `AI lap timing · ${an.laps} crossings of the line over 800 m (${an.lapM} m laps) · ${Math.round(an.frameMs)} ms per frame`,
+          audit: [{ label: "Timing", detail: `${mmss(an.time)} · laps ${an.lapTimes.map(x => mmss(x)).join(" · ")} · start signal ${an.ratio.toFixed(1)}× noise`, valid: true }]
+        };
+      }
+
       // ---------------- TEST 4: VERTICAL JUMP ----------------
       // Score = jump reach - standing reach (handbook Test 4, ruling C21), read at the raised fingertip.
       // The coupled-body detector below finds the jump itself and rejects fakes:
@@ -2693,6 +2715,9 @@ body.cam .rotate{display:none!important}
       sprintM: ["Timed from video: first movement to the torso at the finish line", "वीडियो से समय: पहली हरकत से धड़ के फ़िनिश रेखा तक"],
       sprintA: ["Timed from video with reduced confidence (frame rate or tracking)", "वीडियो से समय, कम विश्वसनीयता (फ़्रेम रेट या ट्रैकिंग)"],
       limSprint: ["Resolution is one video frame (about 33 ms at 30 fps). The start is the first visible movement and can be picked up one or two frames late, so a time can read slightly short.", "रिज़ॉल्यूशन एक वीडियो फ़्रेम (30 fps पर लगभग 33 ms) है। शुरुआत पहली दिखने वाली हरकत है और एक-दो फ़्रेम देर से पकड़ी जा सकती है, इसलिए समय थोड़ा कम दिख सकता है।"],
+      runM: ["Timed from video: first movement to the torso crossing the line after the last lap", "वीडियो से समय: पहली हरकत से अंतिम चक्कर के बाद धड़ के रेखा पार करने तक"],
+      runA: ["Timed from video with reduced confidence (uneven laps, frame rate or tracking)", "वीडियो से समय, कम विश्वसनीयता (असमान चक्कर, फ़्रेम रेट या ट्रैकिंग)"],
+      limRun: ["Laps are counted from crossings of the line, so the distance is right only if the lap length was set correctly and the course was measured. Resolution is one video frame.", "चक्कर रेखा पार करने से गिने जाते हैं, इसलिए दूरी तभी सही है जब चक्कर की लंबाई सही रखी गई और कोर्स नापा गया। रिज़ॉल्यूशन एक वीडियो फ़्रेम है।"],
       shuttleA: ["Timed from video over four lengths of 10 m; touching the lines cannot be verified", "वीडियो से 10 मीटर के चार चरणों का समय; रेखाओं को छूना जाँचा नहीं जा सकता"],
       limShuttle: ["Touching the lines with the hand cannot be verified from video, so a turn is counted when the athlete reaches the line. Resolution is one video frame and the start can be picked up one or two frames late.", "रेखाओं को हाथ से छूना वीडियो से जाँचा नहीं जा सकता, इसलिए एथलीट के रेखा तक पहुँचने पर मोड़ गिना जाता है। रिज़ॉल्यूशन एक फ़्रेम है और शुरुआत एक-दो फ़्रेम देर से पकड़ी जा सकती है।"],
       retSprint: ["Re-run with the phone steady on a tripod, both lines in view, and at least 30 fps", "फ़ोन को ट्राइपॉड पर स्थिर रखकर, दोनों रेखाएँ दिखाते हुए, कम से कम 30 fps पर दोबारा चलाएँ"]
@@ -2729,14 +2754,16 @@ body.cam .rotate{display:none!important}
       if (manual) reason = te.id === "weight" ? X("scale") : te.id === "mball" ? X("tape") : te.id === "run" ? X("watch") : X("manual");
       else if (te.id === "sprint") reason = band === "G" ? X("sprintM") : X("sprintA");
       else if (te.id === "shuttle") reason = X("shuttleA");
+      else if (te.id === "run") reason = band === "G" ? X("runM") : X("runA");
       else if (te.id === "situps") reason = X("reps");
       else reason = band === "G" ? X("measured") : X("estimate");
       if (te.id === "height" && !manual) limit = X("limHair");
       if (te.id === "vjump" && !manual && band === "A") limit = X("limFps");
       if (te.id === "sprint") limit = X("limSprint");
       if (te.id === "shuttle") limit = X("limShuttle");
+      if (te.id === "run" && !manual) limit = X("limRun");
       if (te.id === "sprint" && band === "A") retest = X("retSprint");
-      else if (band === "A" && te.m === "ai" && !manual && te.id !== "vjump" && te.id !== "situps" && te.id !== "shuttle") {
+      else if (band === "A" && te.m === "ai" && !manual && te.id !== "vjump" && te.id !== "situps" && te.id !== "shuttle" && te.id !== "run") {
         retest = te.id === "height" ? t("Lock a wall reference photo, then re-measure for a measured result", "दीवार संदर्भ फोटो लॉक करें, फिर मापें")
           : t("Place a physical reference (floor tape or box scale) in frame, then re-test for a measured result", "फ़्रेम में भौतिक संदर्भ (फ़र्श टेप / बॉक्स स्केल) रखकर दोबारा टेस्ट करें");
       }
@@ -2806,10 +2833,11 @@ body.cam .rotate{display:none!important}
     }
     // fr: [{t (ms), e, n, cx (0..1 or null), gm}], L: {startX, finishX} as fractions of the frame width
     // Shared first half: validate the lines, find the noise floor and the first movement near the start line.
-    function sprPrelude(fr, L) {
+    function sprPrelude(fr, L, oneLine) {
+      if (oneLine) { if (!L || L.lineX == null) return { err: "lines" }; L = { startX: L.lineX, finishX: L.lineX }; }
       if (!L || L.startX == null || L.finishX == null) return { err: "lines" };
       const dir = Math.sign(L.finishX - L.startX);
-      if (!dir || Math.abs(L.finishX - L.startX) < 0.2) return { err: "lines" };
+      if (!oneLine && (!dir || Math.abs(L.finishX - L.startX) < 0.2)) return { err: "lines" };
       if (fr.length < 20) return { err: "short" };
       const dts = []; for (let i = 1; i < fr.length; i++) if (fr[i].t > fr[i - 1].t) dts.push(fr[i].t - fr[i - 1].t);
       const frameMs = median(dts) || 33.3;
@@ -2876,6 +2904,36 @@ body.cam .rotate{display:none!important}
       const startT = fr[s0].t;
       let peak = 0; for (let i = i0; i < Math.min(fr.length, i0 + 30); i++) peak = Math.max(peak, fr[i].e);
       return { startT, finishT, time: (finishT - startT) / 1000, frameMs, shake, ratio: peak / hi, splits: marks.map(m => (m - startT) / 1000) };
+    }
+    // 800 m endurance run: one line (start and finish) seen by a fixed phone, laps of 400 m (2) or 200 m (4).
+    // The athlete is tracked by the motion centre, and each pass of the line in the running direction is a crossing.
+    // The start departure is dropped (it happens within 8 s of the first movement); the last lap's crossing stops the clock.
+    function enduranceAnalyze(fr, L) {
+      const P = sprPrelude(fr, L, true); if (P.err) return P;
+      const { frameMs, shake, hi, i0, s0, c } = P;
+      const lapM = L.lapM === 200 ? 200 : 400, laps = 800 / lapM, X = L.lineX, startT = fr[s0].t;
+      let side0 = null;
+      for (let i = s0; i <= Math.min(fr.length - 1, i0 + 10); i++) { const ci = c(i); if (ci != null) { side0 = ci; break; } }
+      const dir = side0 != null && side0 > X ? -1 : 1;                    // the athlete starts behind the line
+      const events = []; let armed = false, prevC = null, prevT = null;
+      for (let i = s0; i < fr.length - 1; i++) {
+        const ci = c(i); if (ci == null) continue;
+        const q = (ci - X) * dir;
+        if (q <= -0.03) armed = true;
+        else if (armed && q >= 0) {
+          const pq = prevC == null ? q : (prevC - X) * dir, f = prevC == null ? 1 : Math.min(1, Math.max(0, (0 - pq) / ((q - pq) || 1e-9)));
+          events.push(prevT == null ? fr[i].t : prevT + f * (fr[i].t - prevT)); armed = false;
+        }
+        prevC = ci; prevT = fr[i].t;
+      }
+      const lapEv = events.filter(tm => tm - startT >= 8000);
+      if (lapEv.length < laps) return { err: "laps", seen: lapEv.length, laps, frameMs, shake };
+      const finishT = lapEv[laps - 1];
+      const marks = lapEv.slice(0, laps).map(tm => (tm - startT) / 1000);
+      const lapTimes = marks.map((m, k) => m - (k ? marks[k - 1] : 0));
+      const uneven = Math.max(...lapTimes) > 1.8 * Math.min(...lapTimes) || (laps > 1 && Math.min(...lapTimes.slice(1)) < 20);
+      let peak = 0; for (let i = i0; i < Math.min(fr.length, i0 + 30); i++) peak = Math.max(peak, fr[i].e);
+      return { startT, finishT, time: (finishT - startT) / 1000, frameMs, shake, ratio: peak / hi, splits: marks, lapTimes, uneven, seen: laps, laps, lapM };
     }
     const fmtMB = b => (b / 1048576).toFixed(b < 10485760 ? 1 : 0) + " MB";
     const safeName = v => String(v).replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -3419,10 +3477,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       let isRecording = false;
       let recorder = null;
       const supportsCalib = test.key === "height" || test.key === "sit_and_reach" || test.key === "vertical_jump";
-      const isSprint = test.key === "sprint_30m" || test.key === "shuttle_run", isShuttle = test.key === "shuttle_run";
+      const isSprint = test.key === "sprint_30m" || test.key === "shuttle_run" || test.key === "endurance_run", isShuttle = test.key === "shuttle_run", isEndurance = test.key === "endurance_run";
       const trackL = () => (state.trackLines || {})[test.key];
       const setTrackL = v => { state.trackLines = { ...(state.trackLines || {}), [test.key]: v }; persist(); };
-      let sprintSet = null, sprintPrev = null, sprintLastHud = 0;
+      let sprintSet = null, sprintPrev = null, sprintLastHud = 0, enduranceLive = null;
       const cal = { mode: null, pts: [], active: 0 };
       let frameW = 0, frameH = 0;
       let latestValidEv = null;
@@ -3434,9 +3492,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
 
         ${isSprint ? `
           <details class="card stack" style="gap:8px" ${(trackL() && trackL().startX != null && trackL().finishX != null) ? "" : "open"}>
-            <summary>${isShuttle ? t("Set up the course", "कोर्स सेट करें") : t("Set up the track", "ट्रैक सेट करें")}</summary>
-            <span class="small">${isShuttle ? t("Phone on a tripod, in landscape, both lines in view, one athlete at a time. Tap a button, then tap that line on the video. The lines must be 10 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें, एक समय में एक एथलीट। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 10 मीटर दूर हों।") : t("Phone on a tripod, in landscape, both lines in view. Tap a button, then tap that line on the video. The lines must be 30 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 30 मीटर दूर हों।")}</span>
-            <div class="row" style="gap:8px"><button class="btn s" id="btnSetStart" style="min-height:48px">${t("Set start line", "शुरुआती रेखा")}</button><button class="btn s" id="btnSetFinish" style="min-height:48px">${isShuttle ? t("Set far line", "दूर की रेखा") : t("Set finish line", "फ़िनिश रेखा")}</button></div>
+            <summary>${isEndurance ? t("Set up the line", "रेखा सेट करें") : isShuttle ? t("Set up the course", "कोर्स सेट करें") : t("Set up the track", "ट्रैक सेट करें")}</summary>
+            <span class="small">${isEndurance ? t("Phone on a tripod beside the start and finish line, in landscape, one athlete at a time. Tap the button, then tap the line on the video, and choose the lap length of the course.", "फ़ोन शुरुआती और फ़िनिश रेखा के पास ट्राइपॉड पर, लैंडस्केप में, एक समय में एक एथलीट। बटन दबाएँ, फिर वीडियो पर रेखा पर टैप करें, और कोर्स के चक्कर की लंबाई चुनें।") : isShuttle ? t("Phone on a tripod, in landscape, both lines in view, one athlete at a time. Tap a button, then tap that line on the video. The lines must be 10 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें, एक समय में एक एथलीट। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 10 मीटर दूर हों।") : t("Phone on a tripod, in landscape, both lines in view. Tap a button, then tap that line on the video. The lines must be 30 m apart.", "फ़ोन ट्राइपॉड पर, लैंडस्केप में, दोनों रेखाएँ दिखें। बटन दबाएँ, फिर वीडियो पर उस रेखा पर टैप करें। रेखाएँ 30 मीटर दूर हों।")}</span>
+            <div class="row" style="gap:8px"><button class="btn s" id="btnSetStart" style="min-height:48px">${isEndurance ? t("Set start / finish line", "शुरू / फ़िनिश रेखा") : t("Set start line", "शुरुआती रेखा")}</button><button class="btn s" id="btnSetFinish" style="min-height:48px;${isEndurance ? "display:none" : ""}">${isShuttle ? t("Set far line", "दूर की रेखा") : t("Set finish line", "फ़िनिश रेखा")}</button></div>
+            ${isEndurance ? `<div class="seg" id="lapSeg">${[[400, t("400 m laps · 2 laps", "400 मी चक्कर · 2 चक्कर")], [200, t("200 m laps · 4 laps", "200 मी चक्कर · 4 चक्कर")]].map(([m, l]) => `<button data-lap="${m}" aria-pressed="${((trackL() || {}).lapM || 400) === m}">${l}</button>`).join("")}</div>` : ""}
             <div class="row" style="justify-content:space-between"><span class="small" id="sprintStatus" style="font-weight:700"></span><button class="lang-btn" id="btnSprintReset" style="margin:0">${t("Reset lines", "रेखाएँ रीसेट")}</button></div>
           </details>
         ` : ""}
@@ -3548,13 +3607,13 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       const declAth = document.getElementById("declAth"), declCoach = document.getElementById("declCoach");
       declAth.checked = dst.ath; declCoach.checked = dst.coach;
       const declOk = () => dst.ath && dst.coach && !!state.assessor.trim();
-      const linesOk = () => { const L = trackL(); return !!L && L.startX != null && L.finishX != null && Math.abs(L.finishX - L.startX) >= 0.2; };
+      const linesOk = () => { const L = trackL(); if (isEndurance) return !!L && L.lineX != null; return !!L && L.startX != null && L.finishX != null && Math.abs(L.finishX - L.startX) >= 0.2; };
       const readyOk = () => declOk() && (!isSprint || linesOk());
       const syncDecl = () => {
         if (isRecording) return;
         btnRec.disabled = !readyOk();
         const h = document.getElementById("declHint");
-        if (h) h.textContent = readyOk() ? "" : (isSprint && !linesOk() ? (isShuttle ? t("Set the start line and the far line first, 10 m apart.", "पहले शुरुआती रेखा और दूर की रेखा तय करें, 10 मीटर दूर।") : t("Set the start and finish lines first, about 30 m apart.", "पहले शुरुआती और फ़िनिश रेखा तय करें, लगभग 30 मीटर दूर।")) : t("Both confirmations and the coach name are needed to record.", "रिकॉर्ड करने के लिए दोनों पुष्टि और कोच का नाम ज़रूरी है।"));
+        if (h) h.textContent = readyOk() ? "" : (isSprint && !linesOk() ? (isEndurance ? t("Set the start and finish line first.", "पहले शुरुआती और फ़िनिश रेखा तय करें।") : isShuttle ? t("Set the start line and the far line first, 10 m apart.", "पहले शुरुआती रेखा और दूर की रेखा तय करें, 10 मीटर दूर।") : t("Set the start and finish lines first, about 30 m apart.", "पहले शुरुआती और फ़िनिश रेखा तय करें, लगभग 30 मीटर दूर।")) : t("Both confirmations and the coach name are needed to record.", "रिकॉर्ड करने के लिए दोनों पुष्टि और कोच का नाम ज़रूरी है।"));
       };
       declAth.onchange = () => { dst.ath = declAth.checked; syncDecl(); };
       declCoach.onchange = () => { dst.coach = declCoach.checked; syncDecl(); };
@@ -3771,13 +3830,15 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       function refreshSprintStatus() {
         const el = document.getElementById("sprintStatus"); if (!el) return;
         const L = trackL() || {};
-        el.textContent = sprintSet ? (sprintSet === "start" ? t("Tap the START line on the video", "वीडियो पर शुरुआती रेखा पर टैप करें") : (isShuttle ? t("Tap the FAR line on the video", "वीडियो पर दूर की रेखा पर टैप करें") : t("Tap the FINISH line on the video", "वीडियो पर फ़िनिश रेखा पर टैप करें")))
+        el.textContent = sprintSet ? (sprintSet === "start" ? (isEndurance ? t("Tap the START / FINISH line on the video", "वीडियो पर शुरू / फ़िनिश रेखा पर टैप करें") : t("Tap the START line on the video", "वीडियो पर शुरुआती रेखा पर टैप करें")) : (isShuttle ? t("Tap the FAR line on the video", "वीडियो पर दूर की रेखा पर टैप करें") : t("Tap the FINISH line on the video", "वीडियो पर फ़िनिश रेखा पर टैप करें")))
           : `${L.startX != null ? "✅" : "○"} ${t("Start", "शुरू")}   ${L.finishX != null ? "✅" : "○"} ${isShuttle ? t("Far line", "दूर की रेखा") : t("Finish", "फ़िनिश")}`;
+        if (isEndurance && !sprintSet) el.textContent = `${L.lineX != null ? "✅" : "○"} ${t("Start / finish line", "शुरू / फ़िनिश रेखा")} · ${L.lapM || 400} m ${t("laps", "चक्कर")}`;
         el.style.color = sprintSet ? "var(--amber)" : "var(--ink)";
       }
       if (isSprint) {
         const armSet = k => { sprintSet = k; canvasEl.style.pointerEvents = "auto"; refreshSprintStatus(); };
         document.getElementById("btnSetStart").onclick = () => armSet("start");
+        document.querySelectorAll("[data-lap]").forEach(b => b.onclick = () => { setTrackL({ lapM: 400, ...(trackL() || {}), lapM: +b.dataset.lap }); document.querySelectorAll("[data-lap]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); refreshSprintStatus(); });
         document.getElementById("btnSetFinish").onclick = () => armSet("finish");
         document.getElementById("btnSprintReset").onclick = () => { if (state.trackLines) delete state.trackLines[test.key]; sprintSet = null; canvasEl.style.pointerEvents = "none"; persist(); refreshSprintStatus(); syncDecl(); };
         canvasEl.addEventListener("pointerdown", (e) => {
@@ -3786,7 +3847,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           const sc = Math.min(rect.width / frameW, rect.height / frameH), ox = (rect.width - frameW * sc) / 2;
           const x = (e.clientX - rect.left - ox) / sc / frameW;
           if (x < 0 || x > 1) return;
-          setTrackL({ ...(trackL() || {}), [sprintSet === "start" ? "startX" : "finishX"]: x });
+          setTrackL({ ...(isEndurance ? { lapM: 400 } : {}), ...(trackL() || {}), [isEndurance ? "lineX" : (sprintSet === "start" ? "startX" : "finishX")]: x });
           sprintSet = null; canvasEl.style.pointerEvents = "none"; refreshSprintStatus(); syncDecl();
         });
         refreshSprintStatus();
@@ -3911,7 +3972,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         try {
           mediaStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
-            video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: isSprint ? 60 : 30 } }
+            video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: (isSprint && !isEndurance) ? 60 : 30 } }
           });
           videoEl.srcObject = mediaStream;
           await videoEl.play();
@@ -3941,8 +4002,9 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         const L = trackL() || {}, fs = Math.max(14, Math.round(W / 40));
         ctx.lineWidth = Math.max(2, W / 320); ctx.font = `700 ${fs}px sans-serif`;
         const line = (x, color, label) => { ctx.strokeStyle = color; ctx.fillStyle = color; ctx.setLineDash([12, 8]); ctx.beginPath(); ctx.moveTo(x * W, 0); ctx.lineTo(x * W, H); ctx.stroke(); ctx.setLineDash([]); ctx.fillText(label, Math.min(W - fs * 6, x * W + 6), fs * 1.6); };
-        if (L.startX != null) line(L.startX, "#3BE08A", t("START", "शुरू"));
-        if (L.finishX != null) line(L.finishX, "#FF5A4E", isShuttle ? t("FAR LINE", "दूर की रेखा") : t("FINISH", "फ़िनिश"));
+        if (isEndurance) { if (L.lineX != null) line(L.lineX, "#3BE08A", t("START / FINISH", "शुरू / फ़िनिश")); }
+        else if (L.startX != null) line(L.startX, "#3BE08A", t("START", "शुरू"));
+        if (!isEndurance && L.finishX != null) line(L.finishX, "#FF5A4E", isShuttle ? t("FAR LINE", "दूर की रेखा") : t("FINISH", "फ़िनिश"));
         if (cx != null) { ctx.fillStyle = "#FFD166"; ctx.beginPath(); ctx.arc(cx * W, H * 0.5, fs * 0.45, 0, 6.3); ctx.fill(); }
       }
 
@@ -4231,7 +4293,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
               sprintLastHud = now;
               hudFps.textContent = `${Math.round(fps)} fps · ${t("MOTION TIMING", "मोशन टाइमिंग")}`;
               hudMetric.style.display = "none"; // keep the track clear so the lines can be tapped and the athlete seen
-              hudLive.textContent = `${linesOk() ? (isRecording ? t("Recording. The athlete runs on “go”.", "रिकॉर्डिंग। “गो” पर एथलीट दौड़े।") : isShuttle ? t("Course ready. The athlete stands still behind the start line.", "कोर्स तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।") : t("Track ready. The athlete stands still behind the start line.", "ट्रैक तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।")) : isShuttle ? t("Set the start line and the far line.", "शुरुआती रेखा और दूर की रेखा तय करें।") : t("Set the start and finish lines.", "शुरुआती और फ़िनिश रेखा तय करें।")} ${t("Only the athlete should move.", "केवल एथलीट हिले।")}`;
+              hudLive.textContent = `${linesOk() ? (isRecording ? (isEndurance && enduranceLive ? `${t("Laps seen", "देखे गए चक्कर")}: ${enduranceLive.seen != null ? enduranceLive.seen : 0} / ${(trackL() || {}).lapM === 200 ? 4 : 2}. ${t("Recording stops 17 minutes after the start.", "रिकॉर्डिंग शुरू होने के 17 मिनट बाद रुकती है।")}` : t("Recording. The athlete runs on “go”.", "रिकॉर्डिंग। “गो” पर एथलीट दौड़े।")) : isShuttle ? t("Course ready. The athlete stands still behind the start line.", "कोर्स तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।") : t("Track ready. The athlete stands still behind the start line.", "ट्रैक तैयार। एथलीट शुरुआती रेखा के पीछे स्थिर खड़ा हो।")) : isShuttle ? t("Set the start line and the far line.", "शुरुआती रेखा और दूर की रेखा तय करें।") : t("Set the start and finish lines.", "शुरुआती और फ़िनिश रेखा तय करें।")} ${t("Only the athlete should move.", "केवल एथलीट हिले।")}`;
             }
             schedule(); return;
           }
@@ -4296,7 +4358,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         if (!window.MediaRecorder || !mediaStream) return;
         try {
           const mime = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find(m => MediaRecorder.isTypeSupported(m)) || "";
-          const bps = Math.max(600000, Math.min(2500000, Math.floor(test.maxMB * 8e6 * 0.9 / Math.max(test.maxSec, 1))));
+          const bps = isEndurance ? 700000 : Math.max(600000, Math.min(2500000, Math.floor(test.maxMB * 8e6 * 0.9 / Math.max(test.maxSec, 1))));
           recorder = new MediaRecorder(mediaStream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: bps });
           // The clip's chunks live on the recorder itself: the last one arrives after stop() is called.
           const chunks = recorder._chunks = [];
@@ -4373,9 +4435,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           btnRec.textContent = `${t("Recording...", "रिकॉर्डिंग...")} (${test.minSec}s min)`;
           captureTimer = setInterval(() => {
             captureElapsed++;
-            if (isSprint && recordedFrames.length > 20) {
-              const an = (isShuttle ? shuttleAnalyze : sprintAnalyze)(recordedFrames, trackL());
-              if (an && an.finishT && recordedFrames[recordedFrames.length - 1].t - an.finishT > 1500) { finishRecording(); return; }
+            if (isSprint && recordedFrames.length > 20 && (!isEndurance || captureElapsed % 3 === 0)) {
+              const an = (isEndurance ? enduranceAnalyze : isShuttle ? shuttleAnalyze : sprintAnalyze)(recordedFrames, trackL());
+              if (isEndurance) enduranceLive = an;
+              if (an && an.finishT && recordedFrames[recordedFrames.length - 1].t - an.finishT > (isEndurance ? 2500 : 1500)) { finishRecording(); return; }
             }
             const validCount = recordedFrames.filter(f => f.postureOk).length;
             if (test.key === "height") {
@@ -4398,7 +4461,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
               if (captureElapsed >= 20) finishRecording();
               return;
             }
-            hudTimer.textContent = `${captureElapsed}s / ${test.minSec}–${test.maxSec}s (${validCount} ${t("valid", "मान्य")})`;
+            hudTimer.textContent = isEndurance ? `${Math.floor(captureElapsed / 60)}:${String(captureElapsed % 60).padStart(2, "0")} / ${Math.floor(test.maxSec / 60)}:00` : `${captureElapsed}s / ${test.minSec}–${test.maxSec}s (${validCount} ${t("valid", "मान्य")})`;
             if (captureElapsed >= 2) btnRec.disabled = false;
             if (captureElapsed >= test.minSec) {
               btnRec.textContent = `■ ${t("Stop & Compute Score", "रोकें और स्कोर निकालें")} (${captureElapsed}s)`;
