@@ -631,15 +631,22 @@ body.cam .rotate{display:none!important}
     let tiltListenerOn = false;
 
     const MP_VERSION = "0.10.14";
-    const POSE_MODEL_FULL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
-    const POSE_MODEL_LITE = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
+    const POSE_MODEL_FULL_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
+    const POSE_MODEL_LITE_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
 
+    // The runtime and models are used from vendor/mediapipe/ when fetch_vendor.py has been run (and sw.js keeps them on
+    // the phone), so the pose tests need no internet. Without them the public CDN is used, as before.
+    const VENDOR_BASE = new URL("vendor/mediapipe/", location.href).href;
+    async function vendorPresent() {
+      try { return (await fetch(VENDOR_BASE + "wasm/vision_wasm_internal.wasm", { method: "HEAD" })).ok; } catch (e) { return false; }
+    }
     async function ensureMediaPipeLoaded() {
       if (poseLandmarker) return poseLandmarker;
-      const vision = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/vision_bundle.mjs`);
-      const fileset = await vision.FilesetResolver.forVisionTasks(
-        `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`
-      );
+      let local = await vendorPresent(), vision = null;
+      if (local) { try { vision = await import(VENDOR_BASE + "vision_bundle.mjs"); } catch (e) { local = false; } }
+      if (!vision) vision = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/vision_bundle.mjs`);
+      const fileset = await vision.FilesetResolver.forVisionTasks(local ? VENDOR_BASE + "wasm" : `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`);
+      const POSE_MODEL_FULL = local ? VENDOR_BASE + "pose_landmarker_full.task" : POSE_MODEL_FULL_CDN, POSE_MODEL_LITE = local ? VENDOR_BASE + "pose_landmarker_lite.task" : POSE_MODEL_LITE_CDN;
       const makeOpts = (modelAssetPath, delegate) => ({
         baseOptions: { modelAssetPath, delegate },
         runningMode: "VIDEO",
@@ -2704,6 +2711,15 @@ body.cam .rotate{display:none!important}
     state.athletes.forEach(a => { if (!a.date) a.date = todayISO(); });
 
     // Ephemeral UI state (never persisted)
+    // Offline readiness: the service worker is registered and the app plus the pose files are in its cache.
+    async function checkOfflineReady() {
+      try {
+        if (!("serviceWorker" in navigator) || !("caches" in window) || !(await navigator.serviceWorker.getRegistration())) return false;
+        for (const u of ["index.html", "vendor/mediapipe/vision_bundle.mjs", "vendor/mediapipe/wasm/vision_wasm_internal.wasm", "vendor/mediapipe/pose_landmarker_full.task"])
+          if (!(await caches.match(new URL(u, location.href).href, { ignoreSearch: true }))) return false;
+        return true;
+      } catch (e) { return false; }
+    }
     const VW = {
       sheet: null, modal: null, toast: null, genstep: 0, list: state.sequencing === "ATHLETE_WISE" ? "athletes" : "stations",
       mode: state.session?.mode === "INDIVIDUAL" ? "indiv" : "coach", picked: null,
@@ -3211,7 +3227,9 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
  </nav>
  <section class="stack" style="gap:8px"><div class="sec-h"><span class="eyebrow">${t("The ten tests", "दस टेस्ट")}</span><span class="small num">${TESTS.filter(x => x.m === "ai").length} ${t("measured by AI", "AI से मापे")}</span></div>
   <div class="list">${TESTS.map(te => `<div class="li" style="min-height:52px"><span class="num" style="font-weight:700;color:var(--muted);min-width:1.3em">${te.n}</span><span class="grow"><span class="t" ${te.m === "planned" ? 'style="color:var(--ink-2)"' : ""}>${tN(te)}</span></span>${tagOf(te)}</div>`).join("")}</div></section>
- <div class="note gr" style="align-items:flex-start"><span style="color:var(--green)">${IC.shield}</span><span><b style="color:var(--green)">${t("Works offline.", "ऑफ़लाइन काम करता है।")}</b> ${t("Video is processed on this phone and never uploaded.", "वीडियो इसी फ़ोन पर प्रोसेस होता है और कभी अपलोड नहीं होता।")}</span></div>
+ ${VW.offlineReady
+  ? `<div class="note gr" style="align-items:flex-start"><span style="color:var(--green)">${IC.shield}</span><span><b style="color:var(--green)">${t("Works offline.", "ऑफ़लाइन काम करता है।")}</b> ${t("Video is processed on this phone and never uploaded.", "वीडियो इसी फ़ोन पर प्रोसेस होता है और कभी अपलोड नहीं होता।")}</span></div>`
+  : `<div class="note am" style="align-items:flex-start"><span style="color:var(--amber)">${IC.info}</span><span><b>${t("One-time setup for offline use.", "ऑफ़लाइन उपयोग के लिए एक बार का सेटअप।")}</b> ${t("Open the app once with internet so the pose models are saved on this phone. The 30 m, shuttle, endurance and ball tests already work without internet. Video is processed on this phone and never uploaded.", "ऑफ़लाइन उपयोग के लिए एक बार इंटरनेट के साथ ऐप खोलें ताकि पोज़ मॉडल इस फ़ोन पर सहेजे जाएँ। 30 मी, शटल, सहनशक्ति और गेंद टेस्ट बिना इंटरनेट के पहले से चलते हैं। वीडियो इसी फ़ोन पर प्रोसेस होता है और कभी अपलोड नहीं होता।")}</span></div>`}
  <div class="stack" style="gap:8px;padding:4px 4px 0">${LOGO.dset()}<span class="small" style="font-size:.75rem;line-height:1.45">${t("National Hackathon on AI-Powered Battery Fitness Assessment · NeGD · MeitY · MYAS", "AI-संचालित बैटरी फिटनेस मूल्यांकन पर राष्ट्रीय हैकथॉन · NeGD · MeitY · MYAS")}</span></div>
 </main></div>`;
     };
@@ -4991,6 +5009,13 @@ const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attemp
     window.addEventListener("afterprint", () => { const pr = document.getElementById("print-root"); if (pr) pr.innerHTML = ""; });
 
     render();
+
+    // Offline support: HTTPS or localhost only; a certificate the browser does not trust cannot register a service worker.
+    (function () {
+      const check = () => checkOfflineReady().then(v => { if (v !== VW.offlineReady) { VW.offlineReady = v; if (state.route === "home") render(); } });
+      if (!("serviceWorker" in navigator) || !(location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))) return;
+      navigator.serviceWorker.register("sw.js").then(() => { check(); setTimeout(check, 4000); setTimeout(check, 15000); }).catch(() => { });
+    })();
 
     // Launch splash: SAI mark first, then the opening page. Once per app launch; tap to skip.
     (function () {

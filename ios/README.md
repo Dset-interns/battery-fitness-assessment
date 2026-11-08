@@ -16,6 +16,28 @@ This directory contains the iOS implementation of the **Sports Authority of Indi
    - [`index.html`](./iphone-pwa/index.html) & [`manifest.json`](./iphone-pwa/manifest.json): Standalone iOS WebKit app (`apple-mobile-web-app-capable`) matching Slide 7 of the DSeT submission deck (`Battery Assessment`, `New session`, `Athletes`, `Assessments`, `10-Test Battery Reference` with `AI` / `Planned` / `Manual` badges, `Athlete-wise` & `Test-wise` sequencing, live iPhone camera capture with MediaPipe Pose 33-point skeleton overlay, §6.3.1 duration gate, all 4 AI analyzers, manual entry for the remaining 6 tests, bilingual English/Hindi toggle, and full SAI Report Card).
    - [`serve_iphone.py`](./iphone-pwa/serve_iphone.py): Zero-dependency Python HTTPS server that generates a local self-signed TLS certificate so iOS Safari grants camera access over local Wi-Fi.
 
+## Working with no internet
+
+The pose tests (height, Sit & Reach, Vertical Jump, Broad Jump, sit-ups) need the MediaPipe runtime and pose models
+(about 34 MB). They are not committed. Fetch them once while online:
+
+```bash
+python3 ios/iphone-pwa/fetch_vendor.py
+```
+
+The app then uses `vendor/mediapipe/` instead of the public CDN, and the service worker (`sw.js`) keeps the app and those
+files on the phone. After one online visit the whole app, pose tests included, works with no network. The 30 m run,
+shuttle, endurance and ball tests never needed the models.
+
+Two things to know:
+
+- Service workers only run over HTTPS (or `localhost`) with a certificate the browser trusts. The self-signed certificate
+  from `serve_iphone.py` is fine on the Mac at `https://localhost:8443`, but a phone will refuse to register the service
+  worker with it. For offline use on a phone, host the folder on an HTTPS site with a valid certificate (with the `vendor/`
+  folder uploaded) and open it once online. The home screen shows "Works offline" only when the app and models are cached.
+- The optional wall-photo auto-read of a written height (OCR) still downloads its engine from the internet. Without a
+  connection the coach types the number instead.
+
 ## How to Test on Your Apple iPhone Right Now
 
 From the repository root (on branch `sai`):

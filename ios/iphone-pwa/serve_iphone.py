@@ -63,9 +63,13 @@ def ensure_cert(lan_ip: str) -> bool:
 
 class NoCacheRequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self) -> None:
-        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
+        if self.path.startswith("/vendor/"):
+            # The offline pose-AI files are large and never change for a given version.
+            self.send_header("Cache-Control", "public, max-age=86400")
+        else:
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
         super().end_headers()
 
 

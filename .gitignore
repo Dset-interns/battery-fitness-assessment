@@ -50,6 +50,8 @@ captures/
 # --- Models (large; fetched by script per Submission §3.4) ---
 models/*.task
 models/*.tflite
+# Pose-AI runtime and models for offline use; fetched by ios/iphone-pwa/fetch_vendor.py
+ios/iphone-pwa/vendor/
 
 # --- IDE / OS ---
 .idea/
