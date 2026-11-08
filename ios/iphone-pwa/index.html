@@ -342,6 +342,9 @@ button.rec-r:active{background:var(--surface-2)}
 .rec .nb{font-size:.8125rem;color:var(--ink-2);line-height:1.45}
 .chk{display:flex;gap:12px;align-items:flex-start;min-height:48px;padding:6px 0;cursor:pointer;font-size:.9375rem;line-height:1.4}
 .chk input{width:24px;height:24px;flex:none;margin-top:1px;accent-color:var(--primary)}
+.sigpad{display:block;width:100%;height:160px;border:1.5px dashed var(--line-strong);border-radius:12px;background:var(--surface);touch-action:none;cursor:crosshair}
+.cons-p{display:flex;flex-direction:column;gap:6px}
+.tag.warn{background:var(--amber-bg);color:var(--amber)}
 /* A4 layout of the same record markup */
 .page{--green:#13704A;--amber:#8C4F00;--amber-bg:#FBEED8;--red:#B0261E;--ink:#0B0F14;--ink-2:#3D4A59;--muted:#5E6471;--line:#BFC6CE;--line-strong:#8B909A;--primary:#1D3FA6;--primary-soft:#E7ECF8;--surface:#fff;--surface-2:#EEEDE8}
 .page .rec{gap:2.2mm;font-size:8.8pt}
@@ -2602,7 +2605,7 @@ body.cam .rotate{display:none!important}
     if (!state.theme) state.theme = "auto";
     if (state.assessor === undefined) state.assessor = "";
     if (state.centre === undefined) state.centre = "";
-    if (!["home", "login", "register", "setup", "session", "cell", "manual", "saved", "reports", "report", "roster"].includes(state.route)) state.route = "home";
+    if (!["home", "login", "register", "consent", "setup", "session", "cell", "manual", "saved", "reports", "report", "roster"].includes(state.route)) state.route = "home";
     if (state.session && !state.session.date) state.session.date = todayISO();
     state.athletes.forEach(a => { if (!a.date) a.date = todayISO(); });
 
@@ -2691,7 +2694,7 @@ body.cam .rotate{display:none!important}
       ATH = rosterAthletes().map(a => {
         const o = {
           id: a.id, raw: a, name: a.name, age: a.age, g: a.gender === "F" ? t("Female", "महिला") : a.gender === "M" ? t("Male", "पुरुष") : t("Other", "अन्य"),
-          school: a.school || "", motherCm: a.motherCm || null, motherSrc: a.motherSrc || "", fatherCm: a.fatherCm || null, fatherSrc: a.fatherSrc || "", idType: (a.idType && a.idType !== "LOCAL") ? a.idType : "none", idNo: a.externalId || "", date: a.date || todayISO(), r: {}
+          school: a.school || "", consent: a.consent || null, motherCm: a.motherCm || null, motherSrc: a.motherSrc || "", fatherCm: a.fatherCm || null, fatherSrc: a.fatherSrc || "", idType: (a.idType && a.idType !== "LOCAL") ? a.idType : "none", idNo: a.externalId || "", date: a.date || todayISO(), r: {}
         };
         TESTS.forEach(te => { o.r[te.id] = adaptResult(a, te); });
         return o;
@@ -2811,7 +2814,7 @@ body.cam .rotate{display:none!important}
     }
 
     // ---- Navigation + history (Android back button / iOS swipe-back) ----------
-    const PARENT = { login: "home", register: "home", setup: "home", session: "home", cell: "session", manual: "cell", capture: "cell", saved: "session", reports: "session", report: "reports", roster: "reports" };
+    const PARENT = { consent: "setup", login: "home", register: "home", setup: "home", session: "home", cell: "session", manual: "cell", capture: "cell", saved: "session", reports: "session", report: "reports", roster: "reports" };
     let _lastKey = null, _popping = false, _replaceNext = false, _lastRoute = null;
     function nav(route, extra = {}, replace = false) {
       if (extra.aid != null) state.selectedAthleteId = Number(extra.aid);
@@ -2913,7 +2916,7 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
     };
 
     function pickedMap() {
-      if (!VW.picked) { VW.picked = {}; const ids = state.session?.athleteIds; state.athletes.forEach(a => { VW.picked[a.id] = ids ? ids.includes(a.id) : true; }); if (VW.mode === "indiv") { const f = state.athletes.find(a => VW.picked[a.id]); VW.picked = {}; if (f) VW.picked[f.id] = true; } }
+      if (!VW.picked) { VW.picked = {}; const ids = state.session?.athleteIds; state.athletes.forEach(a => { VW.picked[a.id] = !!a.consent && (ids ? ids.includes(a.id) : true); }); if (VW.mode === "indiv") { const f = state.athletes.find(a => VW.picked[a.id]); VW.picked = {}; if (f) VW.picked[f.id] = true; } }
       return VW.picked;
     }
     SCR.setup = () => {
@@ -2925,8 +2928,9 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
  <div class="stack" style="gap:8px"><span class="eyebrow">${t("Who is assessing", "कौन मूल्यांकन कर रहा है")}</span><div class="seg"><button aria-pressed="${VW.mode === "coach"}" data-act="mode" data-v="coach">${t("Coach", "कोच")}<small>${t("Many athletes", "कई एथलीट")}</small></button><button aria-pressed="${VW.mode === "indiv"}" data-act="mode" data-v="indiv">${t("Individual", "व्यक्तिगत")}<small>${t("One athlete", "एक एथलीट")}</small></button></div></div>
  ${VW.mode === "coach" ? `<div class="stack" style="gap:8px"><span class="eyebrow">${t("Run the session", "सत्र का क्रम")}</span><div class="seg"><button aria-pressed="${order === "test"}" data-act="order" data-v="TEST_WISE">${t("By test", "टेस्ट के अनुसार")}<small>${t("One station, everyone", "एक स्टेशन, सब एथलीट")}</small></button><button aria-pressed="${order === "ath"}" data-act="order" data-v="ATHLETE_WISE">${t("By athlete", "एथलीट के अनुसार")}<small>${t("One athlete, all tests", "एक एथलीट, सभी टेस्ट")}</small></button></div></div>` : ""}
  <div class="stack" style="gap:8px"><div class="sec-h"><span class="eyebrow">${t("Roster", "सूची")}</span><span class="small num">${n} ${t("selected", "चुने गए")}</span></div>
- <div class="list">${state.athletes.map(a => `<button class="li" data-act="pick" data-a="${a.id}" role="checkbox" aria-checked="${!!P[a.id]}"><span class="grow"><span class="t">${esc(a.name)}</span><span class="d">${lbl(a)}</span></span><span style="color:var(--primary)">${P[a.id] ? IC.boxOn : IC.box}</span></button>`).join("")}
+ <div class="list">${state.athletes.map(a => `<button class="li" data-act="pick" data-a="${a.id}" role="checkbox" aria-checked="${!!P[a.id]}"><span class="grow"><span class="t">${esc(a.name)}</span><span class="d">${lbl(a)}</span></span>${a.consent ? `<span style="color:var(--primary)">${P[a.id] ? IC.boxOn : IC.box}</span>` : `<span class="tag warn">${t("Consent needed", "सहमति चाहिए")}</span>`}</button>`).join("")}
  <button class="li" data-act="addath" style="color:var(--primary);font-weight:600">${IC.plus}<span>${t("Add athlete", "एथलीट जोड़ें")}</span></button></div></div>
+ ${state.athletes.some(a => !a.consent) ? `<div class="note am">${IC.info}<span>${t("An athlete can be assessed only after the athlete (or a parent or guardian for under-18s) has signed the consent form. Tap a name marked “Consent needed”.", "एथलीट का मूल्यांकन तभी हो सकता है जब एथलीट (18 से कम हो तो माता-पिता या अभिभावक) सहमति फ़ॉर्म पर हस्ताक्षर कर दे। “सहमति चाहिए” वाले नाम पर दबाएँ।")}</span></div>` : ""}
  <div class="note">${IC.info}<span>${TESTS.filter(x => x.m !== "planned").length} ${t("of 10 tests are ready. 30 m Sprint and Shuttle Run are planned and will show “Not available yet” on reports.", "/10 टेस्ट तैयार हैं। 30 मी स्प्रिंट और शटल रन प्रस्तावित हैं और रिपोर्ट में “अभी उपलब्ध नहीं” दिखेंगे।")}</span></div>
 </main>
 <div class="bb"><button class="btn p" data-act="startsession" ${n ? "" : "disabled"}>${t("Start assessment", "मूल्यांकन शुरू करें")} · ${n} ${t("athletes", "एथलीट")}</button></div></div>`;
@@ -4234,7 +4238,7 @@ const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attemp
       const rt = sm.rt.map(te => `<li><b>${tname(a, te)}:</b> ${esc(a.r[te.id].retest)}</li>`).concat(sm.lim.map(te => `<li><b>${tname(a, te)}:</b> ${esc(a.r[te.id].limit)}</li>`));
       return `<div class="rec">
  <div class="rec-ath">
-  <div class="rec-det"><div class="nm"><span>${t("Athlete", "एथलीट")}</span><b>${esc(a.name)}</b></div><div><span>${t("Age · Gender", "आयु · लिंग")}</span><b>${a.age} · ${a.g}</b></div><div style="grid-column:1/-1"><span>${t("Parental height", "माता-पिता की ऊँचाई")}</span><b style="font-size:.85em;font-weight:600">${parH(a)}</b></div><div><span>${t("School", "स्कूल")}</span><b>${esc(a.school) || "—"}</b></div><div><span>${t("Programme ID", "कार्यक्रम ID")}</span><b>${a.idType === "none" ? t("Not provided", "उपलब्ध नहीं") : esc(a.idType + " · " + (a.idNo || "—"))}</b></div><div><span>${t("Assessed", "मूल्यांकन")}</span><b>${fmtDate(a.date)}</b></div></div>
+  <div class="rec-det"><div class="nm"><span>${t("Athlete", "एथलीट")}</span><b>${esc(a.name)}</b></div><div><span>${t("Age · Gender", "आयु · लिंग")}</span><b>${a.age} · ${a.g}</b></div><div style="grid-column:1/-1"><span>${t("Parental height", "माता-पिता की ऊँचाई")}</span><b style="font-size:.85em;font-weight:600">${parH(a)}</b></div><div><span>${t("School", "स्कूल")}</span><b>${esc(a.school) || "—"}</b></div><div><span>${t("Programme ID", "कार्यक्रम ID")}</span><b>${a.idType === "none" ? t("Not provided", "उपलब्ध नहीं") : esc(a.idType + " · " + (a.idNo || "—"))}</b></div><div><span>${t("Assessed", "मूल्यांकन")}</span><b>${fmtDate(a.date)}</b></div><div style="grid-column:1/-1"><span>${t("Consent", "सहमति")}</span><b style="font-size:.85em;font-weight:600">${a.consent ? `${t("Signed by", "हस्ताक्षर:")} ${esc(a.consent.signer)} (${relLabel(a.consent.rel)}) · ${new Date(a.consent.at).toLocaleDateString(state.lang === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" })}` : t("Not recorded", "दर्ज नहीं")}</b></div></div>
   <div class="rec-don">${donutH(sm)}<ul>${leg.map(([b, n, l]) => `<li>${shape(b, 12)}<span>${l}<b>${n}</b></span></li>`).join("")}</ul></div>
  </div>
  <div class="rec-sum">${headline(sm)}</div>
@@ -4333,7 +4337,79 @@ const vidStats = a => { let n = 0, d = 0; TESTS.forEach(te => (a.r[te.id].attemp
  <p class="nb">${t("Raw measurements only. No grades, percentiles or norms. ≈ = estimate. — = not recorded or rejected.", "केवल वास्तविक माप। कोई ग्रेड, पर्सेंटाइल या मानक नहीं। ≈ = अनुमान। — = दर्ज नहीं या अस्वीकृत।")}</p>
  </div>${pdfFoot(i, n, false)}</section>`;
     }
-function shareModal(k) {
+
+    // ---- Consent (rulings C06, C10, C35) ---------------------------------------------------
+    // DRAFT WORDING: for review by the programme's legal and data-protection owners before use.
+    const CONSENT_V = 1;
+    const consentItems = (a) => [
+      { k: "assess", req: true, en: `${esc(a.name)} may take part in the SAI Battery Fitness Assessment (ten physical fitness tests) and the results may be recorded.`, hi: `${esc(a.name)} SAI बैटरी फिटनेस मूल्यांकन (दस शारीरिक फिटनेस टेस्ट) में भाग ले सकता/सकती है और परिणाम दर्ज किए जा सकते हैं।` },
+      { k: "video", req: true, en: "Each test attempt is recorded on video, and the weight display is photographed, on the assessor's phone. The video is analysed on that phone and kept there for audit for the period set by SAI's service level agreement. It is not uploaded to any commercial cloud service.", hi: "हर टेस्ट प्रयास का वीडियो और वज़न के डिस्प्ले की फोटो मूल्यांकनकर्ता के फ़ोन पर ली जाती है। वीडियो उसी फ़ोन पर जाँचा जाता है और SAI के सेवा समझौते में तय अवधि तक ऑडिट के लिए वहीं रखा जाता है। इसे किसी व्यावसायिक क्लाउड सेवा पर अपलोड नहीं किया जाता।" },
+      { k: "data", req: true, en: "Name, age, gender, school, programme ID and test results may be shared with SAI and NeGD for the programme through its secure sync after de-identification, and with the athlete, guardian and school.", hi: "नाम, आयु, लिंग, स्कूल, कार्यक्रम ID और टेस्ट परिणाम कार्यक्रम के लिए, पहचान हटाकर, सुरक्षित सिंक के ज़रिए SAI और NeGD के साथ, तथा एथलीट, अभिभावक और स्कूल के साथ साझा किए जा सकते हैं।" },
+      { k: "parentHeight", req: false, en: "Optional: the heights of the biological mother and father may be recorded, only as an indicative input for estimating expected adult height. If this is not ticked, any parental height already entered is removed.", hi: "वैकल्पिक: जैविक माँ और पिता की ऊँचाई केवल वयस्क ऊँचाई के संकेतात्मक अनुमान के लिए दर्ज की जा सकती है। टिक न करने पर पहले दर्ज माता-पिता की ऊँचाई हटा दी जाएगी।" }
+    ];
+    const relLabel = r => r === "parent" ? t("Parent", "माता-पिता") : r === "guardian" ? t("Guardian", "अभिभावक") : t("Self", "स्वयं");
+    SCR.consent = () => {
+      const a = state.athletes.find(x => x.id === state.selectedAthleteId) || state.athletes[0];
+      const minor = a.age < 18, back = VW.consentReturn || "setup";
+      if (a.consent && !(VW.consent && VW.consent.resign)) {
+        const c = a.consent;
+        return `<div class="scr">${barH(t("Consent", "सहमति"), esc(a.name))}
+<main class="main">
+ <div class="note gr" style="align-items:center"><span class="okdot" style="flex:none;animation:none">${IC.tick}</span><span><b>${t("Consent recorded", "सहमति दर्ज")}</b> · ${esc(c.signer)} (${relLabel(c.rel)}) · ${new Date(c.at).toLocaleDateString(state.lang === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" })}</span></div>
+ <div class="list">${consentItems(a).map(it => `<div class="li" style="align-items:flex-start;padding-top:12px;padding-bottom:12px"><span style="color:${c.items[it.k] ? "var(--green)" : "var(--muted)"}">${c.items[it.k] ? IC.tick : IC.close}</span><span class="grow small" style="color:var(--ink)">${t(it.en, it.hi)}</span></div>`).join("")}</div>
+ <button class="btn s" data-act="consentpdf">${IC.dl}${t("Download consent form (PDF)", "सहमति फ़ॉर्म (PDF) डाउनलोड")}</button>
+ <button class="btn q" data-act="consentresign">${t("Sign again", "फिर से हस्ताक्षर")}</button>
+</main>
+<div class="bb"><button class="btn p" data-act="go" data-s="${back}">${t("Continue", "आगे बढ़ें")}</button></div></div>`;
+      }
+      const C = (VW.consent && VW.consent.aid === a.id) ? VW.consent : (VW.consent = { aid: a.id, assess: false, video: false, data: false, parentHeight: false, signer: minor ? "" : a.name, rel: minor ? "parent" : "self", drawn: false, resign: !!a.consent });
+      const rels = minor ? ["parent", "guardian"] : ["self"];
+      return `<div class="scr">${barH(t("Consent", "सहमति"), esc(a.name))}
+<main class="main">
+ <div class="note">${IC.shield}<span>${minor ? t(`${esc(a.name)} is under 18, so a parent or guardian must read and sign.`, `${esc(a.name)} 18 वर्ष से कम है, इसलिए माता-पिता या अभिभावक को पढ़कर हस्ताक्षर करना होगा।`) : t("Please read each statement, tick to agree and sign below.", "कृपया हर कथन पढ़ें, सहमति के लिए टिक करें और नीचे हस्ताक्षर करें।")}</span></div>
+ <div class="card cons-p">${consentItems(a).map(it => `<label class="chk"><input type="checkbox" data-ck="${it.k}" ${C[it.k] ? "checked" : ""}><span>${t(it.en, it.hi)}</span></label>`).join("")}
+  <span class="small">${t("Consent can be withdrawn at any time by telling the assessor or the school. Data is handled under SAI's data-protection procedures.", "सहमति किसी भी समय मूल्यांकनकर्ता या स्कूल को बताकर वापस ली जा सकती है। डेटा SAI की डेटा-सुरक्षा प्रक्रियाओं के अनुसार संभाला जाता है।")}</span></div>
+ <div class="field"><label for="cn-name">${minor ? t("Name of parent or guardian", "माता-पिता या अभिभावक का नाम") : t("Name", "नाम")}</label><input id="cn-name" value="${esc(C.signer)}" autocomplete="name"></div>
+ ${minor ? `<div class="field"><span class="lab">${t("Relationship to the athlete", "एथलीट से संबंध")}</span><div class="seg">${rels.map(r => `<button data-rel="${r}" aria-pressed="${C.rel === r}">${relLabel(r)}</button>`).join("")}</div></div>` : ""}
+ <div class="field"><span class="lab">${t("Signature", "हस्ताक्षर")}</span><canvas id="sigpad" class="sigpad" aria-label="${t("Signature area", "हस्ताक्षर क्षेत्र")}"></canvas>
+  <div class="row" style="justify-content:space-between"><span class="hint">${t("Sign with a finger", "उँगली से हस्ताक्षर करें")}</span><button class="btn q" id="sigClear" style="flex:0 0 auto;min-height:40px">${t("Clear", "मिटाएँ")}</button></div></div>
+ <span class="small" id="consHint" style="color:var(--amber)"></span>
+</main>
+<div class="bb"><button class="btn p" id="btnConsent" data-act="consentsave" disabled>${t("Agree and sign", "सहमत हूँ और हस्ताक्षर करता/करती हूँ")}</button></div></div>`;
+    };
+    function bindConsent() {
+      const cv = document.getElementById("sigpad"); if (!cv) return;
+      const C = VW.consent, a = state.athletes.find(x => x.id === C.aid), minor = a.age < 18;
+      const dpr = window.devicePixelRatio || 1, r = cv.getBoundingClientRect();
+      cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+      const g = cv.getContext("2d"); g.scale(dpr, dpr); g.lineWidth = 2.4; g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#0B0F14"; g.fillStyle = "#0B0F14";
+      const btn = document.getElementById("btnConsent"), hint = document.getElementById("consHint");
+      const ok = () => C.assess && C.video && C.data && C.signer.trim().length >= 2 && C.drawn && (!minor || C.rel === "parent" || C.rel === "guardian");
+      const sync = () => { btn.disabled = !ok(); hint.textContent = ok() ? "" : t("Tick the three required statements, enter the name and sign to continue.", "आगे बढ़ने के लिए तीनों आवश्यक कथनों पर टिक करें, नाम लिखें और हस्ताक्षर करें।"); };
+      document.querySelectorAll("[data-ck]").forEach(el => el.onchange = () => { C[el.dataset.ck] = el.checked; sync(); });
+      document.getElementById("cn-name").oninput = e => { C.signer = e.target.value; sync(); };
+      document.querySelectorAll("[data-rel]").forEach(el => el.onclick = () => { C.rel = el.dataset.rel; document.querySelectorAll("[data-rel]").forEach(b => b.setAttribute("aria-pressed", String(b === el))); sync(); });
+      let down = false, last = null;
+      const pos = e => { const b = cv.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
+      cv.onpointerdown = e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); down = true; last = pos(e); g.beginPath(); g.arc(last.x, last.y, 1.2, 0, 6.3); g.fill(); };
+      cv.onpointermove = e => { if (!down) return; const p = pos(e); g.beginPath(); g.moveTo(last.x, last.y); g.lineTo(p.x, p.y); g.stroke(); last = p; if (!C.drawn) { C.drawn = true; sync(); } };
+      cv.onpointerup = cv.onpointercancel = () => { down = false; };
+      document.getElementById("sigClear").onclick = () => { g.clearRect(0, 0, cv.width, cv.height); C.drawn = false; sync(); };
+      sync();
+    }
+    function consentPage(a, sigUrl) {
+      const c = a.consent, items = consentItems(a);
+      return `<section class="page">${pdfHead(t("Consent form", "सहमति फ़ॉर्म"))}<div class="pb" style="gap:4mm">
+ <div class="det"><div class="nm"><span>${t("Athlete", "एथलीट")}</span><b>${esc(a.name)}</b></div><div><span>${t("Age · Gender", "आयु · लिंग")}</span><b>${a.age} · ${a.gender === "F" ? t("Female", "महिला") : a.gender === "M" ? t("Male", "पुरुष") : t("Other", "अन्य")}</b></div><div><span>${t("School", "स्कूल")}</span><b>${esc(a.school) || "—"}</b></div><div><span>${t("Programme ID", "कार्यक्रम ID")}</span><b>${a.idType && a.idType !== "LOCAL" ? esc(a.idType + " · " + (a.externalId || "—")) : t("Not provided", "उपलब्ध नहीं")}</b></div></div>
+ <p style="font-size:9.5pt;line-height:1.45">${c.minor ? t("The athlete is under 18. This consent is given by the athlete's parent or guardian.", "एथलीट 18 वर्ष से कम है। यह सहमति एथलीट के माता-पिता या अभिभावक द्वारा दी गई है।") : t("This consent is given by the athlete.", "यह सहमति एथलीट द्वारा दी गई है।")}</p>
+ <div style="display:flex;flex-direction:column;gap:2.4mm">${items.map(it => `<div style="display:grid;grid-template-columns:6mm 1fr;gap:2mm;font-size:9.5pt;line-height:1.4"><b style="font-size:12pt;line-height:1">${c.items[it.k] ? "☑" : "☐"}</b><span>${t(it.en, it.hi)}</span></div>`).join("")}</div>
+ <p style="font-size:8.5pt;color:#3D4A59">${t("Consent can be withdrawn at any time by telling the assessor or the school. Data is handled under SAI's data-protection procedures.", "सहमति किसी भी समय मूल्यांकनकर्ता या स्कूल को बताकर वापस ली जा सकती है। डेटा SAI की डेटा-सुरक्षा प्रक्रियाओं के अनुसार संभाला जाता है।")}</p>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:10mm;margin-top:4mm"><div><div style="height:22mm;border-bottom:1pt solid #0B0F14;display:flex;align-items:flex-end">${sigUrl ? `<img src="${sigUrl}" alt="" style="max-height:21mm;max-width:100%">` : ""}</div><div style="font-size:8.5pt;margin-top:1.4mm"><b>${esc(c.signer)}</b> · ${relLabel(c.rel)}<br><span style="color:#3D4A59">${t("Signed", "हस्ताक्षर")} ${new Date(c.at).toLocaleString(state.lang === "hi" ? "hi-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span></div></div>
+ <div><div style="height:22mm;border-bottom:1pt solid #0B0F14"></div><div style="font-size:8.5pt;margin-top:1.4mm"><b>${esc(c.assessor) || "—"}</b> · ${t("Assessor", "मूल्यांकनकर्ता")}</div></div></div>
+ </div>${pdfFoot(1, 1, false).replace(/<div class="sig">[\s\S]*?<\/div><div class="fl">/, '<div class="fl">')}</section>`;
+    }
+
+    function shareModal(k) {
       const all = k === "all", pages = all ? ATH.length + 1 : 1;
       return `<div class="scrim" data-act="back"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="shd"><h2 class="grow" style="font-size:1.25rem;padding-top:10px;font-weight:700">${t("Download PDF", "PDF डाउनलोड करें")}</h2><button class="ib" data-act="back" aria-label="${t("Close", "बंद करें")}">${IC.close}</button></div><div class="sbody" style="gap:14px"><div class="note">${IC.doc}<span>${all ? `${ATH.length} ${t("report cards and a roster summary", "रिपोर्ट कार्ड और एक सूची सारांश")}` : esc(curA().name)} · ${pages} ${t("page(s) · A4", "पृष्ठ · A4")}</span></div>
  <div class="field"><label for="f-as">${t("Assessor name (printed on the signature line)", "मूल्यांकनकर्ता का नाम (हस्ताक्षर रेखा पर छपेगा)")}</label><input id="f-as" data-f3="assessor" value="${esc(state.assessor)}" autocomplete="name"></div>
@@ -4361,6 +4437,7 @@ function shareModal(k) {
       root.innerHTML = fn().replace('class="scr"', `class="scr${enter ? " enter" : ""}"`) + (VW.sheet && state.route === "report" ? sheetHTML() : "") + (VW.modal ? shareModal(VW.modal === "shareall" ? "all" : "athlete") : "") + (VW.toast ? `<div class="toast" role="status">${VW.toast}</div>` : "");
       document.getElementById("rotate").innerHTML = sv('<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>', 44, 1.6) + `<span>${t("Turn your phone upright", "फ़ोन को सीधा पकड़ें")}</span>`;
       if (state.route === "cell") bindCell();
+      if (state.route === "consent") bindConsent();
     }
     function toast(msg) { VW.toast = msg; render(); clearTimeout(toast.t); toast.t = setTimeout(() => { VW.toast = null; if (state.route !== "capture") render(); }, 2200); }
     const ACT = {
@@ -4375,12 +4452,13 @@ function shareModal(k) {
         state.athletes.push({ id, name: R.name.trim(), age: parseInt(R.age, 10), gender: R.g === "Female" ? "F" : R.g === "Male" ? "M" : "O", school: R.school.trim(), motherCm: parseInt(R.motherCm, 10) || null, motherSrc: R.motherCm ? (R.motherSrc || "self") : "", fatherCm: parseInt(R.fatherCm, 10) || null, fatherSrc: R.fatherCm ? (R.fatherSrc || "self") : "", idType: R.idType === "none" ? "LOCAL" : R.idType, externalId: R.idType === "none" ? "" : R.idType === "Aadhaar" ? "XXXX XXXX " + R.idNo.replace(/\D/g, "").slice(-4) : R.idNo.trim(), date: R.date || todayISO() });
         state.selectedAthleteId = id; if (VW.picked) VW.picked[id] = true;
         VW.reg = { name: "", age: "", g: "", school: "", idType: "none", idNo: "", date: todayISO(), motherCm: "", motherSrc: "", fatherCm: "", fatherSrc: "" };
-        nav("setup");
+        VW.consentReturn = "setup"; VW.consent = null;
+        nav("consent");
       },
       addath: () => nav("register"),
       mode: el => { VW.mode = el.dataset.v; if (VW.mode === "indiv") { const P = pickedMap(); const f = state.athletes.find(a => P[a.id]); VW.picked = {}; if (f) VW.picked[f.id] = true; state.sequencing = "ATHLETE_WISE"; } render(); },
       order: el => { state.sequencing = el.dataset.v; VW.list = state.sequencing === "ATHLETE_WISE" ? "athletes" : "stations"; render(); },
-      pick: el => { const P = pickedMap(), id = Number(el.dataset.a); if (VW.mode === "indiv") { VW.picked = {}; VW.picked[id] = true; } else P[id] = !P[id]; render(); },
+      pick: el => { const P = pickedMap(), id = Number(el.dataset.a); if (!state.athletes.find(x => x.id === id)?.consent) { VW.consentReturn = "setup"; VW.consent = null; return nav("consent", { aid: id }); } if (VW.mode === "indiv") { VW.picked = {}; VW.picked[id] = true; } else P[id] = !P[id]; render(); },
       startsession: () => {
         const ids = state.athletes.filter(a => pickedMap()[a.id]).map(a => a.id); if (!ids.length) return;
         state.session = { mode: VW.mode === "indiv" ? "INDIVIDUAL" : "COACH", athleteIds: ids, startedAt: Date.now(), date: todayISO() };
@@ -4391,6 +4469,29 @@ function shareModal(k) {
       list: el => { VW.list = el.dataset.v; if (state.session?.mode !== "INDIVIDUAL") state.sequencing = VW.list === "athletes" ? "ATHLETE_WISE" : "TEST_WISE"; render(); },
       liststations: () => { VW.list = "stations"; render(); },
       open: el => { const a = ATH.find(x => x.id === Number(el.dataset.a)), te = TESTS.find(x => x.key === el.dataset.t); if (a && te) openTest(a, te); },
+      consentresign: () => { VW.consent = { aid: state.selectedAthleteId, assess: false, video: false, data: false, parentHeight: false, signer: "", rel: "self", drawn: false, resign: true }; const a = state.athletes.find(x => x.id === state.selectedAthleteId); if (a) { VW.consent.signer = a.age < 18 ? "" : a.name; VW.consent.rel = a.age < 18 ? "parent" : "self"; } render(); },
+      consentsave: async () => {
+        const C = VW.consent, a = state.athletes.find(x => x.id === (C && C.aid)), cv = document.getElementById("sigpad"); if (!C || !a || !cv) return;
+        const minor = a.age < 18;
+        if (!(C.assess && C.video && C.data && C.signer.trim().length >= 2 && C.drawn && (!minor || C.rel === "parent" || C.rel === "guardian"))) return;
+        const bin = atob(cv.toDataURL("image/png").split(",")[1]), bytes = new Uint8Array(bin.length); // synchronous, unlike toBlob
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const blob = new Blob([bytes], { type: "image/png" });
+        const sigKey = `s:${a.id}:consent:${Date.now().toString(36)}`;
+        try { await VDB.put(sigKey, { blob, mime: "image/png", sizeBytes: blob.size, athleteId: a.id, savedAt: Date.now() }); } catch (e) { return toast(t("Could not store the signature on this phone", "इस फ़ोन पर हस्ताक्षर सहेजा नहीं जा सका")); }
+        a.consent = { v: CONSENT_V, at: Date.now(), signer: C.signer.trim(), rel: minor ? C.rel : "self", minor, items: { assess: true, video: true, data: true, parentHeight: !!C.parentHeight }, sigKey, sigBytes: blob.size, assessor: state.assessor.trim() };
+        if (!C.parentHeight) { a.motherCm = null; a.motherSrc = ""; a.fatherCm = null; a.fatherSrc = ""; }
+        const back = VW.consentReturn || "setup"; VW.consent = null; VW.picked = null;
+        toast(`${IC.tick} ${t("Consent recorded", "सहमति दर्ज")}`);
+        nav(back, {}, true);
+      },
+      consentpdf: async () => {
+        const a = state.athletes.find(x => x.id === state.selectedAthleteId); if (!a || !a.consent) return;
+        let url = "";
+        try { const rec = await VDB.get(a.consent.sigKey); if (rec && rec.blob) url = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(rec.blob); }); } catch (e) { }
+        document.getElementById("print-root").innerHTML = consentPage(a, url);
+        setTimeout(() => window.print(), 80);
+      },
       dlmedia: el => downloadMedia(el.dataset.k, el.dataset.n),
       manualfromcell: () => { if (canManual(dT(TKEY[state.selectedTestKey]))) openManual(state.selectedAthleteId, state.selectedTestKey, "cell"); },
       savemanual: saveManual,
