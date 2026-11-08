@@ -508,7 +508,7 @@ body.cam .rotate{display:none!important}
       },
       {
         number: 6, key: "medicine_ball_throw",
-        nameEn: "Medicine Ball Throw", nameHi: "मेडिसिन बॉल थ्रो",
+        nameEn: "Backward Overhead Medicine Ball Throw", nameHi: "बैकवर्ड ओवरहेड मेडिसिन बॉल थ्रो",
         minSec: 5, maxSec: 30, minMB: 3, maxMB: 15,
         attempts: 3, unit: "cm", mode: "AI", isPhoto: false,
         guideEn: "Backward overhead throw. Mount the phone on a tripod to the side of the throwing lane, in landscape and far enough back to see the line, the whole flight and the landing. Lay the tape along the lane from the throw line and put a marker on it at a known distance. Tap the throw line and the marker on the ground in the video, and choose the marker distance. The athlete stands with the heels at the line and the back to the throw. Ball: 2 kg for males, 1 kg for females. The distance is read from the line to where the ball first lands, in metres and centimetres. Three attempts, best counts. The ball should land along the tape.",
@@ -1687,10 +1687,13 @@ body.cam .rotate{display:none!important}
       };
     }
 
+    // Handbook Test 9: the angle at the knees is under 90 degrees. Pose estimation from the side is good to about 10 degrees,
+    // so the limit used is 100. One constant, used by the live check, the setup check and the per-rep check.
+    const SITUP_KNEE_MAX = 100;
     // TEST 9 — SIT-UPS (Scale-free isotropic joint angles + revised KHOJ handbook, Rule 2a, 2b, 2c)
     // Enforces:
     //  - Rule 1: Lying on floor (rejects standing or upright swinging without lying flat on back <= 28°)
-    //  - Setup: Knees MUST be bent (60°–120°; the handbook says under 90°, relaxed for pose-estimation noise) with knee apex raised above the hip-ankle floor line
+    //  - Setup: Knees MUST be bent (under 90° per the handbook, 100° used for pose noise) with knee apex raised above the hip-ankle floor line
     //  - Rule 2a: Hands clasped behind neck/head
     //  - Rule 2b: Curl torso up (>= 46°) until elbows reach knees WITHOUT pushing off the floor with the elbow
     //  - Rule 2c: Return shoulder blades & elbows flat to floor (torsoDeg <= 28° and hipDeg >= 104°) before next rep counts
@@ -1724,10 +1727,10 @@ body.cam .rotate{display:none!important}
       const torsoDeg = Math.atan2(Math.max(0, hip.y - sh.y), Math.abs(sh.x - hip.x) + 1e-6) * 180 / Math.PI;
       const kneeDeg = angleDeg(hip, kn, an);
 
-      // Knee apex must rise above (smaller Y than) the hip-to-ankle floor baseline AND knee angle must be bent (≤ 120°)
+      // Knee apex must rise above (smaller Y than) the hip-to-ankle floor baseline AND knee angle must be bent (≤ SITUP_KNEE_MAX)
       const floorLineY = 0.5 * (hip.y + an.y);
       const kneeApexRiseRatio = (floorLineY - kn.y) / femur;
-      const kneeBentOk = kneeDeg <= 120 && kneeDeg >= 40 && kneeApexRiseRatio >= 0.12;
+      const kneeBentOk = kneeDeg <= SITUP_KNEE_MAX && kneeDeg >= 40 && kneeApexRiseRatio >= 0.12;
 
       const hasEl = vis(lm, s.el, 0.35);
       const elPt = hasEl ? p(s.el) : null;
@@ -1742,7 +1745,7 @@ body.cam .rotate{display:none!important}
 
       let stateText;
       if (!kneeBentOk) {
-        stateText = `🚫 ${t("FOUL: Knees Straight", "फाउल: घुटने सीधे हैं")} (${kneeDeg.toFixed(0)}° > 120°) — ${t("BEND KNEES!", "घुटने मोड़ें!")}`;
+        stateText = `🚫 ${t("FOUL: Knees Straight", "फाउल: घुटने सीधे हैं")} (${kneeDeg.toFixed(0)}° > ${SITUP_KNEE_MAX}°) — ${t("BEND KNEES!", "घुटने मोड़ें!")}`;
       } else if (isSupineFlat) {
         stateText = `✅ ${t("FLAT ON BACK", "पीठ के बल लेटे हैं")} (${torsoDeg.toFixed(0)}°) · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° ✓ — ⬆️ ${t("Curl Up!", "ऊपर उठें!")}`;
       } else if (isCurledUp) {
@@ -2262,8 +2265,8 @@ body.cam .rotate{display:none!important}
                   const minBodyPartRiseCm = Math.min(footClearanceCm, hipRiseCm, shRiseCm);
 
                   if (minBodyPartRiseCm >= 3.5 && coMRiseCm >= 3.8 && footClearanceCm >= 3.8) {
-                    // SAI Handbook Test IV: Standing Vertical Jump must be vertical on the spot (no horizontal run-up / broad jump > 45 cm)
-                    if (horizDriftCm > 45.0) {
+                    // SAI Handbook Test IV: Standing Vertical Jump must be vertical on the spot, without shuffling or approach steps (drift over 30 cm is a foul)
+                    if (horizDriftCm > 30.0) {                       // from the spot: no shuffling and no approach steps
                       horizontalRunupFoul = true;
                     } else {
                       const kinematicCm = Math.min(footClearanceCm * 1.08, coMRiseCm);
@@ -2485,7 +2488,7 @@ body.cam .rotate{display:none!important}
       // ---------------- TEST 9: SIT-UPS ----------------
       // Enforces ALL SAI Handbook Test IX Rules:
       //  - Window cutoff: 45 s for every athlete (revised KHOJ handbook, Oct 2026)
-      //  - Rule 1: Supine on floor with knees bent (<= 120°), rejects standing or upright swinging
+      //  - Rule 1: Supine on floor with knees bent (<= SITUP_KNEE_MAX), rejects standing or upright swinging
       //  - (No-resting rule removed in the revised handbook)
       //  - Rule 2a: Fingers clasped behind the neck (wristEar <= 0.85)
       //  - Rule 2b: Elbows brought forward to touch knees WITHOUT pushing off the floor with the elbow during rise
@@ -2506,16 +2509,16 @@ body.cam .rotate{display:none!important}
         const minHip = pct(hipSm, 0.05), maxHip = pct(hipSm, 0.95), hipRange = maxHip - minHip;
         const minTorso = pct(torsoSm, 0.08), maxTorso = pct(torsoSm, 0.92), torsoRange = maxTorso - minTorso;
         const medKnee = median(kneeSm);
-        const straightKneeRatio = ok.filter((f, idx) => kneeSm[idx] > 120 || f.kneeBentOk === false).length / ok.length;
+        const straightKneeRatio = ok.filter((f, idx) => kneeSm[idx] > SITUP_KNEE_MAX || f.kneeBentOk === false).length / ok.length;
 
         // 1. Check Bent Knees across the attempt
-        if (medKnee > 120 || straightKneeRatio > 0.65) {
+        if (medKnee > SITUP_KNEE_MAX || straightKneeRatio > 0.65) {
           return {
             valid: false, value: null, unit: "reps", confidence: "RED",
-            method: t(`FOUL (Setup) — Knees straight (${medKnee.toFixed(0)}° > 120°)`, `फाउल (सेटअप) — घुटने सीधे हैं (${medKnee.toFixed(0)}° > 120°)`),
+            method: t(`FOUL (Setup) — Knees straight (${medKnee.toFixed(0)}° > ${SITUP_KNEE_MAX}°)`, `फाउल (सेटअप) — घुटने सीधे हैं (${medKnee.toFixed(0)}° > ${SITUP_KNEE_MAX}°)`),
             audit: [{
               label: "Setup Foul (Knees Straight)",
-              detail: `Attempt rejected: Knees remained straight (${medKnee.toFixed(0)}° > 120° max allowed). You must bend your knees (~90°) with feet flat on the floor.`,
+              detail: `Attempt rejected: Knees remained straight (${medKnee.toFixed(0)}° > ${SITUP_KNEE_MAX}° max allowed). You must bend your knees (~90°) with feet flat on the floor.`,
               valid: false
             }]
           };
@@ -2602,7 +2605,7 @@ body.cam .rotate{display:none!important}
               const we = repFrames.map(x => x.wristEar).filter(v => v !== null);
               const repKnees = repFrames.map(x => x.kneeSm);
               const maxKneeInRep = pct(repKnees, 0.85);
-              const straightFramesInRep = repFrames.filter(x => x.kneeSm > 120 || x.kneeBentOk === false).length;
+              const straightFramesInRep = repFrames.filter(x => x.kneeSm > SITUP_KNEE_MAX || x.kneeBentOk === false).length;
               const minHipInUp = Math.min(...up.map(x => x.hipSm));
               const maxTorsoInUp = Math.max(...up.map(x => x.torsoSm));
               const minTorsoInDown = Math.min(...down.map(x => x.torsoSm));
@@ -2611,12 +2614,12 @@ body.cam .rotate{display:none!important}
                 : 0;
 
               const fouls = [];
-              // Setup: knees must stay bent (<= 120°). The no-resting rule was removed in the revised handbook.
+              // Setup: knees must stay bent (<= SITUP_KNEE_MAX). The no-resting rule was removed in the revised handbook.
               if (false && restSec > 3.0) { // 'no resting' rule removed in the revised handbook
                 fouls.push(`resting ${restSec.toFixed(1)}s between sit-ups`);
               }
-              if (maxKneeInRep > 120 || straightFramesInRep > repFrames.length * 0.30) {
-                fouls.push(`Setup: knees straight (${maxKneeInRep.toFixed(0)}° > 120°)`);
+              if (maxKneeInRep > SITUP_KNEE_MAX || straightFramesInRep > repFrames.length * 0.30) {
+                fouls.push(`Setup: knees straight (${maxKneeInRep.toFixed(0)}° > ${SITUP_KNEE_MAX}°)`);
               }
               // Rule 2a: Fingers clasped behind neck
               if (we.length && median(we) > 0.85) {
@@ -2667,7 +2670,7 @@ body.cam .rotate{display:none!important}
         }
 
         if (!audit.length || validReps === 0) {
-          const firstFoul = audit.find(a => !a.valid)?.detail || "Complete a full supine (≤28°) → curl up to knees (≥46°) → supine (≤28°) cycle with knees bent (≤120°).";
+          const firstFoul = audit.find(a => !a.valid)?.detail || "Complete a full supine (≤28°) → curl up to knees (≥46°) → supine (≤28°) cycle with knees bent (under 90°).";
           return {
             valid: false,
             value: null,
@@ -3410,7 +3413,7 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
   ${state.calib?.height?.method === "sticky150" ? `<div style="display:flex;gap:10px;align-items:center;">${state.calib.height.thumbDataUrl ? `<img src="${state.calib.height.thumbDataUrl}" alt="" style="width:58px;height:102px;object-fit:cover;border-radius:6px;flex-shrink:0;">` : ""}<div style="flex:1;"><div style="font-weight:700;color:var(--green)">${shape("G", 14)} ${t("Saved reference photo active", "सहेजी गई संदर्भ फोटो सक्रिय")}: ${esc(state.calib.height.refLabel || ((state.calib.height.markCm || 150) + " cm"))}</div><div class="small" style="margin-top:3px">${t("Reused for every height attempt and athlete until you change it.", "बदलने तक हर प्रयास और एथलीट के लिए उपयोग होगी।")}</div><div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;"><input type="file" id="inpCellRefPhoto" accept="image/*" style="display:none;"><button class="lang-btn" id="btnCellUploadRef">${t("Change reference photo", "संदर्भ फोटो बदलें")}</button><button class="lang-btn" id="btnCellClearRef" style="color:var(--red)">${t("Clear", "हटाएँ")}</button></div></div></div>`
     : `<div class="h2" style="margin-bottom:4px">${t("Wall reference photo", "दीवार संदर्भ फोटो")}</div><div class="small" style="margin-bottom:8px">${t("Upload a photo of your wall sticky note, A4 sheet or written wall mark (e.g. 150 cm) once. It stays saved for all measurements until you change it. Without it, height is an estimate.", "दीवार के स्टिकी नोट, A4 शीट या 150 cm जैसे निशान की फोटो एक बार अपलोड करें। इसके बिना ऊँचाई अनुमानित रहेगी।")}</div><input type="file" id="inpCellRefPhoto" accept="image/*" style="display:none;"><button class="btn s" id="btnCellUploadRef" style="min-height:var(--touch)">${t("Upload reference photo", "संदर्भ फोटो अपलोड करें")}</button>`}
   <div id="cellRefPhotoPanel" style="display:none;margin-top:10px;font-size:.875rem;"></div></div>` : "";
-      const histRows = hist.length ? `<div class="card"><div class="row" style="justify-content:space-between"><span class="eyebrow">${t("Attempts so far", "अब तक के प्रयास")} · ${used}/${bt.attempts}</span><button class="lang-btn" id="btnClearAttempts" style="color:var(--red);margin:0">${t("Reset", "रीसेट")}</button></div>${hist.map((x, i) => `<div class="att"><span class="k">${t("Attempt", "प्रयास")} ${i + 1}</span>${x.valid && x.value !== null ? `<span class="v">${fmtS(te, x.value)}</span>` : `${shape("R", 14)}<span class="grow"><b style="color:var(--red)">${t("Rejected", "अस्वीकृत")}</b> · ${esc(shortWhy(x))}</span>`}</div>`).join("")}</div>` : "";
+      const histRows = hist.length ? `<div class="card"><div class="row" style="justify-content:space-between"><span class="eyebrow">${t("Attempts so far", "अब तक के प्रयास")} · ${used}/${bt.attempts}</span></div>${hist.map((x, i) => `<div class="att"><span class="k">${t("Attempt", "प्रयास")} ${i + 1}</span>${x.valid && x.value !== null ? `<span class="v">${fmtS(te, x.value)}</span>` : `${shape("R", 14)}<span class="grow"><b style="color:var(--red)">${t("Rejected", "अस्वीकृत")}</b> · ${esc(shortWhy(x))}</span>`}</div>`).join("")}</div>` : "";
       return `<div class="scr">${barH(tN(te), `${esc(a.name)} · ${t("Test", "टेस्ट")} ${te.n} ${t("of", "/")} 10`, `<span class="tag ${te.m === "ai" ? "ai" : ""}" style="margin-right:12px">${te.m === "ai" ? "AI" : t("Manual", "मैन्युअल")}</span>`)}
 <main class="main" style="gap:14px">
  <div class="card stack" style="gap:6px"><span class="eyebrow">${t("SAI protocol", "SAI प्रोटोकॉल")} · ${bt.attempts} ${t("attempt(s) permitted", "प्रयास अनुमत")}</span><span class="sub">${state.lang === "hi" ? bt.guideHi : bt.guideEn}</span></div>
@@ -3421,8 +3424,6 @@ IC.dl = sv('<path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 20h14"/>', 22);
     };
     function bindCell() {
       const a = curA(), te = dT(TKEY[state.selectedTestKey]) || TESTS[0], key = cellKey(a.id, te.key);
-      const clearBtn = document.getElementById("btnClearAttempts");
-      if (clearBtn) clearBtn.onclick = () => { delete state.results[key]; render(); };
       const up = document.getElementById("btnCellUploadRef"), inp = document.getElementById("inpCellRefPhoto"), panel = document.getElementById("cellRefPhotoPanel");
       if (up && inp && panel) { up.onclick = () => inp.click(); inp.onchange = e => { const f = e.target.files?.[0]; if (f) openRefPhotoEditor(f, panel, 720, 1280, closed => { if (closed) render(); }); }; }
       const clr = document.getElementById("btnCellClearRef");
@@ -4344,7 +4345,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
             ctx.fillStyle = "#FFFFFF";
             ctx.textAlign = "center";
             ctx.font = `bold ${Math.round(fontMain * 1.05)}px -apple-system, sans-serif`;
-            ctx.fillText(`🚫 FOUL (Setup): KNEES STRAIGHT (${ev.kneeDeg.toFixed(0)}° > 120°)`, frameW / 2, by + Math.round(fontMain * 1.35));
+            ctx.fillText(`🚫 FOUL (Setup): KNEES STRAIGHT (${ev.kneeDeg.toFixed(0)}° > ${SITUP_KNEE_MAX}°)`, frameW / 2, by + Math.round(fontMain * 1.35));
             ctx.font = `bold ${Math.round(fontMain * 0.85)}px -apple-system, sans-serif`;
             ctx.fillText(t("Bend your knees (~90°) with feet flat on the floor!", "घुटनों को (~90°) मोड़ें और पैर ज़मीन पर रखें!"), frameW / 2, by + Math.round(fontMain * 2.55));
             ctx.textAlign = "left";
