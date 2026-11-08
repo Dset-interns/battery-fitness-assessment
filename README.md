@@ -97,9 +97,9 @@ against the ground plane) · 30 m sprint (finish-line crossing + audio start —
 the perpendicular full-track view needs ~23 m of lateral clearance that no
 school ground reliably has) · shuttle run · endurance lap timing.
 
-The sync service and de-identification gateway are built: see [`backend/README.md`](backend/README.md). The web app in
-`ios/iphone-pwa/` has moved well past this table (all ten tests, consent, per-attempt video, offline); this README has not
-been brought up to date yet.
+This status table describes the earlier phases. The current state is in [`docs/`](docs/README.md), starting with
+[`docs/HANDBOOK_COMPLIANCE.md`](docs/HANDBOOK_COMPLIANCE.md): the web app in `ios/iphone-pwa/` measures all ten tests under the
+revised handbook, the Android build is `app/webapp`, and the sync service and de-identification gateway are in `backend/`.
 
 ---
 
