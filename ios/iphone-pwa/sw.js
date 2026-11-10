@@ -9,8 +9,8 @@
  * Browsers only run service workers on HTTPS (or localhost) with a certificate they trust.
  * Raise CACHE when the list of files below changes.
  */
-const CACHE = "bfa-shell-v1";
-const SHELL = ["./", "index.html", "manifest.json", "sai-logo.png", "dset_logo.png"];
+const CACHE = "bfa-shell-v2";
+const SHELL = ["./", "index.html", "manifest.json", "sai-logo.png", "dset_logo.png", "apple-touch-icon.png", "a4_marker.html"];
 const VENDOR = [
   "vendor/mediapipe/vision_bundle.mjs",
   "vendor/mediapipe/wasm/vision_wasm_internal.js",

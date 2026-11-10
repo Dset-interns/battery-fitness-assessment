@@ -31,10 +31,21 @@ shuttle, endurance and ball tests never needed the models.
 
 Two things to know:
 
-- Service workers only run over HTTPS (or `localhost`) with a certificate the browser trusts. The self-signed certificate
-  from `serve_iphone.py` is fine on the Mac at `https://localhost:8443`, but a phone will refuse to register the service
-  worker with it. For offline use on a phone, host the folder on an HTTPS site with a valid certificate (with the `vendor/`
-  folder uploaded) and open it once online. The home screen shows "Works offline" only when the app and models are cached.
+- Service workers only run over HTTPS (or `localhost`) with a certificate the browser trusts. A plain self-signed
+  certificate lets the camera work after "visit this website", but the phone will not register the service worker, so
+  the app cannot work offline. Fix it once with a local certificate authority:
+
+  ```bash
+  bash ios/iphone-pwa/make_trusted_cert.sh      # re-run if the Mac's Wi-Fi address changes
+  ```
+
+  AirDrop `ios/iphone-pwa/.certs/sai_local_ca.crt` to the iPhone, install it (Settings › General › VPN & Device
+  Management), and turn it on under Settings › General › About › Certificate Trust Settings. The authority only covers
+  private network addresses and `localhost`, so it cannot vouch for any public website. Its key stays in the git-ignored
+  `.certs/` folder; do not share it. Alternatively, host the folder (with `vendor/`) on an HTTPS site with a valid
+  certificate. The home screen shows "Works offline" only when the app and models are cached.
+- A Home Screen app keeps its own storage, separate from Safari. Athletes and results entered in a Safari tab do not
+  appear in the Home Screen app, so use one or the other for a session.
 - The optional wall-photo auto-read of a written height (OCR) still downloads its engine from the internet. Without a
   connection the coach types the number instead.
 
