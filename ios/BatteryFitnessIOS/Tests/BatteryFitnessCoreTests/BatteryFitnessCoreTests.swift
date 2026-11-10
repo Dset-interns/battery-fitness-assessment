@@ -3,12 +3,58 @@ import XCTest
 
 final class BatteryFitnessCoreTests: XCTestCase {
 
-    func testAllTenBatteryTestsAndFourAIMeasured() {
+    func testAllTenBatteryTestsAndFiveAIMeasured() {
         XCTAssertEqual(BatteryTest.allCases.count, 10)
         let aiTests = BatteryTest.aiMeasured
-        XCTAssertEqual(aiTests.count, 4)
-        XCTAssertEqual(Set(aiTests), Set([.height, .sitAndReach, .verticalJump, .sitUps]))
-        XCTAssertEqual(BatteryTest.aiPlanned.count, 3)
+        XCTAssertEqual(aiTests.count, 5)
+        XCTAssertEqual(Set(aiTests), Set([.height, .sitAndReach, .verticalJump, .broadJump, .sitUps]))
+        XCTAssertEqual(BatteryTest.aiPlanned.count, 2)
+    }
+
+    /// Side-view jump at 30 fps, 1 px = 0.5 cm: lead toe 22 px ahead of the ankle, heel 12 px
+    /// behind, so toe-to-rear-heel = travel - 34 px.
+    private func broadJumpSignals(dir: Double = 1.0, travelPx: Double = 420.0, spreadPx: Double = 6.0) -> [BroadJumpSignal] {
+        var out: [BroadJumpSignal] = []
+        var t = 0.0
+        func frame(_ offset: Double, _ footY: Double) {
+            let a = 300.0 + dir * offset
+            out.append(BroadJumpSignal(
+                t: t, hipX: a, ankleX: a,
+                toeLeftX: a + dir * 22, toeRightX: a + dir * 22,
+                heelLeftX: a - dir * 12, heelRightX: a - dir * 12,
+                ankleSpreadX: spreadPx, footY: footY, kneeDeg: 170))
+            t += 1.0 / 30.0
+        }
+        for _ in 0..<20 { frame(0, 600) }
+        for i in 1...10 {
+            let u = Double(i) / 10.0
+            frame(travelPx * u, 600 - 40 * sin(Double.pi * u))
+        }
+        for _ in 0..<20 { frame(travelPx, 600) }
+        return out
+    }
+
+    func testBroadJumpMeasuresToeToRearHeelBothDirections() {
+        for dir in [1.0, -1.0] {
+            let res = BroadJumpAnalyzer.measure(signals: broadJumpSignals(dir: dir), cmPerPx: 0.5, scaleRung: 1)
+            XCTAssertTrue(res.valid)
+            XCTAssertEqual(res.distanceCm, 193.0, accuracy: 1.0)
+        }
+    }
+
+    func testBroadJumpUsesTakeoffLineAndFlagsToesOver() {
+        let behind = BroadJumpAnalyzer.measure(signals: broadJumpSignals(), cmPerPx: 0.5, takeoffLineX: 330, scaleRung: 1)
+        XCTAssertTrue(behind.valid)
+        XCTAssertEqual(behind.distanceCm, (300 + 420 - 12 - 330) * 0.5, accuracy: 1.0)
+        let over = BroadJumpAnalyzer.measure(signals: broadJumpSignals(), cmPerPx: 0.5, takeoffLineX: 310, scaleRung: 1)
+        XCTAssertFalse(over.valid)
+        XCTAssertTrue(over.foulReason.contains("take-off line"))
+    }
+
+    func testBroadJumpRejectsNoJumpOneFootAndFrontView() {
+        XCTAssertFalse(BroadJumpAnalyzer.measure(signals: broadJumpSignals(travelPx: 20), cmPerPx: 0.5, scaleRung: 1).valid)
+        XCTAssertFalse(BroadJumpAnalyzer.measure(signals: broadJumpSignals(spreadPx: 100), cmPerPx: 0.5, scaleRung: 1).valid)
+        XCTAssertFalse(BroadJumpAnalyzer.isSideProfile(shoulderWidthPx: 60, hipWidthPx: 40, torsoPx: 100))
     }
 
     func testSessionEngineOrderEquivalence() {

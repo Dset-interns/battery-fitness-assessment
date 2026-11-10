@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>A4 height marker</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    html, body { margin: 0; background: #fff; }
+    .help { font: 14px/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; max-width: 640px; margin: 16px auto; padding: 0 16px; color: #222; }
+    .sheet { width: 210mm; height: 297mm; margin: 0 auto; }
+    .sheet svg { display: block; width: 210mm; height: 297mm; }
+    @media print { .help { display: none; } .sheet { margin: 0; } }
+  </style>
+</head>
+<body>
+  <div class="help">
+    <strong>A4 height marker</strong>
+    <ol>
+      <li>Print this page on A4 paper at <strong>100% / Actual size</strong> (turn off "Fit to page", no headers or footers).</li>
+      <li>Measure the black frame with a ruler: its outer edges must be <strong>27.0 cm tall and 18.0 cm wide</strong>. If not, the printer scaled the page; print again at 100%.</li>
+      <li>Stick the sheet <strong>flat</strong> on the wall beside the athlete, upright, with no creases or shadows across the frame. Keep other dark objects at least 5 cm away from the frame.</li>
+      <li>Measure the height of the frame's <strong>top outer edge</strong> from the floor with a tape and enter it in the app.</li>
+    </ol>
+  </div>
+  <div class="sheet">
+    <!-- Units are millimetres. Outer frame 180 x 270 mm (18.0 x 27.0 cm), border 20 mm, inside white, centred on the page. -->
+    <svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297">
+      <rect x="0" y="0" width="210" height="297" fill="#fff" />
+      <rect x="15" y="13.5" width="180" height="270" fill="#000" />
+      <rect x="35" y="33.5" width="140" height="230" fill="#fff" />
+    </svg>
+  </div>
+</body>
+</html>

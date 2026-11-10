@@ -549,3 +549,281 @@ public enum SitUpAnalyzer {
         )
     }
 }
+
+// MARK: - Test 5: Standing Broad Jump Analyzer (SAI Handbook Test V)
+//
+// Handbook: stand behind a line, feet slightly apart, two-foot take-off and landing, do not
+// fall backward. Distance is taken from the take-off line to the NEAREST point of contact on
+// landing (the back of the heels). The camera sees the jump from the side, so "forward" is
+// whichever way the hips travel across the frame.
+
+/// One frame of side-view pose features. All x/y values are image pixels.
+public struct BroadJumpSignal: Sendable {
+    public let t: Double
+    public let hipX: Double
+    public let ankleX: Double
+    public let toeLeftX: Double
+    public let toeRightX: Double
+    public let heelLeftX: Double
+    public let heelRightX: Double
+    public let ankleSpreadX: Double
+    public let footY: Double
+    public let kneeDeg: Double
+
+    public init(
+        t: Double,
+        hipX: Double,
+        ankleX: Double,
+        toeLeftX: Double,
+        toeRightX: Double,
+        heelLeftX: Double,
+        heelRightX: Double,
+        ankleSpreadX: Double,
+        footY: Double,
+        kneeDeg: Double
+    ) {
+        self.t = t
+        self.hipX = hipX
+        self.ankleX = ankleX
+        self.toeLeftX = toeLeftX
+        self.toeRightX = toeRightX
+        self.heelLeftX = heelLeftX
+        self.heelRightX = heelRightX
+        self.ankleSpreadX = ankleSpreadX
+        self.footY = footY
+        self.kneeDeg = kneeDeg
+    }
+}
+
+public struct BroadJumpMeasurementResult: Equatable, Sendable {
+    public let valid: Bool
+    public let distanceCm: Double
+    public let foulReason: String
+    public let centreTravelCm: Double
+    public let liftCm: Double
+    public let minKneeDeg: Double
+    public let usedTakeoffLine: Bool
+    public let confidence: ConfidenceBand
+    public let confidenceReasons: [String]
+}
+
+public enum BroadJumpAnalyzer {
+    public static let minHorizontalTravelCm: Double = 25.0
+    public static let minHipTravelCm: Double = 20.0
+    public static let maxPreWalkCm: Double = 25.0
+    public static let maxStartSpreadCm: Double = 26.0
+    public static let maxEndSpreadCm: Double = 28.0
+    public static let maxAirSpreadCm: Double = 38.0
+    public static let minTwoFootLiftCm: Double = 2.2
+    public static let minPeakSpeedCmPerSec: Double = 55.0
+    public static let maxStepBackCm: Double = 15.0
+    public static let toeOverLineToleranceCm: Double = 2.0
+    /// Toe-to-heel should roughly match how far the body travelled; outside this the toe/heel
+    /// landmarks are probably jittering, so the result is flagged AMBER (never silently replaced).
+    public static let toeHeelVsTravelRange: ClosedRange<Double> = 0.65...1.05
+
+    // MARK: Per-frame gates (used by the pose layer before frames are recorded)
+
+    /// Rejects a front-facing athlete: a side-on camera must see narrow shoulders and hips.
+    public static func isSideProfile(shoulderWidthPx: Double, hipWidthPx: Double, torsoPx: Double) -> Bool {
+        !(shoulderWidthPx > 0.46 * torsoPx && hipWidthPx > 0.28 * torsoPx)
+    }
+
+    /// Rejects sitting/lying: the ankles must be well below the hips.
+    public static func isUpright(ankleY: Double, hipY: Double, torsoPx: Double) -> Bool {
+        (ankleY - hipY) >= 0.55 * torsoPx
+    }
+
+    // MARK: Measurement
+
+    /// - Parameters:
+    ///   - cmPerPx: image scale at the athlete's plane.
+    ///   - takeoffLineX: x of the take-off line in pixels, if known. When nil the distance is
+    ///     measured from the athlete's own lead toe (an approximation, reported as such).
+    ///   - scaleRung: calibration rung (1-2 reference in frame, 3+ estimated from body size).
+    public static func measure(
+        signals: [BroadJumpSignal],
+        cmPerPx: Double,
+        takeoffLineX: Double? = nil,
+        scaleRung: Int = 3,
+        fps: Double = 30.0,
+        detectionRate: Double = 1.0
+    ) -> BroadJumpMeasurementResult {
+        func foul(_ reason: String, travel: Double = 0.0, lift: Double = 0.0, knee: Double = 180.0) -> BroadJumpMeasurementResult {
+            BroadJumpMeasurementResult(
+                valid: false, distanceCm: 0.0, foulReason: reason,
+                centreTravelCm: travel, liftCm: lift, minKneeDeg: knee,
+                usedTakeoffLine: takeoffLineX != nil,
+                confidence: .red, confidenceReasons: [reason]
+            )
+        }
+
+        let n = signals.count
+        guard n >= 15, cmPerPx > 0 else {
+            return foul("Fewer than 15 usable pose frames or no image scale")
+        }
+
+        let hip = medianFilter3(signals.map(\.hipX))
+        let ankle = medianFilter3(signals.map(\.ankleX))
+        let foot = medianFilter3(signals.map(\.footY))
+        let spread = medianFilter3(signals.map(\.ankleSpreadX))
+        let knee = medianFilter3(signals.map(\.kneeDeg))
+        let minKnee = knee.min() ?? 180.0
+
+        // Smoothed horizontal hip speed; its peak marks the push-off/flight phase.
+        var speed = [Double](repeating: 0.0, count: n)
+        for i in 1..<n {
+            let dt = max(0.016, signals[i].t - signals[i - 1].t)
+            speed[i] = abs(hip[i] - hip[i - 1]) * cmPerPx / dt
+        }
+        let speedSm: [Double] = (0..<n).map { i in
+            let lo = max(0, i - 1), hi = min(n - 1, i + 1)
+            return speed[lo...hi].reduce(0.0, +) / Double(hi - lo + 1)
+        }
+        var peakIdx = 1
+        var peakSpeed = 0.0
+        for i in 1..<n where speedSm[i] > peakSpeed {
+            peakSpeed = speedSm[i]
+            peakIdx = i
+        }
+        let speedThr = max(35.0, peakSpeed * 0.25)
+        var take = peakIdx
+        while take > 1 && speedSm[take - 1] >= speedThr { take -= 1 }
+        var land = peakIdx
+        while land < n - 2 && speedSm[land + 1] >= speedThr { land += 1 }
+
+        let preStart = max(0, take - 12)
+        let preEnd = max(preStart + 2, take)
+        let postStart = min(n - 2, land + 1)
+        let postEnd = min(n, land + 13)
+        guard preEnd <= n, postEnd - postStart >= 2 else {
+            return foul("Not enough frames before take-off or after landing")
+        }
+
+        let dir: Double = (median(Array(hip[postStart..<postEnd])) - median(Array(hip[preStart..<preEnd]))) >= 0 ? 1.0 : -1.0
+
+        let startAnkle = median(Array(ankle[preStart..<preEnd]))
+        let endAnkle = median(Array(ankle[postStart..<postEnd]))
+        let ankleTravelCm = abs(endAnkle - startAnkle) * cmPerPx
+        let hipTravelCm = abs(median(Array(hip[postStart..<postEnd])) - median(Array(hip[preStart..<preEnd]))) * cmPerPx
+        let centreTravelCm = 0.60 * ankleTravelCm + 0.40 * hipTravelCm
+
+        if max(ankleTravelCm, hipTravelCm) < minHorizontalTravelCm || hipTravelCm < minHipTravelCm {
+            return foul(String(format: "No horizontal jump (%.1f cm < %.0f cm)", max(ankleTravelCm, hipTravelCm), minHorizontalTravelCm),
+                        travel: centreTravelCm, knee: minKnee)
+        }
+
+        // Must start stationary behind the line: no walk-up or run-up.
+        if preStart >= 4 {
+            let initialAnkle = median(Array(ankle[0..<min(5, preStart)]))
+            let preWalkCm = (startAnkle - initialAnkle) * dir * cmPerPx
+            if preWalkCm > maxPreWalkCm {
+                return foul(String(format: "Preliminary walk-up before take-off (%.0f cm)", preWalkCm),
+                            travel: centreTravelCm, knee: minKnee)
+            }
+        }
+
+        // Two-foot take-off and landing.
+        let startSpreadCm = median(Array(spread[preStart..<preEnd])) * cmPerPx
+        let endSpreadCm = median(Array(spread[postStart..<postEnd])) * cmPerPx
+        let airSlice = Array(spread[take...max(take, land)])
+        let maxSpreadCm = percentile(airSlice, 0.90) * cmPerPx
+        let baselineFootY = max(median(Array(foot[preStart..<preEnd])), median(Array(foot[postStart..<postEnd])))
+        let minFootY = foot[max(0, take - 2)..<min(n, land + 3)].min() ?? baselineFootY
+        let liftCm = max(0.0, (baselineFootY - minFootY) * cmPerPx)
+        if (maxSpreadCm > maxAirSpreadCm && liftCm < minTwoFootLiftCm)
+            || startSpreadCm > maxStartSpreadCm
+            || endSpreadCm > maxEndSpreadCm
+            || peakSpeed < minPeakSpeedCmPerSec {
+            return foul(String(format: "Not a two-foot jump (foot separation %.0f cm, lift %.1f cm)",
+                               max(startSpreadCm, endSpreadCm, maxSpreadCm), liftCm),
+                        travel: centreTravelCm, lift: liftCm, knee: minKnee)
+        }
+
+        // Handbook: landing "without falling backward".
+        if postEnd < n - 2 {
+            let rearAfterLanding = dir > 0
+                ? (ankle[postStart...].min() ?? endAnkle)
+                : (ankle[postStart...].max() ?? endAnkle)
+            let stepBackCm = (endAnkle - rearAfterLanding) * dir * cmPerPx
+            if stepBackCm > maxStepBackCm {
+                return foul(String(format: "Stepped or fell backward after landing (%.0f cm)", stepBackCm),
+                            travel: centreTravelCm, lift: liftCm, knee: minKnee)
+            }
+        }
+
+        // Lead toe at take-off, and the rear-most heel on landing ("back of the heels").
+        let toes = (preStart..<preEnd).map { i -> Double in
+            dir > 0 ? max(signals[i].toeLeftX, signals[i].toeRightX) : min(signals[i].toeLeftX, signals[i].toeRightX)
+        }
+        let heels = (postStart..<postEnd).map { i -> Double in
+            dir > 0 ? min(signals[i].heelLeftX, signals[i].heelRightX) : max(signals[i].heelLeftX, signals[i].heelRightX)
+        }
+        let startLeadToe = median(toes)
+        let landRearHeel = median(heels)
+
+        var reasons: [String] = []
+        let origin: Double
+        if let line = takeoffLineX {
+            let toesOverCm = (startLeadToe - line) * dir * cmPerPx
+            if toesOverCm > toeOverLineToleranceCm {
+                return foul(String(format: "Toes over the take-off line by %.1f cm", toesOverCm),
+                            travel: centreTravelCm, lift: liftCm, knee: minKnee)
+            }
+            origin = line
+        } else {
+            origin = startLeadToe
+            reasons.append("No take-off line marked: measured from the athlete's own lead toe")
+        }
+        let distanceCm = max(0.0, (landRearHeel - origin) * dir * cmPerPx)
+
+        let baseBand = ConfidenceEvaluators.bandFromSignals(detectionRate: detectionRate, fps: fps)
+        var band = baseBand.0
+        reasons.append(contentsOf: baseBand.1)
+        if scaleRung >= 3 && band == .green {
+            band = .amber
+            reasons.append("Scale estimated from body size (Rung \(scaleRung)), not a reference in frame")
+        }
+        if takeoffLineX == nil {
+            if band == .green { band = .amber }
+            if centreTravelCm > 0 && !toeHeelVsTravelRange.contains(distanceCm / centreTravelCm) {
+                reasons.append("Toe/heel landmarks disagree with body travel (landmark jitter likely)")
+            }
+        }
+
+        return BroadJumpMeasurementResult(
+            valid: true,
+            distanceCm: (distanceCm * 10.0).rounded() / 10.0,
+            foulReason: "",
+            centreTravelCm: (centreTravelCm * 10.0).rounded() / 10.0,
+            liftCm: (liftCm * 10.0).rounded() / 10.0,
+            minKneeDeg: (minKnee * 10.0).rounded() / 10.0,
+            usedTakeoffLine: takeoffLineX != nil,
+            confidence: band,
+            confidenceReasons: reasons
+        )
+    }
+
+    // MARK: Small numeric helpers
+
+    private static func median(_ a: [Double]) -> Double {
+        guard !a.isEmpty else { return .nan }
+        let s = a.sorted()
+        let m = s.count / 2
+        return s.count % 2 == 1 ? s[m] : (s[m - 1] + s[m]) / 2.0
+    }
+
+    private static func percentile(_ a: [Double], _ p: Double) -> Double {
+        guard !a.isEmpty else { return 0.0 }
+        let s = a.sorted()
+        let idx = min(s.count - 1, max(0, Int((p * Double(s.count - 1)).rounded())))
+        return s[idx]
+    }
+
+    private static func medianFilter3(_ a: [Double]) -> [Double] {
+        guard a.count > 2 else { return a }
+        return a.indices.map { i in
+            median(Array(a[max(0, i - 1)...min(a.count - 1, i + 1)]))
+        }
+    }
+}

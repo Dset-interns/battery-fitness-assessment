@@ -548,6 +548,83 @@ body.cam .rotate{display:none!important}
       }
     ];
 
+    // Handbook attempt rules. `pick` = how the final score is chosen from the attempts:
+    //   max (cm, reps: higher is better), min (seconds: lower is better), last (re-measurement replaces the old reading).
+    // `unlimited` = the app lets the assessor re-measure (Concept Note 5.1: "allow re-measurement").
+    // `extra` = the one extra attempt the Handbook allows, which only the assessor can grant.
+    const ATTEMPT_RULES = {
+      height: { pick: "last", unlimited: true },
+      weight: { pick: "last", unlimited: true },
+      sit_and_reach: { pick: "max" },
+      vertical_jump: { pick: "max" },
+      broad_jump: { pick: "max" },
+      medicine_ball_throw: { pick: "max", extra: {
+        en: "Grant a 3rd attempt (valid reason: fault or interruption)",
+        hi: "तीसरा प्रयास दें (वैध कारण: त्रुटि या रुकावट)" } },
+      sprint_30m: { pick: "min" },
+      shuttle_run: { pick: "min" },
+      sit_ups: { pick: "max", extra: {
+        en: "Grant a retry (athlete did not get a fair opportunity)",
+        hi: "दोबारा प्रयास दें (एथलीट को उचित अवसर नहीं मिला)" } },
+      endurance_run: { pick: "min" }
+    };
+
+    // Does this attempt use up one of the athlete's attempts?
+    //  - a valid result: yes
+    //  - a rule foul (athlete performed it and broke a Handbook rule): yes
+    //  - a capture failure or "nothing happened" (not in frame, no pose, no jump seen): no, free retake
+    function attemptCounts(a) {
+      if (!a) return false;
+      return !!a.valid || a.rejectKind === "foul";
+    }
+    function countedAttempts(history) {
+      return (history || []).filter(attemptCounts).length;
+    }
+    function extraGranted(cellKeyStr) {
+      return !!(state.extraAttempts && state.extraAttempts[cellKeyStr]);
+    }
+    function allowedAttempts(test, cellKeyStr) {
+      return test.attempts + (extraGranted(cellKeyStr) ? 1 : 0);
+    }
+    function isExhausted(test, history, cellKeyStr) {
+      if (ATTEMPT_RULES[test.key]?.unlimited) return false;
+      return countedAttempts(history) >= allowedAttempts(test, cellKeyStr);
+    }
+    // The score of record for a test, chosen from all valid attempts per the rule above.
+    function pickBest(test, history) {
+      const valid = (history || []).filter(a => a && a.valid && a.value !== null);
+      if (!valid.length) return null;
+      const pick = ATTEMPT_RULES[test.key]?.pick || "max";
+      if (pick === "last") return valid[valid.length - 1];
+      if (pick === "min") return valid.reduce((b, c) => (c.value < b.value ? c : b), valid[0]);
+      return valid.reduce((b, c) => (c.value > b.value ? c : b), valid[0]);
+    }
+
+    // SAI ruling C39: manual entry only for Height and Weight; never for Sit-Ups or the Shuttle Run, nor for the
+    // other camera-measured tests. Medicine Ball, 30 m and Endurance keep it until their AI measurement exists.
+    function manualAllowed(test) {
+      if (test.key === "height" || test.key === "weight") return true;
+      if (test.key === "shuttle_run" || test.key === "sit_ups") return false;
+      return test.mode !== "AI";
+    }
+
+    // Fixes a typing mistake in the LAST manually entered value. It is not a new attempt (the athlete did not perform
+    // again), and the original value is kept in the history so the record stays auditable.
+    // Returns the new history, or null when there is nothing to correct.
+    function correctLastEntry(history, newValue, now) {
+      const idx = (history || []).length - 1;
+      const last = history && history[idx];
+      if (!last || !last.valid || last.audit?.[0]?.label !== "Manual") return null;
+      if (!Number.isFinite(newValue) || newValue === last.value) return null;
+      const corrected = {
+        ...last,
+        value: newValue,
+        corrections: [...(last.corrections || []), { from: last.value, to: newValue, at: now }],
+        audit: [{ label: "Manual", detail: `Assessor entered ${newValue} ${last.unit} (corrected from ${last.value})`, valid: true }]
+      };
+      return [...history.slice(0, idx), corrected];
+    }
+
     const saved = JSON.parse(localStorage.getItem("sai_ios_state_v5") || "null");
     const state = saved || {
       lang: "en",
@@ -630,6 +707,9 @@ body.cam .rotate{display:none!important}
     let deviceTilt = null;
     let tiltListenerOn = false;
 
+    // Shown on the home screen and in the Height audit line so it is obvious which code the phone is running
+    // (an already-open Safari tab keeps running the old JavaScript until it is reloaded).
+    const BUILD_ID = "2026-11-10 ios-testing-merge";
     const MP_VERSION = "0.10.14";
     const POSE_MODEL_FULL_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
     const POSE_MODEL_LITE_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
@@ -678,7 +758,7 @@ body.cam .rotate{display:none!important}
         }
         window.addEventListener("deviceorientation", (e) => {
           if (e.beta == null || e.gamma == null) return;
-          deviceTilt = { beta: e.beta, gamma: e.gamma, at: performance.now() };
+          deviceTilt = { alpha: e.alpha, beta: e.beta, gamma: e.gamma, at: performance.now() };
         });
         tiltListenerOn = true;
         return true;
@@ -695,6 +775,24 @@ body.cam .rotate{display:none!important}
       const roll = deviceTilt.gamma;
       const ok = Math.abs(pitch) <= 8 && Math.abs(roll) <= 8;
       return { known: true, ok, pitch, roll, text: `${t("Tilt", "झुकाव")} ${pitch.toFixed(1)}°` };
+    }
+
+    // Camera pitch in degrees (up = +) from the tilt sensor, or null when it is unavailable/stale.
+    // Used to correct for the phone being tilted differently from when the wall mark was set.
+    function currentPitchDeg() {
+      const l = phoneLevel();
+      return l.known ? l.pitch : null;
+    }
+
+    // Pitch, roll and heading (yaw) of the phone, or null when the tilt sensor is unavailable/stale.
+    // Used to notice that the phone has been moved or turned since a wall mark was locked.
+    function currentOrientation() {
+      const l = phoneLevel();
+      if (!l.known) return null;
+      return { pitch: l.pitch, roll: l.roll, yaw: (deviceTilt && deviceTilt.alpha != null) ? deviceTilt.alpha : null };
+    }
+    function yawDiffDeg(a, b) {
+      return Math.abs(((a - b + 540) % 360) - 180);
     }
 
     function P(lm, i, W, H) {
@@ -827,10 +925,28 @@ body.cam .rotate{display:none!important}
     // has NOT yet run Test 1 (Height) and has NOT tapped a ruler in frame.
     // (Test 1 Height itself NEVER uses this — it measures purely from camera pixels!)
     function getAthleteRefHeightCm(athlete) {
-      const recorded = athlete ? state.results[cellKey(athlete.id, "height")]?.value : null;
-      if (recorded && recorded > 80) return recorded;
+      return refHeightInfo(athlete).cm;
+    }
+
+    // Which height scaled this test, for the audit line: the athlete's Test 1 result, or the age table.
+    function refHeightNote(athlete) {
+      const r = refHeightInfo(athlete);
+      return r.fromTest1
+        ? `scale from Height ${r.cm.toFixed(1)} cm (Test 1)`
+        : `scale from age-table height ${r.cm} cm (Height not measured yet)`;
+    }
+
+    function refHeightInfo(athlete) {
+      const res = athlete ? state.results[cellKey(athlete.id, "height")] : null;
+      // A saved height outside 90–220 cm is a bad reading and would scale every other test wrongly
+      if (res && res.valid !== false && res.value >= 90 && res.value <= 220) return { cm: res.value, fromTest1: true };
+      return { cm: ageTableHeightCm(athlete), fromTest1: false };
+    }
+
+    function ageTableHeightCm(athlete) {
       const age = Number(athlete?.age) || 16;
-      const isMale = (athlete?.gender || "").toLowerCase() === "male";
+      // Athletes are saved with gender "M" / "F"
+      const isMale = /^m/i.test(athlete?.gender || "");
       if (age <= 6) return isMale ? 115 : 114;
       if (age <= 8) return isMale ? 126 : 125;
       if (age <= 10) return isMale ? 137 : 137;
@@ -919,8 +1035,11 @@ body.cam .rotate{display:none!important}
     if (state.calib && state.calib.height && state.calib.height.method === "sticky150" && !state.calib.height.lockedFromLiveTap) {
       state.calib.height.lockedFromPhoto = true;
     }
+    // A saved wall-mark position is NOT trusted on load: the phone may have moved since it was set.
+    // It becomes usable only after the camera sees the mark live (liveSeenAt) or the user taps it this session.
+    let _tapConfirmed = false;
     let _autoStickyCalib = (state.calib && state.calib.height && state.calib.height.method === "sticky150" && state.calib.height.topY > 0)
-      ? { ...state.calib.height, liveDetected: true }
+      ? { ...state.calib.height, liveDetected: false }
       : null;
     let _tesseractPromise = null;
 
@@ -976,6 +1095,7 @@ body.cam .rotate{display:none!important}
         return {
           ...uploadedCalib,
           liveDetected: true,
+          confirmedThisSession: _tapConfirmed,
           topY: uploadedCalib.topY * sy,
           botY: (uploadedCalib.botY || (uploadedCalib.topY + (uploadedCalib.noteH || H * 0.04))) * sy,
           leftX: (uploadedCalib.leftX || W * 0.44) * sx,
@@ -1038,9 +1158,15 @@ body.cam .rotate{display:none!important}
           const noteH = Math.max(H * 0.018, botY - topY), noteW = Math.max(W * 0.022, rightX - leftX);
           if (noteH >= H * 0.015 && noteH <= H * 0.22 && noteW >= W * 0.02 && noteW <= W * 0.30) {
             const cx = Math.round(xm), cy = Math.round(ym);
+            // If a reference position was saved and the live note is somewhere else, either the phone moved or this
+            // blob is not the note. Do not guess which: flag it so the height test blocks until the mark is re-set.
+            const savedTopY = (uploadedCalib && uploadedCalib.topY > 0) ? uploadedCalib.topY * (H / (uploadedCalib.frameH || H)) : null;
             return {
               ...(uploadedCalib || {}),
               liveDetected: true,
+              liveSeenAt: performance.now(),
+              pitchAtSeen: currentPitchDeg(),
+              refMismatch: savedTopY !== null && Math.abs(topY - savedTopY) > 0.03 * H,
               topY, botY: topY + noteH, leftX, rightX: leftX + noteW, noteH, noteW,
               cxNorm: cx / SW, cyNorm: cy / SH,
               noteHNorm: noteH / H, noteWNorm: noteW / W,
@@ -1061,7 +1187,7 @@ body.cam .rotate{display:none!important}
         const sx = W / (uploadedCalib.frameW || W);
         return {
           ...uploadedCalib,
-          liveDetected: true,
+          liveDetected: false, // saved position only; not seen in this video (see liveSeenAt)
           topY: uploadedCalib.topY * sy,
           botY: (uploadedCalib.botY || (uploadedCalib.topY + (uploadedCalib.noteH || H * 0.08))) * sy,
           leftX: (uploadedCalib.leftX || W * 0.44) * sx,
@@ -1141,7 +1267,11 @@ body.cam .rotate{display:none!important}
           const rightX = (pct(gxPts, 0.96) / SW) * W;
           const noteH = Math.max(H * 0.03, botY - topY);
           const noteW = Math.max(W * 0.04, rightX - leftX);
+          const savedTopY3 = (uploadedCalib && uploadedCalib.topY > 0) ? uploadedCalib.topY * (H / (uploadedCalib.frameH || H)) : null;
           return {
+            liveSeenAt: performance.now(),
+            pitchAtSeen: currentPitchDeg(),
+            refMismatch: savedTopY3 !== null && Math.abs(topY - savedTopY3) > 0.03 * H,
             topY, botY: topY + noteH, leftX, rightX: leftX + noteW, noteH, noteW,
             cxNorm: bestCx / SW, cyNorm: bestCy / SH,
             noteHNorm: noteH / H, noteWNorm: noteW / W,
@@ -1192,7 +1322,306 @@ body.cam .rotate{display:none!important}
       return null;
     }
 
+    // =========================================================================
+    // Printed A4 marker (a4_marker.html): a thick black frame whose OUTER size is exactly 27.0 x 18.0 cm.
+    // It gives the image scale directly (cm per pixel at the wall) AND the height anchor (its top edge is at a height
+    // the assessor enters), so no camera distance has to be typed in.
+    // =========================================================================
+    // Sizes of the marker sheet in cm. The defaults are the printed a4_marker.html; a hand-made sheet can differ, so the
+    // assessor enters the real measurements (state.a4Dims). The scale comes from the WHITE part, so measure it exactly.
+    const A4_MARKER_DEFAULT = { longCm: 27.0, shortCm: 18.0, innerLongCm: 23.0, innerShortCm: 14.0 };
+    function a4Dims() {
+      const d = (state && state.a4Dims) || {};
+      const num = (v, fallback) => (Number.isFinite(v) && v > 0 ? v : fallback);
+      const longCm = num(d.longCm, A4_MARKER_DEFAULT.longCm), shortCm = num(d.shortCm, A4_MARKER_DEFAULT.shortCm);
+      const innerLongCm = num(d.innerLongCm, A4_MARKER_DEFAULT.innerLongCm), innerShortCm = num(d.innerShortCm, A4_MARKER_DEFAULT.innerShortCm);
+      // the ring can have a different thickness along the long and the short side
+      return { longCm, shortCm, innerLongCm, innerShortCm,
+        ringLongCm: Math.max(0.3, (longCm - innerLongCm) / 2), ringShortCm: Math.max(0.3, (shortCm - innerShortCm) / 2) };
+    }
+    let _a4Canvas = null, _a4Ctx = null, _a4Frame = 0, _a4Last = null;
+    let _a4Why = "";   // why the last look for the marker failed (shown to the user)
+
+    // The marker is found by its WHITE INSIDE: a solid bright 14 x 23 cm rectangle fully enclosed by the 2 cm black ring.
+    // That works on any wall colour (the ring separates it from everything else), unlike looking for the black frame itself,
+    // which merges with a dark wall once the thin white paper margin is blurred.
+    // gray: Uint8 brightness (w*h). excl: optional Uint8 (1 = ignore this pixel, e.g. the athlete).
+    // Returns the marker's OUTER edges in these pixels, or null. Pure function (no DOM), so it can be tested.
+    function findA4MarkerInGray(gray, w, h, excl) {
+      const BRIGHT = 128;
+      _a4Why = "no white 14 x 23 cm block with the right proportions in view. Check: the sheet is upright and flat, it is within about 3.5 m, and the ring is SOLID BLACK (a light, grey or shiny ring merges with the white)";
+      const n = w * h;
+      const lab = new Uint8Array(n);
+      const stack = new Int32Array(n);
+      const isBright = (q) => gray[q] >= BRIGHT && !(excl && excl[q]);
+      let best = null;
+      for (let i = 0; i < n; i++) {
+        if (lab[i] || !isBright(i)) continue;
+        let sp = 0, cnt = 0, minX = w, maxX = 0, minY = h, maxY = 0;
+        stack[sp++] = i; lab[i] = 1;
+        while (sp) {
+          const p = stack[--sp];
+          const x = p % w, y = (p / w) | 0;
+          cnt++;
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+          if (x > 0 && !lab[p - 1] && isBright(p - 1)) { lab[p - 1] = 1; stack[sp++] = p - 1; }
+          if (x < w - 1 && !lab[p + 1] && isBright(p + 1)) { lab[p + 1] = 1; stack[sp++] = p + 1; }
+          if (y > 0 && !lab[p - w] && isBright(p - w)) { lab[p - w] = 1; stack[sp++] = p - w; }
+          if (y < h - 1 && !lab[p + w] && isBright(p + w)) { lab[p + w] = 1; stack[sp++] = p + w; }
+        }
+        const cand = a4Candidate(gray, w, h, minX, minY, maxX, maxY, cnt);
+        if (cand && (!best || cand.outerLong > best.outerLong)) best = cand;
+      }
+      if (best) _a4Why = "";
+      return best;
+    }
+
+    // Is this bright blob the marker's white inside? Checks proportions, solidity and the black ring around it, measures the
+    // white rectangle's edges to sub-pixel accuracy, then expands by the known 2 cm ring to get the outer frame.
+    function a4Candidate(gray, w, h, minX, minY, maxX, maxY, cnt) {
+      const bw = maxX - minX + 1, bh = maxY - minY + 1;
+      const long = Math.max(bw, bh), short = Math.min(bw, bh);
+      if (short < 10 || long > 0.8 * h) return null;
+      const D = a4Dims();
+      const want = D.innerLongCm / D.innerShortCm;
+      if (Math.abs(long / short - want) / want > 0.12) return null;
+      if (cnt / (bw * bh) < 0.9) return null;                    // must be a solid white rectangle
+      const portrait = bh >= bw;
+      const innerVcm = portrait ? D.innerLongCm : D.innerShortCm;
+      const innerHcm = portrait ? D.innerShortCm : D.innerLongCm;
+      const outerVcm = portrait ? D.longCm : D.shortCm;
+      const outerHcm = portrait ? D.shortCm : D.longCm;
+      const ringVcm = portrait ? D.ringLongCm : D.ringShortCm;     // ring thickness (cm) above/below the white part
+      const ringHcm = portrait ? D.ringShortCm : D.ringLongCm;     // ring thickness (cm) left/right of the white part
+      const bt = (ringHcm / innerHcm) * bw;                        // ring thickness in px (horizontal)
+      const bv = (ringVcm / innerVcm) * bh;                        // ring thickness in px (vertical)
+      const px = (x, y) => gray[Math.min(h - 1, Math.max(0, Math.floor(y + 0.5))) * w + Math.min(w - 1, Math.max(0, Math.floor(x + 0.5)))];
+      // Sub-pixel edges of the white rectangle: walk from inside outwards and find where brightness crosses halfway.
+      const scan = (x, y, dx, dy, steps) => {
+        const at = (k) => px(x + dx * k, y + dy * k);
+        const bright = at(0), dark = at(steps);
+        if (bright - dark < 60) return null;
+        const thr = (bright + dark) / 2;
+        for (let k = 1; k <= steps; k++) {
+          const g1 = at(k - 1), g2 = at(k);
+          if (g1 > thr && g2 <= thr) return k - 1 + (g1 - thr) / (g1 - g2);
+        }
+        return null;
+      };
+      const med = (a) => { const s = [...a].sort((p, q) => p - q); return s[s.length >> 1]; };
+      const top = [], bot = [], left = [], right = [];
+      const stepsV = 3 + Math.round(0.6 * bv), stepsH = 3 + Math.round(0.6 * bt);
+      for (let k = 0; k < 24; k++) {
+        const x = minX + bw * (0.25 + 0.5 * k / 23), y = minY + bh * (0.25 + 0.5 * k / 23);
+        const tv = scan(x, minY + 3, 0, -1, stepsV); if (tv !== null) top.push(minY + 3 - tv);
+        const bv2 = scan(x, maxY - 3, 0, 1, stepsV); if (bv2 !== null) bot.push(maxY - 3 + bv2);
+        const lv = scan(minX + 3, y, -1, 0, stepsH); if (lv !== null) left.push(minX + 3 - lv);
+        const rv = scan(maxX - 3, y, 1, 0, stepsH); if (rv !== null) right.push(maxX - 3 + rv);
+      }
+      if ([top, bot, left, right].some((e) => e.length < 14)) {
+        _a4Why = "white block seen, but the edge between it and the ring is too faint: the ring is not clearly black or the picture is blurred";
+        return null;
+      }
+      // +0.5: the crossings above are in pixel-index space; the pose landmarks use pixel-edge coordinates (0..H)
+      const iTop = med(top) + 0.5, iBot = med(bot) + 0.5, iLeft = med(left) + 0.5, iRight = med(right) + 0.5;
+      const innerHpx = iBot - iTop, innerWpx = iRight - iLeft;
+      if (innerHpx <= 0 || innerWpx <= 0) return null;
+      const skew = (innerVcm / innerHpx) / (innerHcm / innerWpx);   // 1.0 when the marker is seen square-on
+      if (skew < 0.9 || skew > 1.1) {                               // viewed at an angle: the scale would be wrong
+        _a4Why = "white block seen, but the sheet is viewed at an angle (width/height ratio off by " + Math.round(Math.abs(skew - 1) * 100) + "%): face the camera at the sheet";
+        return null;
+      }
+      // outer frame = white rectangle grown by the known 2 cm ring (in px, using this marker's own scale)
+      const ringV = innerHpx * (ringVcm / innerVcm), ringH = innerWpx * (ringHcm / innerHcm);
+      const topY = iTop - ringV, botY = iBot + ringV, leftX = iLeft - ringH, rightX = iRight + ringH;
+      // The black ring must really surround the white rectangle: sample its middle band, placed from the measured edges
+      // (pixel-edge coordinates, so floor() picks the pixel), and require it to be dark on all four sides.
+      const ringMean = (x0, y0, x1, y1) => {
+        if (x1 <= x0 || y1 <= y0) return null;
+        let acc = 0;
+        for (let a = 0; a < 12; a++) for (let b = 0; b < 12; b++) {
+          const xx = x0 + (x1 - x0) * a / 11, yy = y0 + (y1 - y0) * b / 11;
+          acc += gray[Math.min(h - 1, Math.max(0, Math.floor(yy))) * w + Math.min(w - 1, Math.max(0, Math.floor(xx)))];
+        }
+        return acc / 144;
+      };
+      const ringMeans = [
+        ringMean(iLeft - 0.8 * ringH, iTop, iLeft - 0.35 * ringH, iBot),
+        ringMean(iRight + 0.35 * ringH, iTop, iRight + 0.8 * ringH, iBot),
+        ringMean(iLeft, iTop - 0.8 * ringV, iRight, iTop - 0.35 * ringV),
+        ringMean(iLeft, iBot + 0.35 * ringV, iRight, iBot + 0.8 * ringV)
+      ];
+      if (ringMeans.some((m) => m === null || m > 110)) {
+        const worst = Math.max(...ringMeans.filter((m) => m !== null));
+        _a4Why = "white block seen, but the ring around it is too light (brightness " + Math.round(worst) + " of 255, needs under 110): colour it blacker";
+        return null;
+      }
+      const outerH = botY - topY, outerW = rightX - leftX;
+      return { topY, botY, leftX, rightX, outerH, outerW, vCm: outerVcm, hCm: outerHcm, portrait, skew, outerLong: Math.max(outerH, outerW) };
+    }
+
+    // =========================================================================
+    // Plain white A4 sheet (no black frame): found by colour. Paper is bright in ALL three channels (min of R,G,B is high),
+    // while a yellow / coloured / dark wall is not, so the sheet stands out even where its brightness is similar to the wall.
+    // It fails on a white or cream wall, where paper and wall look alike; the framed marker is for those walls.
+    // The scale comes from the paper's size: 29.7 x 21.0 cm.
+    // =========================================================================
+    const A4_PAPER = { longCm: 29.7, shortCm: 21.0 };
+
+    // white: Uint8 = min(R,G,B) per pixel (w*h). excl: optional Uint8 (1 = ignore, e.g. the athlete).
+    // Returns the sheet's edges in these pixels, or null. Pure function (no DOM), so it can be tested.
+    function findPlainA4InWhite(white, w, h, excl) {
+      const n = w * h;
+      for (const T of [190, 150]) {
+        const lab = new Uint8Array(n);
+        const stack = new Int32Array(n);
+        const on = (q) => white[q] >= T && !(excl && excl[q]);
+        let best = null;
+        for (let i = 0; i < n; i++) {
+          if (lab[i] || !on(i)) continue;
+          let sp = 0, cnt = 0, minX = w, maxX = 0, minY = h, maxY = 0;
+          stack[sp++] = i; lab[i] = 1;
+          while (sp) {
+            const p = stack[--sp];
+            const x = p % w, y = (p / w) | 0;
+            cnt++;
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+            if (x > 0 && !lab[p - 1] && on(p - 1)) { lab[p - 1] = 1; stack[sp++] = p - 1; }
+            if (x < w - 1 && !lab[p + 1] && on(p + 1)) { lab[p + 1] = 1; stack[sp++] = p + 1; }
+            if (y > 0 && !lab[p - w] && on(p - w)) { lab[p - w] = 1; stack[sp++] = p - w; }
+            if (y < h - 1 && !lab[p + w] && on(p + w)) { lab[p + w] = 1; stack[sp++] = p + w; }
+          }
+          const cand = plainA4Candidate(white, w, h, minX, minY, maxX, maxY, cnt);
+          if (cand && (!best || cand.outerLong > best.outerLong)) best = cand;
+        }
+        if (best) return best;
+      }
+      return null;
+    }
+
+    function plainA4Candidate(white, w, h, minX, minY, maxX, maxY, cnt) {
+      const bw = maxX - minX + 1, bh = maxY - minY + 1;
+      const long = Math.max(bw, bh), short = Math.min(bw, bh);
+      if (short < 14 || long > 0.9 * h) return null;
+      const want = A4_PAPER.longCm / A4_PAPER.shortCm;
+      if (Math.abs(long / short - want) / want > 0.07) return null;     // A-series proportions (1 : 1.414)
+      if (cnt / (bw * bh) < 0.88) return null;                          // a solid sheet, not a ragged shape
+      const portrait = bh >= bw;
+      const vCm = portrait ? A4_PAPER.longCm : A4_PAPER.shortCm;
+      const hCm = portrait ? A4_PAPER.shortCm : A4_PAPER.longCm;
+      const px = (x, y) => white[Math.min(h - 1, Math.max(0, Math.floor(y + 0.5))) * w + Math.min(w - 1, Math.max(0, Math.floor(x + 0.5)))];
+      // sub-pixel edge: walk from inside the sheet outwards; the wall beside it must be clearly less white than the paper
+      const scan = (x, y, dx, dy, steps) => {
+        const at = (k) => px(x + dx * k, y + dy * k);
+        const bright = at(0), dark = at(steps);
+        if (bright - dark < 45) return null;
+        const thr = (bright + dark) / 2;
+        for (let k = 1; k <= steps; k++) {
+          const g1 = at(k - 1), g2 = at(k);
+          if (g1 > thr && g2 <= thr) return k - 1 + (g1 - thr) / (g1 - g2);
+        }
+        return null;
+      };
+      const med = (a) => { const t = [...a].sort((p, q) => p - q); return t[t.length >> 1]; };
+      const top = [], bot = [], left = [], right = [];
+      const steps = 13;
+      for (let k = 0; k < 24; k++) {
+        const x = minX + bw * (0.25 + 0.5 * k / 23), y = minY + bh * (0.25 + 0.5 * k / 23);
+        const tv = scan(x, minY + 3, 0, -1, steps); if (tv !== null) top.push(minY + 3 - tv);
+        const bv = scan(x, maxY - 3, 0, 1, steps); if (bv !== null) bot.push(maxY - 3 + bv);
+        const lv = scan(minX + 3, y, -1, 0, steps); if (lv !== null) left.push(minX + 3 - lv);
+        const rv = scan(maxX - 3, y, 1, 0, steps); if (rv !== null) right.push(maxX - 3 + rv);
+      }
+      if ([top, bot, left, right].some((e) => e.length < 14)) return null;   // no clear edge: wall too similar to the paper
+      // +0.5: pixel-index space -> pixel-edge coordinates (as used by the pose landmarks)
+      const topY = med(top) + 0.5, botY = med(bot) + 0.5, leftX = med(left) + 0.5, rightX = med(right) + 0.5;
+      const outerH = botY - topY, outerW = rightX - leftX;
+      if (outerH <= 0 || outerW <= 0) return null;
+      const skew = (vCm / outerH) / (hCm / outerW);
+      if (skew < 0.9 || skew > 1.1) return null;                         // viewed at an angle
+      return { topY, botY, leftX, rightX, outerH, outerW, vCm, hCm, portrait, skew, outerLong: Math.max(outerH, outerW), kind: "plain" };
+    }
+
+    // Looks for the marker in the live video (analysed on a 540-px-wide copy, every 3rd frame) and returns the same kind of
+    // object as a detected sticky note, in full-resolution coordinates, plus isMarker/objSizeCm for the height maths.
+    function detectA4Marker(videoEl, mask, W, H) {
+      if (!state.useA4Marker || !videoEl || !videoEl.videoWidth) return null;
+      _a4Frame++;
+      if (_a4Frame % 3 !== 0 && _a4Last) return _a4Last;
+      const CW = 540, CH = Math.round(CW * H / W);
+      if (!_a4Canvas || _a4Canvas.width !== CW || _a4Canvas.height !== CH) {
+        _a4Canvas = document.createElement("canvas");
+        _a4Canvas.width = CW; _a4Canvas.height = CH;
+        _a4Ctx = _a4Canvas.getContext("2d", { willReadFrequently: true });
+      }
+      try {
+        _a4Ctx.drawImage(videoEl, 0, 0, CW, CH);
+        const img = _a4Ctx.getImageData(0, 0, CW, CH).data;
+        const gray = new Uint8Array(CW * CH), white = new Uint8Array(CW * CH);
+        for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+          gray[i] = (0.299 * img[p] + 0.587 * img[p + 1] + 0.114 * img[p + 2]) | 0;
+          white[i] = Math.min(img[p], img[p + 1], img[p + 2]);
+        }
+        let excl = null;
+        if (mask) {   // ignore the athlete (dark clothes must not look like a frame)
+          excl = new Uint8Array(CW * CH);
+          for (let y = 0; y < CH; y++) {
+            const my = Math.min(mask.h - 1, Math.floor(y / CH * mask.h));
+            for (let x = 0; x < CW; x++) {
+              const mx = Math.min(mask.w - 1, Math.floor(x / CW * mask.w));
+              if (mask.data[my * mask.w + mx] > mask.thr) excl[y * CW + x] = 1;
+            }
+          }
+        }
+        let f = findA4MarkerInGray(gray, CW, CH, excl);
+        if (!f) {
+          const framedWhy = _a4Why;
+          f = findPlainA4InWhite(white, CW, CH, excl);
+          if (f) _a4Why = "";
+          else _a4Why = /white block seen/.test(framedWhy) ? framedWhy
+            : "no framed marker and no plain white A4 sheet found (a plain sheet needs a wall clearly darker or more coloured than the paper, e.g. yellow)";
+        }
+        if (!f) return _a4Last;
+        const sy = H / CH, sx = W / CW;
+        const prev = (_a4Last && _a4Last.frameH === H && performance.now() - _a4Last.liveSeenAt < 1500) ? _a4Last : null;
+        const sm = (a, b) => (prev ? 0.5 * prev[a] + 0.5 * b : b);   // light smoothing against frame-to-frame jitter
+        _a4Last = {
+          isMarker: true,
+          liveDetected: true,
+          liveSeenAt: performance.now(),
+          pitchAtSeen: currentPitchDeg(),
+          refMismatch: false,
+          topY: sm("topY", f.topY * sy),
+          botY: sm("botY", f.botY * sy),
+          leftX: sm("leftX", f.leftX * sx),
+          rightX: sm("rightX", f.rightX * sx),
+          noteH: sm("noteH", f.outerH * sy),
+          noteW: sm("noteW", f.outerW * sx),
+          objSizeCm: f.vCm,
+          markCm: Number(state.a4TopCm) || 150,
+          skew: f.skew,
+          frameW: W,
+          frameH: H
+        };
+        return _a4Last;
+      } catch (_) {
+        return _a4Last;
+      }
+    }
+
     function detectWallStickyNote(videoEl, mask, W, H) {
+      if (state.useA4Marker) {
+        // Marker mode: only the printed marker counts; saved sticky-note positions are ignored.
+        const mk = detectA4Marker(videoEl, mask, W, H);
+        if (mk) {
+          mk.markCm = Number(state.a4TopCm) || 150;
+          mk.liveDetected = performance.now() - mk.liveSeenAt < 4000;
+          _autoStickyCalib = mk;
+        }
+        return (_autoStickyCalib && _autoStickyCalib.isMarker) ? _autoStickyCalib : null;
+      }
       if (!videoEl || !videoEl.videoWidth) return _autoStickyCalib;
       const SW = 144, SH = 256;
       if (!_stickyCanvas) {
@@ -1207,19 +1636,27 @@ body.cam .rotate{display:none!important}
         const uploadedCalib = state.calib?.height?.method === "sticky150" ? state.calib.height : null;
         const det = analyzeWallImageBuffer(img, SW, SH, W, H, mask, uploadedCalib);
         if (det) {
-          if (!_autoStickyCalib || _autoStickyCalib.frameH !== H) {
+          const prev = _autoStickyCalib;
+          const sameFrame = !!prev && prev.frameH === H;
+          if (sameFrame && !det.liveSeenAt && prev.liveSeenAt) {
+            // The mark is not visible right now (e.g. the athlete covers it). Keep the last position actually SEEN in
+            // this video (with the phone tilt recorded then) instead of blending in the saved position every frame,
+            // which drifted toward coordinates taken at a different phone angle.
+          } else if (!sameFrame) {
             _autoStickyCalib = det;
           } else {
             _autoStickyCalib = {
               ...det,
-              topY: 0.75 * _autoStickyCalib.topY + 0.25 * det.topY,
-              botY: 0.75 * _autoStickyCalib.botY + 0.25 * det.botY,
-              leftX: 0.75 * _autoStickyCalib.leftX + 0.25 * det.leftX,
-              rightX: 0.75 * _autoStickyCalib.rightX + 0.25 * det.rightX,
-              noteH: 0.75 * _autoStickyCalib.noteH + 0.25 * det.noteH,
-              noteW: 0.75 * _autoStickyCalib.noteW + 0.25 * det.noteW
+              topY: 0.75 * prev.topY + 0.25 * det.topY,
+              botY: 0.75 * prev.botY + 0.25 * det.botY,
+              leftX: 0.75 * prev.leftX + 0.25 * det.leftX,
+              rightX: 0.75 * prev.rightX + 0.25 * det.rightX,
+              noteH: 0.75 * prev.noteH + 0.25 * det.noteH,
+              noteW: 0.75 * prev.noteW + 0.25 * det.noteW
             };
           }
+          _autoStickyCalib.liveDetected = !!(_autoStickyCalib.confirmedThisSession ||
+            (_autoStickyCalib.liveSeenAt && performance.now() - _autoStickyCalib.liveSeenAt < 4000));
         }
       } catch (_) {}
       return _autoStickyCalib;
@@ -1233,8 +1670,14 @@ body.cam .rotate{display:none!important}
     function evalHeight(lm, mask, W, H, calib, stickyNote) {
       const p = (i) => P(lm, i, W, H);
       const activeCalib = calib || getCalib("height", W, H);
+      if (state.useA4Marker && !(stickyNote && stickyNote.isMarker)) {
+        return fail(t("A4 marker not seen", "A4 मार्कर नहीं दिखा"),
+          t("Stick the printed A4 marker flat on the wall beside the athlete and keep its whole black frame in view.",
+            "छपा A4 मार्कर एथलीट के बगल में दीवार पर सपाट लगाएँ और उसका पूरा काला फ्रेम दिखाएँ।") +
+            (_a4Why ? " [" + _a4Why + "]" : ""));
+      }
       const hasSticky150 = !!(stickyNote && stickyNote.topY > 0) || (activeCalib && activeCalib.method === "sticky150");
-      const sticky = (activeCalib && activeCalib.method === "sticky150")
+      const sticky = (stickyNote && stickyNote.isMarker) ? stickyNote : (activeCalib && activeCalib.method === "sticky150")
         ? {
             ...activeCalib,
             ...(stickyNote || {}),
@@ -1266,10 +1709,13 @@ body.cam .rotate{display:none!important}
         return fail(t("Face the camera", "कैमरे की ओर मुँह करें"), t("Stand facing the camera with shoulders square.", "कैमरे की ओर सीधा मुँह करके खड़े हों।"));
       }
 
-      if (!hasSticky150 && hasAnkles) {
+      // Standing posture is checked whenever the legs are visible, with or without a wall mark (a seated person must
+      // not pass): straight knees, upright hips, and hip-to-ankle long enough compared with the torso.
+      if (hasAnkles) {
         const kneeMin = Math.min(angleDeg(p(23), p(25), p(27)), angleDeg(p(24), p(26), p(28)));
         const hipAng = angleDeg(shMid, hipMid, mid(p(25), p(26)));
-        if (kneeMin < 155 || hipAng < 152) {
+        const legDropPx = hasHips ? (anMid.y - hipMid.y) : Infinity;
+        if (kneeMin < 155 || hipAng < 152 || legDropPx < 1.2 * torsoPx) {
           return fail(`${t("Not upright", "सीधे नहीं")} (${t("knee", "घुटना")} ${kneeMin.toFixed(0)}°)`,
             t("Stand tall: heels against the wall, knees straight (≥155°).", "दीवार से एड़ी सटाकर, घुटने सीधे रखकर खड़े हों।"));
         }
@@ -1338,6 +1784,44 @@ body.cam .rotate{display:none!important}
       // and automatically blocks frames where the athlete leans down to tap the phone on the table!
       // ---------------------------------------------------------------
       if (hasSticky150 && sticky && sticky.topY > 0) {
+        // The wall mark is only a valid anchor while it is confirmed in THIS view: seen live in the last 4 s, or
+        // tapped this session. A saved position alone is stale as soon as the phone has moved.
+        const seenLive = !!sticky.liveSeenAt && performance.now() - sticky.liveSeenAt < 4000;
+        // A TAPPED mark is only valid while the phone stays where it was when the mark was locked. Turning or lifting the
+        // phone (e.g. pointing it at your face and back at the wall) makes the saved position meaningless.
+        let phoneMoved = false;
+        if (sticky.confirmedThisSession && sticky.orientAtLock) {
+          const o0 = sticky.orientAtLock, o1 = currentOrientation();
+          if (o1) {
+            phoneMoved = Math.abs(o1.pitch - o0.pitch) > 3 || Math.abs(o1.roll - o0.roll) > 3 ||
+              (o0.yaw != null && o1.yaw != null && yawDiffDeg(o1.yaw, o0.yaw) > 5);
+          }
+        }
+        const markConfirmed = seenLive || (!!sticky.confirmedThisSession && !phoneMoved);
+        if (sticky.refMismatch) {
+          return fail(
+            t("Wall mark moved — set it again", "दीवार का निशान खिसक गया — फिर से सेट करें"),
+            t("The note seen now is not where the saved reference says it should be (the phone moved, or this is not the note). Tap '1-Tap Wall Mark' on the note, or retake the reference photo from this phone position.",
+              "अभी दिख रहा नोट सहेजे गए संदर्भ की जगह पर नहीं है (फ़ोन हिला है या यह नोट नहीं है)। नोट पर '1-Tap Wall Mark' दबाएँ, या इसी स्थिति से संदर्भ फ़ोटो दोबारा लें।"),
+            { vertexY }
+          );
+        }
+        if (!markConfirmed && phoneMoved) {
+          return fail(
+            t("Phone moved — set the mark again", "फ़ोन हिल गया — निशान फिर से सेट करें"),
+            t("The phone was moved or turned after the wall mark was set, so the saved mark no longer matches this view. Put the phone back, or tap '1-Tap Wall Mark' on the note again.",
+              "निशान सेट करने के बाद फ़ोन हिला या घुमाया गया, इसलिए सहेजा निशान इस दृश्य से मेल नहीं खाता। फ़ोन वापस रखें, या नोट पर फिर से '1-Tap Wall Mark' दबाएँ।"),
+            { vertexY }
+          );
+        }
+        if (!markConfirmed) {
+          return fail(
+            t("Wall mark not confirmed", "दीवार का निशान पक्का नहीं हुआ"),
+            t("The saved wall mark is only used while the camera can see it. Keep the note in view, or tap '1-Tap Wall Mark' on it in the live picture.",
+              "सहेजा गया निशान तभी इस्तेमाल होता है जब कैमरा उसे देख सके। नोट को फ्रेम में रखें, या लाइव तस्वीर में उस पर '1-Tap Wall Mark' दबाएँ।"),
+            { vertexY }
+          );
+        }
         const sy = H / (sticky.frameH || H);
         const yMark = sticky.topY * sy;
         const noteH = Math.max(H * 0.025, (sticky.noteH || H * 0.085) * sy);
@@ -1348,7 +1832,9 @@ body.cam .rotate{display:none!important}
 
         // If the athlete is leaning down toward the table to press Start/Stop on the phone
         // (head drops far below the 150 cm sticky note or looms huge in front of the lens), pause timer!
-        if (headNeckPx > H * 0.095 || (markCm >= 135 && vertexY > yMark + 0.35 * noteH)) {
+        // (A head below the mark is NOT a lean: athletes shorter than the 150 cm mark are legitimate. Leaning toward the
+        // phone shows up as the head looming large, and the motion gate above pauses while the athlete moves.)
+        if (headNeckPx > H * 0.095) {
           return fail(
             t("⏸ Stand Tall Against Wall Mark", "⏸ दीवार के निशान के पास सीधे खड़े हों"),
             t("⏸ Timer paused while reaching for the phone — stand tall with your back against the wall next to the 150 cm mark!",
@@ -1361,13 +1847,41 @@ body.cam .rotate{display:none!important}
         const cmPerPxNote = notePhysicalCm / noteH;
         const headToShoulderPx = Math.max(H * 0.06, shMid.y - vertexY);
         const cmPerPxUpper = 27.5 / headToShoulderPx;
-        const cmPerPxWall = (noteH >= H * 0.045)
-          ? (0.65 * cmPerPxNote + 0.35 * cmPerPxUpper)
-          : cmPerPxOptics;
+        // A printed marker has a known size at the wall plane: use it as the scale directly (no typed distance, and no
+        // guess about the athlete's head-to-shoulder length). Otherwise keep the previous behaviour.
+        let cmPerPxWall = sticky.isMarker
+          ? cmPerPxNote
+          : (noteH >= H * 0.045)
+            ? (0.65 * cmPerPxNote + 0.35 * cmPerPxUpper)
+            : cmPerPxOptics;
 
-        const deltaAboveMarkPx = yMark - vertexY;
+        // Compare the head and the mark as a LEVEL camera would see them. If the phone is tilted differently from when the
+        // mark was set/tapped/last seen, every row in the picture shifts (about 16 px per degree here, ~5 cm), which used to
+        // move the head relative to the mark. Without tilt data this falls back to the raw rows.
+        const markPitch = sticky.pitchAtSeen ?? sticky.pitchAtLock ?? null;
+        const nowPitch = currentPitchDeg();
+        const tiltCorrected = markPitch !== null && nowPitch !== null;
+        const deltaAboveMarkPx = tiltCorrected
+          ? levelRow(yMark, markPitch, W, H) - levelRow(vertexY, nowPitch, W, H)
+          : yMark - vertexY;
+        const pitchShiftDeg = tiltCorrected ? (nowPitch - markPitch) : 0;
+        // The marker's own height must be measured in the same level-corrected rows: a tilted phone squashes or stretches
+        // it in the picture, which put the scale off (about 4 cm on a 176 cm person at 14.5 deg of tilt).
+        if (sticky.isMarker && markPitch !== null && sticky.botY > sticky.topY) {
+          const levelNoteH = levelRow(sticky.botY * sy, markPitch, W, H) - levelRow(yMark, markPitch, W, H);
+          if (levelNoteH > 0) cmPerPxWall = notePhysicalCm / levelNoteH;
+        }
         const deltaCm = deltaAboveMarkPx * cmPerPxWall;
         const cmSticky = markCm + deltaCm;
+        // Plausibility net: a height outside this range means the mark (or its height setting) is wrong
+        if (cmSticky < 85 || cmSticky > 215) {
+          return fail(
+            t("Height out of range — check the wall mark", "ऊँचाई सीमा से बाहर — दीवार का निशान जाँचें"),
+            t(`The wall mark gives ${cmSticky.toFixed(0)} cm, which is not a plausible height. Check that the note really is at ${markCm} cm (measure with a tape) and set the mark again.`,
+              `दीवार का निशान ${cmSticky.toFixed(0)} सेमी दे रहा है, जो संभव ऊँचाई नहीं है। जाँचें कि नोट सच में ${markCm} सेमी पर है (टेप से नापें) और निशान फिर से सेट करें।`),
+            { vertexY }
+          );
+        }
         const estWallDistM = Math.max(0.95, Math.min(3.50, (fPx * cmPerPxWall) / 100.0));
         const virtualSoleY = Math.min(H - 4, vertexY + cmSticky / cmPerPxWall);
 
@@ -1381,10 +1895,12 @@ body.cam .rotate{display:none!important}
           vertexSource,
           cm: cmSticky,
           cmPerPx: cmPerPxWall,
-          calibMethod: "sticky150",
+          calibMethod: sticky.isMarker ? "a4marker" : "sticky150",
+          // true only when hips AND ankles were seen, i.e. the standing posture could actually be checked
+          postureVerified: hasAnkles && hasHips,
           headRoll,
           liveMetric: `📌 ${cmSticky.toFixed(1)} cm (${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm vs ${markCm} cm mark)`,
-          reason: `✅ ${t("Wall Reference Locked", "दीवार संदर्भ लॉक")} (${markCm} cm) · ${t("Head is", "सिर")} ${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm ${t("vs mark", "निशान से")} → ${cmSticky.toFixed(1)} cm`
+          reason: `✅ ${t("Wall Reference Locked", "दीवार संदर्भ लॉक")} (${markCm} cm) · ${t("Head is", "सिर")} ${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm ${t("vs mark", "निशान से")} → ${cmSticky.toFixed(1)} cm${Math.abs(pitchShiftDeg) > 1 ? ` · ${t("angle-corrected", "कोण-सुधार")} ${pitchShiftDeg >= 0 ? "+" : ""}${pitchShiftDeg.toFixed(1)}°` : ""}`
         };
       }
 
@@ -1502,7 +2018,7 @@ body.cam .rotate{display:none!important}
         cmPerPx: effCmPerPx,
         calibMethod: activeCalib.method,
         headRoll,
-        liveMetric: `✅ ${t("DISTANCE OK", "दूरी सही")} · ${cm.toFixed(1)} cm (±1.5 cm)`,
+        liveMetric: `✅ ${t("DISTANCE OK", "दूरी सही")} · ${cm.toFixed(1)} cm (${t("estimate", "अनुमान")})`,
         reason: `✅ ${t("Distance is CORRECT — Hold still!", "दूरी सही है — स्थिर खड़े रहें!")} · ${bodyPx.toFixed(0)} px × ${effCmPerPx.toFixed(4)} cm/px`
       };
     }
@@ -1570,7 +2086,14 @@ body.cam .rotate{display:none!important}
         if (best && best.proj >= lmProj) tip = best;
       }
 
-      const reachPx = tip ? tip.proj : lmProj;
+      // Handbook Test III: the 23 cm mark is on the HEEL line, so reach is measured from the heels, not the toes.
+      // The toes point up and sit a few cm past the heels; add that gap when the heel is visible.
+      const heelSeen = vis(lm, s.heel, 0.35);
+      const toeAheadOfHeelPx = heelSeen ? (ft.x - heel.x) * u.x + (ft.y - heel.y) * u.y : 0;
+      // Capped at half the foot length so a misplaced heel point cannot add a large jump.
+      const heelGapPx = Math.min(Math.max(0, toeAheadOfHeelPx), 0.5 * dist2D(heel, ft));
+      const reachPx = (tip ? tip.proj : lmProj) + heelGapPx;
+      const refLine = heelSeen ? t("vs heel line", "एड़ी रेखा से") : t("vs toes", "पंजों से");
       const tipPt = tip ? { x: tip.x, y: tip.y } : handLm;
       // Projection of fingertips from hip along the leg axis (0.0 = hip, ~0.52 = knee, 1.0 = ankle)
       const handLegRatio = ((tipPt.x - hip.x) * u.x + (tipPt.y - hip.y) * u.y) / legLen;
@@ -1619,6 +2142,7 @@ body.cam .rotate{display:none!important}
         scoreCm,
         cmPerPx,
         scaleMode,
+        refLine,
         tipX: tip ? tip.x : handLm.x,
         tipY: tip ? tip.y : handLm.y,
         toeX: ft.x,
@@ -1848,6 +2372,11 @@ body.cam .rotate{display:none!important}
         ankX: ankleMidX,
         toeX,
         heelX,
+        // Both feet, so landing can use the rear-most heel ("back of the heels", Handbook Test V)
+        toeLX: vis(lm, 31, 0.35) ? p(31).x : toeX,
+        toeRX: vis(lm, 32, 0.35) ? p(32).x : toeX,
+        heelLX: vis(lm, 29, 0.35) ? p(29).x : heelX,
+        heelRX: vis(lm, 30, 0.35) ? p(30).x : heelX,
         hasToes,
         hasHeels,
         ankleMidY,
@@ -1878,7 +2407,17 @@ body.cam .rotate{display:none!important}
       return { valid: false, value: null, unit: test.unit, confidence: "RED", method, audit: [{ label: "Rejected", detail, valid: false }] };
     }
 
+    // Tags every rejected result so the attempt counter can tell a rule foul (counts as an attempt)
+    // from a capture failure or "nothing happened" result (free retake).
     function computeAttemptResult(test, athlete, recordedFrames, fps, calib) {
+      const r = computeAttemptResultCore(test, athlete, recordedFrames, fps, calib);
+      if (r && !r.valid && !r.rejectKind) {
+        r.rejectKind = /FOUL|फाउल|नियम उल्लंघन/i.test(r.method || "") ? "foul" : "nothing";
+      }
+      return r;
+    }
+
+    function computeAttemptResultCore(test, athlete, recordedFrames, fps, calib) {
       const ok = recordedFrames.filter(f => f.postureOk);
       if (ok.length < 8) {
         const wrongEx = recordedFrames.find(f => f.isWrongExercise);
@@ -1925,21 +2464,27 @@ body.cam .rotate{display:none!important}
         const medDistM = median(ok.map(f => f.estDistM || 2.50));
         const medCmPerPx = median(ok.map(f => f.cmPerPx));
         const sample = ok[ok.length - 1];
-        const isRung12 = sample.calibMethod === "tape" || sample.calibMethod === "person" || sample.calibMethod === "wall" || sample.calibMethod === "sticky150";
-        const isWall = sample.calibMethod === "wall" || sample.calibMethod === "sticky150";
-        const band = (isRung12 && spread <= 3.5 && roll <= 10) ? "GREEN" : "AMBER";
+        const isRung12 = sample.calibMethod === "tape" || sample.calibMethod === "person" || sample.calibMethod === "wall" || sample.calibMethod === "sticky150" || sample.calibMethod === "a4marker";
+        const isWall = sample.calibMethod === "wall" || sample.calibMethod === "sticky150" || sample.calibMethod === "a4marker";
+        // Wall-mark frames only need head and shoulders; if the legs were not visible the standing posture was never checked
+        const postureVerified = ok.filter(f => f.postureVerified !== false).length >= 0.8 * ok.length;
+        const band = (isRung12 && spread <= 3.5 && roll <= 10 && postureVerified) ? "GREEN" : "AMBER";
         const valid = spread <= 5.0;
-        const tol = isWall ? "±1.0 cm" : "±1.5 cm";
+        // No numeric tolerance is claimed: accuracy has not been field-validated (see Known Issues).
+        const tol = sample.calibMethod === "a4marker" ? "A4 marker scale, unvalidated"
+          : isWall ? "wall reference, unvalidated"
+          : (isRung12 ? "tape/person reference, unvalidated" : "assumes camera distance, unvalidated");
 
         return {
           valid,
-          value: Number(h.toFixed(1)),
+          // A rejected attempt carries no number (it used to keep e.g. 194.6 and pre-fill the manual-entry box)
+          value: valid ? Number(h.toFixed(1)) : null,
           unit: "cm",
           confidence: valid ? band : "RED",
           method: `Height: ${h.toFixed(1)} cm (${tol}) · Dist ${medDistM.toFixed(2)} m · ${vals.length} frames median`,
           audit: [{
             label: "Standing Height",
-            detail: `Height: ${h.toFixed(1)} cm (${tol}) · Dist ${medDistM.toFixed(2)} m · Body ${median(ok.map(f => f.bodyPx)).toFixed(0)} px × ${medCmPerPx.toFixed(4)} cm/px · vertex: ${sample.vertexSource}${isWall ? ` · off-wall ${median(ok.map(f => f.offWallCm || 0)).toFixed(0)} cm (corrected)` : ""} · spread ${spread.toFixed(1)} cm`,
+            detail: `Height: ${h.toFixed(1)} cm (${tol}) · Dist ${medDistM.toFixed(2)} m · Body ${median(ok.map(f => f.bodyPx)).toFixed(0)} px × ${medCmPerPx.toFixed(4)} cm/px · vertex: ${sample.vertexSource}${isWall ? ` · off-wall ${median(ok.map(f => f.offWallCm || 0)).toFixed(0)} cm (corrected)` : ""} · spread ${spread.toFixed(1)} cm${postureVerified ? "" : " · ⚠ posture not verified (legs not in view)"} · build ${BUILD_ID}`,
             valid
           }]
         };
@@ -1996,9 +2541,9 @@ body.cam .rotate{display:none!important}
 
         // SAI Handbook Test III Two-Hand Symmetry Check (both hands must reach together, not a one-arm reach):
         const asymVals = auditIndices.map(i => ok[i].handAsymmetryCm || 0).filter(v => v > 0);
-        if (asymVals.length >= 3 && median(asymVals) > 15.0) {
+        if (asymVals.length >= 3 && median(asymVals) > 5.0) {
           return rejected(test, t("FOUL — One-handed / uneven reach", "फाउल — एक हाथ आगे / असमान पहुँच"),
-            t(`SAI Rule Foul: Both hands must be placed on top of each other or side-by-side (hand offset ${median(asymVals).toFixed(1)} cm > 15 cm).`,
+            t(`SAI Rule Foul: Both hands must be placed on top of each other or side-by-side (hand offset ${median(asymVals).toFixed(1)} cm > 5 cm).`,
               `SAI नियम उल्लंघन: दोनों हाथ एक-दूसरे के ऊपर या बराबर में होने चाहिए।`));
         }
 
@@ -2016,26 +2561,26 @@ body.cam .rotate{display:none!important}
         }
 
         // Prefer a held plateau window (≥450 ms with spread ≤2.5 cm), fallback to 85th percentile valid reach
+        // Score the BEST steady plateau (not the last one), falling back to the 85th percentile of the reach
         let heldReach = pct(r, 0.85);
+        let bestPlateau = -Infinity;
         for (let i = 0; i < reachingFrames.length; i++) {
           let j = i;
           while (j < reachingFrames.length && (reachingFrames[j].t - reachingFrames[i].t) < 1800) j++;
           if (j >= reachingFrames.length) break;
           const win = r.slice(i, j + 1);
           const sp = Math.max(...win) - Math.min(...win);
-          if (sp <= 2.5) {
-            const v = median(win);
-            if (v >= heldReach - 1.5) {
-              heldReach = v;
-            }
-          }
+          if (sp <= 2.5) bestPlateau = Math.max(bestPlateau, median(win));
         }
+        if (bestPlateau > -Infinity && bestPlateau >= heldReach - 1.5) heldReach = bestPlateau;
 
         const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
         const heelOff = median(reachingFrames.map(f => f.heelOffsetCm || 0));
         const score = Math.max(0.0, boxOffset + heldReach + heelOff);
         const minKnee = Math.min(minKneeAtPeak, minKneeDuringReach);
         const isCalib = !!calib && calib.method !== "distance";
+        // The two-hands rule can only be verified when both wrists were visible; otherwise do not claim GREEN
+        const handsChecked = asymVals.length >= 3;
 
         return {
           valid: true,
@@ -2201,9 +2746,9 @@ body.cam .rotate{display:none!important}
               const preFloor = median(footSm.slice(Math.max(0, sIdx - 8), sIdx));
               const postFloor = median(footSm.slice(eIdx + 1, Math.min(n, eIdx + 9)));
               const floorDiffCm = Math.abs(preFloor - postFloor) * cmPerPx;
-              // Use the higher on-screen floor (smaller Y) of pre and post so stepping back NEVER creates artificial lift
-              const floorY = Math.min(preFloor, postFloor);
+              // One floor level for both the airborne threshold and the clearance (they used to differ by up to the 6 cm tolerance)
               const meanFloorY = 0.5 * (preFloor + postFloor);
+              const floorY = meanFloorY;
 
               // Grounded frames before takeoff and after landing:
               // Taking the 20th percentile of Y (highest upright position while grounded) automatically ignores
@@ -2462,24 +3007,27 @@ body.cam .rotate{display:none!important}
         }
 
         // 5. SAI Handbook Test V Distance: Take-off Toe Line to Nearest Landing Heel
-        const startToeX = median(toeXSm.slice(preStart, preEnd));
-        const landHeelX = median(heelXSm.slice(postStart, postEnd));
+        // Lead toe at take-off, rear-most heel at landing (nearest point of contact to the line).
+        const leadToe = (f) => dir > 0 ? Math.max(f.toeLX ?? f.toeX, f.toeRX ?? f.toeX) : Math.min(f.toeLX ?? f.toeX, f.toeRX ?? f.toeX);
+        const rearHeel = (f) => dir > 0 ? Math.min(f.heelLX ?? f.heelX, f.heelRX ?? f.heelX) : Math.max(f.heelLX ?? f.heelX, f.heelRX ?? f.heelX);
+        const startToeX = median(ok.slice(preStart, preEnd).map(leadToe));
+        const landHeelX = median(ok.slice(postStart, postEnd).map(rearHeel));
         const rawToeToHeelCm = Math.max(0, (landHeelX - startToeX) * dir * cmPerPx);
         const centerTravelCm = 0.60 * ankTravelCm + 0.40 * hipTravelCm;
-        // Blend direct toe-to-heel measurement with center-of-mass travel (accounting for ~10 cm ankle-to-toe offset when toe landmarks jitter)
-        const jumpCm = (rawToeToHeelCm >= 0.65 * centerTravelCm && rawToeToHeelCm <= 1.05 * centerTravelCm)
-          ? (0.55 * rawToeToHeelCm + 0.45 * centerTravelCm)
-          : centerTravelCm;
+        // The score is the Handbook distance (toe-to-heel). Body travel is only a sanity check: it includes the
+        // foot offset, so blending it into the score over-read by roughly 8-12 cm.
+        const jumpCm = rawToeToHeelCm;
+        const travelAgrees = rawToeToHeelCm >= 0.65 * centerTravelCm && rawToeToHeelCm <= 1.05 * centerTravelCm;
 
         return {
           valid: true,
           value: Number(jumpCm.toFixed(1)),
           unit: "cm",
-          confidence: calib ? "GREEN" : "AMBER",
-          method: `AI Broad Jump (Toe-to-Heel) · ${jumpCm.toFixed(1)} cm · Two-foot lift +${verticalClearanceCm.toFixed(1)} cm · Knee ${minKnee.toFixed(0)}°`,
+          confidence: (calib && travelAgrees) ? "GREEN" : "AMBER",
+          method: `AI Broad Jump (Toe-to-Heel) · ${jumpCm.toFixed(1)} cm · Two-foot lift +${verticalClearanceCm.toFixed(1)} cm · Knee ${minKnee.toFixed(0)}°${calib?.cmPerPx ? "" : " · " + refHeightNote(athlete)}`,
           audit: [{
             label: "Standing Broad Jump",
-            detail: `✅ Valid Two-Foot Jump: ${jumpCm.toFixed(1)} cm (Toe→Heel ${rawToeToHeelCm.toFixed(1)} cm · CoM ΔX ${centerTravelCm.toFixed(1)} cm · Lift +${verticalClearanceCm.toFixed(1)} cm · Landing spread ${endSpreadCm.toFixed(1)} cm ✓)`,
+            detail: `✅ Valid Two-Foot Jump: ${jumpCm.toFixed(1)} cm (Toe→Heel ${rawToeToHeelCm.toFixed(1)} cm · CoM ΔX ${centerTravelCm.toFixed(1)} cm · Lift +${verticalClearanceCm.toFixed(1)} cm · Landing spread ${endSpreadCm.toFixed(1)} cm ✓)${travelAgrees ? "" : " ⚠ toe/heel landmarks disagree with body travel — confidence lowered"}`,
             valid: true
           }]
         };
@@ -3750,12 +4298,47 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
                   <li>${t("Do not move the phone again. Each athlete stands barefoot, <b>heels, buttocks and shoulders touching the wall</b>, beside the tape, looking straight ahead.", "फ़ोन को फिर न हिलाएँ। हर एथलीट नंगे पैर, <b>एड़ी, कूल्हे और कंधे दीवार से सटाकर</b>, टेप के बगल में सीधा देखते हुए खड़ा हो।")}</li>
                 </ol>
               </details>
-              <div style="margin-top:8px;display:${state.calib?.height?.method === "sticky150" ? "none" : "block"};">
+              <div style="margin-top:8px;display:block;">
                 <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;">
-                  <span>📏 ${t("Camera-to-Wall Distance (estimate mode only)", "कैमरे से दीवार की दूरी (केवल अनुमान)")}</span>
+                  <span>📏 ${state.useA4Marker
+                    ? t("Camera-to-Wall Distance (not used while the A4 marker is on)", "कैमरे से दीवार की दूरी (A4 मार्कर चालू होने पर उपयोग नहीं)")
+                    : state.calib?.height?.method === "sticky150"
+                    ? t("Camera-to-Wall Distance (scales the head-to-mark gap)", "कैमरे से दीवार की दूरी (सिर-निशान अंतर का स्केल)")
+                    : t("Camera-to-Wall Distance (estimate mode only)", "कैमरे से दीवार की दूरी (केवल अनुमान)")}</span>
                   <span id="lblDistVal">${(state.cameraDistanceM || 2.50).toFixed(2)} m</span>
                 </div>
                 <input id="rngDist" type="range" min="1.50" max="4.00" step="0.05" value="${state.cameraDistanceM || 2.50}" style="width:100%;margin-top:4px;" />
+              </div>
+              <div style="margin-top:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+                <label style="display:flex;gap:8px;align-items:center;font-size:12px;font-weight:800;">
+                  <input type="checkbox" id="chkA4" ${state.useA4Marker ? "checked" : ""} />
+                  📐 ${t("Use A4 marker — printed frame, or a plain white A4 sheet on a coloured wall (scale from the sheet, no distance needed)", "A4 मार्कर उपयोग करें — छपा फ्रेम, या रंगीन दीवार पर सादा सफ़ेद A4 शीट (शीट से स्केल, दूरी की ज़रूरत नहीं)")}
+                </label>
+                <div id="a4Row" style="display:${state.useA4Marker ? "flex" : "none"};gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px;">
+                  <span style="font-weight:700;">${t("Height of the TOP edge from the floor (cm): the frame's outer top edge, or the plain sheet's top edge", "ऊपरी किनारे की फ़र्श से ऊँचाई (cm): फ्रेम का बाहरी ऊपरी किनारा, या सादी शीट का ऊपरी किनारा")}</span>
+                  <input id="inpA4Top" type="number" step="0.1" value="${state.a4TopCm || 150}" style="width:72px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);" />
+                </div>
+                <div id="a4DimsRow" style="display:${state.useA4Marker ? "block" : "none"};margin-top:8px;font-size:12px;">
+                  <div style="font-weight:700;margin-bottom:4px;">${t("Sheet size in cm (measure with a ruler; long side × short side)", "शीट का आकार cm में (रूलर से नापें; लंबी भुजा × छोटी भुजा)")}</div>
+                  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                    <span>${t("White part", "सफ़ेद हिस्सा")}</span>
+                    <input id="inpA4InnerLong" type="number" step="0.1" value="${state.a4Dims?.innerLongCm ?? 23}" style="width:58px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);" /> ×
+                    <input id="inpA4InnerShort" type="number" step="0.1" value="${state.a4Dims?.innerShortCm ?? 14}" style="width:58px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);" />
+                    <span style="margin-left:6px;">${t("Outer frame", "बाहरी फ्रेम")}</span>
+                    <input id="inpA4OuterLong" type="number" step="0.1" value="${state.a4Dims?.longCm ?? 27}" style="width:58px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);" /> ×
+                    <input id="inpA4OuterShort" type="number" step="0.1" value="${state.a4Dims?.shortCm ?? 18}" style="width:58px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);" />
+                  </div>
+                  <div id="a4DimsMsg" style="margin-top:4px;font-size:11px;font-weight:700;color:var(--red-fg,#B3261E);"></div>
+                </div>
+                <div style="margin-top:6px;font-size:11px;line-height:1.4;color:var(--text-sub);">
+                  ${t("Print a4_marker.html at 100% (Actual size) on A4 and check with a ruler that the black frame is 27.0 cm tall and 18.0 cm wide. Stick the sheet flat on the wall beside the athlete. Measure the height of the frame's top edge with a tape and enter it above. A plain white A4 sheet (29.7 x 21.0 cm, upright and flat) also works on a wall that is clearly darker or more coloured than the paper, such as a yellow wall; it does not work on a white or cream wall.",
+                      "a4_marker.html को A4 पर 100% (वास्तविक आकार) में छापें और रूलर से जाँचें कि काला फ्रेम 27.0 cm ऊँचा और 18.0 cm चौड़ा है। शीट को एथलीट के बगल में दीवार पर सपाट चिपकाएँ। फ्रेम के ऊपरी किनारे की ऊँचाई टेप से नापकर ऊपर दर्ज करें।")}
+                </div>
+                <div style="margin-top:8px;">
+                  <a href="a4_marker.html" target="_blank" rel="noopener" style="display:inline-block;padding:7px 10px;border-radius:8px;background:var(--primary);color:#fff;font-size:12px;font-weight:800;text-decoration:none;">
+                    🖨️ ${t("Open the printable A4 marker (print it on a computer at 100%)", "छपने योग्य A4 मार्कर खोलें (कंप्यूटर से 100% पर छापें)")}
+                  </a>
+                </div>
               </div>
             ` : ""}
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
@@ -3994,7 +4577,11 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
             const noteH = n === 2 ? Math.abs(cal.pts[1].y - cal.pts[0].y) : null;
             const vfovF = H0 >= W0 ? (34.61 / 25.4) : (25.96 / 25.4);
             const cmPerPxOpt = ((state.cameraDistanceM || 2.50) * 100.0 * vfovF) / H0;
-            _autoStickyCalib = { topY, botY: topY + (noteH || H0 * 0.04), leftX: cal.pts[0].x - 25, rightX: cal.pts[0].x + 25, noteH, markCm, liveDetected: true, lockedFromLiveTap: true, frameW: W0, frameH: H0 };
+            _tapConfirmed = true;
+            const pitchAtLock = (cal.tapPitch === undefined) ? null : cal.tapPitch;
+            // Phone orientation at the moment of locking: if the phone is later moved or turned, the mark is no longer valid
+            const orientAtLock = currentOrientation();
+            _autoStickyCalib = { topY, botY: topY + (noteH || H0 * 0.04), leftX: cal.pts[0].x - 25, rightX: cal.pts[0].x + 25, noteH, markCm, liveDetected: true, confirmedThisSession: true, lockedFromLiveTap: true, pitchAtLock, orientAtLock, frameW: W0, frameH: H0 };
             if (!state.calib) state.calib = {};
             state.calib.height = {
               method: "sticky150",
@@ -4007,6 +4594,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
               cmPerPx: cmPerPxOpt,
               refCm: markCm,
               refPx: H0 - topY,
+              pitchAtLock,
+              orientAtLock,
               frameW: W0,
               frameH: H0,
               at: Date.now()
@@ -4092,6 +4681,9 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           cal.active = d0 <= d1 ? 0 : 1;
           cal.pts[cal.active] = { x, y };
         }
+        // The tapped position belongs to the picture at THIS moment, so remember the phone tilt now
+        // (the Lock button is pressed later, after the phone has usually been handled and re-tilted).
+        cal.tapPitch = currentPitchDeg();
         if (cal.mode === "wall") renderWallPanel(); else renderTapPanel();
       });
 
@@ -4133,6 +4725,45 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
           inpUp.onchange = (e) => {
             const f = e.target.files?.[0];
             if (f) renderRefPhotoPanel(f);
+          };
+        }
+        const chkA4 = document.getElementById("chkA4");
+        if (chkA4) {
+          chkA4.onchange = () => {
+            state.useA4Marker = chkA4.checked;
+            _a4Last = null;
+            _autoStickyCalib = null;      // never carry a sticky-note position into marker mode (or the reverse)
+            const row = document.getElementById("a4Row");
+            if (row) row.style.display = chkA4.checked ? "flex" : "none";
+            const dimsRow = document.getElementById("a4DimsRow");
+            if (dimsRow) dimsRow.style.display = chkA4.checked ? "block" : "none";
+            persist();
+          };
+        }
+        const saveA4Dims = () => {
+          const v = (id) => parseFloat(document.getElementById(id)?.value);
+          const d = { innerLongCm: v("inpA4InnerLong"), innerShortCm: v("inpA4InnerShort"), longCm: v("inpA4OuterLong"), shortCm: v("inpA4OuterShort") };
+          const msg = document.getElementById("a4DimsMsg");
+          const good = Object.values(d).every((x) => Number.isFinite(x) && x > 0) &&
+            d.innerLongCm >= d.innerShortCm && d.longCm >= d.shortCm && d.innerLongCm < d.longCm && d.innerShortCm < d.shortCm;
+          if (!good) {
+            if (msg) msg.textContent = t("Check the sizes: each long side must be at least its short side, and the white part must be smaller than the outer frame.", "आकार जाँचें: हर लंबी भुजा छोटी भुजा से कम न हो, और सफ़ेद हिस्सा बाहरी फ्रेम से छोटा हो।");
+            return;
+          }
+          if (msg) msg.textContent = "";
+          state.a4Dims = d;
+          _a4Last = null;
+          persist();
+        };
+        ["inpA4InnerLong", "inpA4InnerShort", "inpA4OuterLong", "inpA4OuterShort"].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.oninput = saveA4Dims;
+        });
+        const inpA4Top = document.getElementById("inpA4Top");
+        if (inpA4Top) {
+          inpA4Top.oninput = (e) => {
+            const v = parseFloat(e.target.value);
+            if (v > 0) { state.a4TopCm = v; persist(); }
           };
         }
         const rngDist = document.getElementById("rngDist");
@@ -4424,7 +5055,9 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
             ctx.beginPath(); ctx.moveTo(0, yM); ctx.lineTo(frameW, yM); ctx.stroke();
             ctx.fillStyle = "#FFD166";
             ctx.font = `bold ${Math.max(15, Math.round(frameH * 0.017))}px -apple-system, sans-serif`;
-            ctx.fillText(`📌 ${(wc?.markCm || liveSticky.markCm || 150).toFixed(1)} cm WALL STICKY NOTE LOCKED`, 12, Math.max(24, yM - 8));
+            ctx.fillText(liveSticky.isMarker
+              ? `📐 A4 MARKER · top edge ${Number(liveSticky.markCm).toFixed(1)} cm`
+              : `📌 ${(wc?.markCm || liveSticky.markCm || 150).toFixed(1)} cm WALL STICKY NOTE LOCKED`, 12, Math.max(24, yM - 8));
           } else if (wc && wc.method === "sticky150" && latestLiveEv && latestLiveEv.postureOk && latestLiveEv.cmPerPx > 0) {
             const markCm = Number(wc.markCm) || 150.0;
             const yM = latestLiveEv.vertexY + (latestLiveEv.cm - markCm) / latestLiveEv.cmPerPx;
@@ -4554,7 +5187,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
               const people = res.landmarks || [];
               const mask = people.length ? maskReader(masks[0]) : null;
               const stickyNote = test.key === "height" ? detectWallStickyNote(videoEl, mask, W, H) : null;
-              const secondVisible = people.length > 1 &&
+              // Handbook Test IX: "feet are held by his/her partner", so a second person is expected for Sit-Ups.
+              const secondVisible = test.key !== "sit_ups" && people.length > 1 &&
                 [0, 11, 12, 23, 24].reduce((s, i) => s + (people[1][i]?.visibility ?? 0), 0) / 5 > 0.55;
               if (!people.length) {
                 ev = fail(
@@ -4634,6 +5268,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         stopCamera();
         const attemptOut = computeAttemptResult(test, athlete, recordedFrames, fps, calibUsed);
         if (videoMeta) attemptOut.video = videoMeta;
+        // Record what is needed to judge a result later: which code ran, the frame rate, and how many frames were usable
+        if (attemptOut) {
+          attemptOut.meta = { build: BUILD_ID, fps: Math.round(fps), frames: recordedFrames.length, usableFrames: recordedFrames.filter(f => f.postureOk).length };
+        }
         const newHistory = [...prevHistory, attemptOut];
         const validAttempts = newHistory.filter(a => a.valid && a.value !== null);
         if (validAttempts.length > 0) {
