@@ -710,7 +710,7 @@ body.cam .rotate{display:none!important}
 
     // Shown on the home screen and in the Height audit line so it is obvious which code the phone is running
     // (an already-open Safari tab keeps running the old JavaScript until it is reloaded).
-    const BUILD_ID = "2026-11-10 ios-testing-merge";
+    const BUILD_ID = "2026-11-11 height-tap-fix";
     const MP_VERSION = "0.10.14";
     const POSE_MODEL_FULL_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
     const POSE_MODEL_LITE_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
@@ -1623,6 +1623,14 @@ body.cam .rotate{display:none!important}
         }
         return (_autoStickyCalib && _autoStickyCalib.isMarker) ? _autoStickyCalib : null;
       }
+      // The assessor tapped the mark in this live view: trust that position and skip colour detection. Otherwise a
+      // yellowish wall, door frame or lamp was picked up as "the note", pulled the tapped mark toward it every frame and
+      // flagged a false "Wall mark moved". Moving or turning the phone is still caught by the tilt/compass check.
+      if (_autoStickyCalib && _autoStickyCalib.lockedFromLiveTap && _autoStickyCalib.confirmedThisSession) {
+        _autoStickyCalib.liveDetected = true;
+        _autoStickyCalib.refMismatch = false;
+        return _autoStickyCalib;
+      }
       if (!videoEl || !videoEl.videoWidth) return _autoStickyCalib;
       const SW = 144, SH = 256;
       if (!_stickyCanvas) {
@@ -1872,6 +1880,30 @@ body.cam .rotate{display:none!important}
           const levelNoteH = levelRow(sticky.botY * sy, markPitch, W, H) - levelRow(yMark, markPitch, W, H);
           if (levelNoteH > 0) cmPerPxWall = notePhysicalCm / levelNoteH;
         }
+        // A TAPPED mark has no known size, so its size cannot give the scale (the code used to assume a 7.62 cm note
+        // filling 8.5% of the picture, about 4x too small at 2.5 m, which squeezed every height toward the mark).
+        // Use the floor instead: the athlete stands against the wall, so the floor under the heels and the mark are in
+        // the same plane, 0 cm and markCm apart. Floor = the tapped floor point if one was given, else the heels.
+        // The result then depends on a ratio of rows, so a few cm of error at the feet moves the height by well under 1 cm.
+        let scaleSource = sticky.isMarker ? "marker" : (noteH >= H * 0.045 ? "note" : "distance");
+        if (!sticky.isMarker && sticky.lockedFromLiveTap) {
+          cmPerPxWall = cmPerPxOptics;
+          scaleSource = "distance";
+          const floorTap = sticky.floorY > 0 ? sticky.floorY * sy : null;
+          let floorRow = null, floorPitch = null;
+          if (floorTap !== null) { floorRow = floorTap; floorPitch = markPitch; }
+          else if (vis(lm, 29, 0.35) && vis(lm, 30, 0.35)) { floorRow = 0.5 * (p(29).y + p(30).y) + 0.02 * headNeckPx; floorPitch = nowPitch; }
+          else if (hasAnkles) { floorRow = anMid.y + 0.10 * headNeckPx; floorPitch = nowPitch; }
+          if (floorRow !== null) {
+            const levelMark = tiltCorrected ? levelRow(yMark, markPitch, W, H) : yMark;
+            const levelFloor = (tiltCorrected && floorPitch !== null) ? levelRow(floorRow, floorPitch, W, H) : floorRow;
+            const markAboveFloorPx = levelFloor - levelMark;
+            if (markAboveFloorPx > H * 0.15) {
+              cmPerPxWall = markCm / markAboveFloorPx;
+              scaleSource = floorTap !== null ? "floor tap" : "heels";
+            }
+          }
+        }
         const deltaCm = deltaAboveMarkPx * cmPerPxWall;
         const cmSticky = markCm + deltaCm;
         // Plausibility net: a height outside this range means the mark (or its height setting) is wrong
@@ -1897,11 +1929,12 @@ body.cam .rotate{display:none!important}
           cm: cmSticky,
           cmPerPx: cmPerPxWall,
           calibMethod: sticky.isMarker ? "a4marker" : "sticky150",
+          scaleSource,
           // true only when hips AND ankles were seen, i.e. the standing posture could actually be checked
           postureVerified: hasAnkles && hasHips,
           headRoll,
           liveMetric: `📌 ${cmSticky.toFixed(1)} cm (${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm vs ${markCm} cm mark)`,
-          reason: `✅ ${t("Wall Reference Locked", "दीवार संदर्भ लॉक")} (${markCm} cm) · ${t("Head is", "सिर")} ${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm ${t("vs mark", "निशान से")} → ${cmSticky.toFixed(1)} cm${Math.abs(pitchShiftDeg) > 1 ? ` · ${t("angle-corrected", "कोण-सुधार")} ${pitchShiftDeg >= 0 ? "+" : ""}${pitchShiftDeg.toFixed(1)}°` : ""}`
+          reason: `✅ ${t("Wall Reference Locked", "दीवार संदर्भ लॉक")} (${markCm} cm) · ${t("Head is", "सिर")} ${deltaCm >= 0 ? "+" : ""}${deltaCm.toFixed(1)} cm ${t("vs mark", "निशान से")} → ${cmSticky.toFixed(1)} cm · ${t("scale", "स्केल")}: ${scaleSource}${Math.abs(pitchShiftDeg) > 1 ? ` · ${t("angle-corrected", "कोण-सुधार")} ${pitchShiftDeg >= 0 ? "+" : ""}${pitchShiftDeg.toFixed(1)}°` : ""}`
         };
       }
 
@@ -2485,7 +2518,7 @@ body.cam .rotate{display:none!important}
           method: `Height: ${h.toFixed(1)} cm (${tol}) · Dist ${medDistM.toFixed(2)} m · ${vals.length} frames median`,
           audit: [{
             label: "Standing Height",
-            detail: `Height: ${h.toFixed(1)} cm (${tol}) · Dist ${medDistM.toFixed(2)} m · Body ${median(ok.map(f => f.bodyPx)).toFixed(0)} px × ${medCmPerPx.toFixed(4)} cm/px · vertex: ${sample.vertexSource}${isWall ? ` · off-wall ${median(ok.map(f => f.offWallCm || 0)).toFixed(0)} cm (corrected)` : ""} · spread ${spread.toFixed(1)} cm${postureVerified ? "" : " · ⚠ posture not verified (legs not in view)"} · build ${BUILD_ID}`,
+            detail: `Height: ${h.toFixed(1)} cm (${tol}) · Dist ${medDistM.toFixed(2)} m · Body ${median(ok.map(f => f.bodyPx)).toFixed(0)} px × ${medCmPerPx.toFixed(4)} cm/px · vertex: ${sample.vertexSource}${sample.scaleSource ? ` · scale: ${sample.scaleSource}` : ""}${isWall ? ` · off-wall ${median(ok.map(f => f.offWallCm || 0)).toFixed(0)} cm (corrected)` : ""} · spread ${spread.toFixed(1)} cm${postureVerified ? "" : " · ⚠ posture not verified (legs not in view)"} · build ${BUILD_ID}`,
             valid
           }]
         };
@@ -4543,8 +4576,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
         calPanel.style.display = "block";
         calPanel.innerHTML = `
           <div style="font-weight:700;margin-bottom:4px;">
-            ${n === 0 ? t("Tap on the TOP edge of your 150 cm sticky note on the wall (1 tap is enough — even if a table blocks the floor!).", "दीवार पर लगे 150 cm स्टिकी नोट के ऊपरी किनारे पर टैप करें (केवल 1 टैप पर्याप्त है)!")
-              : n === 1 ? t("✅ 150 cm Sticky Note tapped! Click 'Lock 150 cm Sticky Note' below (or tap Floor too if visible).", "✅ 150 cm निशान चुना गया! नीचे '150 cm स्टिकी नोट लॉक करें' दबाएँ।")
+            ${n === 0 ? t("Tap exactly on the 150 cm line on the wall (the top edge of your sticky note or white sheet, or a pen line). Any colour works.", "दीवार पर 150 cm की रेखा पर ठीक टैप करें (स्टिकी नोट या सफ़ेद शीट का ऊपरी किनारा, या पेन की रेखा)। कोई भी रंग चलेगा।")
+              : n === 1 ? t("✅ 150 cm line tapped. For the best scale, also tap the FLOOR at the wall (where the wall meets the floor), then Lock. Or Lock now: the athlete's heels are then used as the floor.", "✅ 150 cm रेखा चुनी गई। सबसे सही स्केल के लिए दीवार के पास फ़र्श (जहाँ दीवार फ़र्श से मिलती है) पर भी टैप करें, फिर लॉक करें। या अभी लॉक करें: तब एथलीट की एड़ियाँ फ़र्श मानी जाएँगी।")
               : t("Fine-tune the marks, enter values, then Save.", "दोनों निशान ठीक करें, मान डालें, फिर सहेजें।")}
           </div>
           ${n >= 1 ? `
@@ -4575,14 +4608,17 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
             state.lastWallMarkCm = markCm;
             const W0 = frameW || 720, H0 = frameH || 1280;
             const topY = n === 1 ? cal.pts[0].y : Math.min(cal.pts[0].y, cal.pts[1].y);
-            const noteH = n === 2 ? Math.abs(cal.pts[1].y - cal.pts[0].y) : null;
+            // A tapped mark has no known size (sticky note, white sheet or a pen line), so no note height is stored.
+            // The second tap, if given, is the FLOOR (it used to be stored as the note height, a scale about 20x off).
+            const noteH = null;
+            const floorY = n === 2 ? Math.max(cal.pts[0].y, cal.pts[1].y) : null;
             const vfovF = H0 >= W0 ? (34.61 / 25.4) : (25.96 / 25.4);
             const cmPerPxOpt = ((state.cameraDistanceM || 2.50) * 100.0 * vfovF) / H0;
             _tapConfirmed = true;
             const pitchAtLock = (cal.tapPitch === undefined) ? null : cal.tapPitch;
             // Phone orientation at the moment of locking: if the phone is later moved or turned, the mark is no longer valid
             const orientAtLock = currentOrientation();
-            _autoStickyCalib = { topY, botY: topY + (noteH || H0 * 0.04), leftX: cal.pts[0].x - 25, rightX: cal.pts[0].x + 25, noteH, markCm, liveDetected: true, confirmedThisSession: true, lockedFromLiveTap: true, pitchAtLock, orientAtLock, frameW: W0, frameH: H0 };
+            _autoStickyCalib = { topY, botY: topY + H0 * 0.04, leftX: cal.pts[0].x - 25, rightX: cal.pts[0].x + 25, noteH, floorY, markCm, liveDetected: true, confirmedThisSession: true, lockedFromLiveTap: true, pitchAtLock, orientAtLock, frameW: W0, frameH: H0 };
             if (!state.calib) state.calib = {};
             state.calib.height = {
               method: "sticky150",
@@ -4591,6 +4627,7 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
               liveDetected: true,
               topY,
               noteH,
+              floorY,
               markCm,
               cmPerPx: cmPerPxOpt,
               refCm: markCm,
