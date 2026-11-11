@@ -73,6 +73,17 @@ class NoCacheRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 
+class QuietServer(http.server.ThreadingHTTPServer):
+    """Skip the traceback when the phone drops a connection mid-download (Safari often cancels and re-requests the
+    large model files). It is harmless; every other error is still printed."""
+
+    def handle_error(self, request, client_address) -> None:
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (BrokenPipeError, ConnectionResetError, ssl.SSLEOFError)):
+            return
+        super().handle_error(request, client_address)
+
+
 def main() -> int:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8443
     os.chdir(HERE)
@@ -80,7 +91,7 @@ def main() -> int:
     has_tls = ensure_cert(lan_ip)
 
     handler = NoCacheRequestHandler
-    httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
+    httpd = QuietServer(("0.0.0.0", port), handler)
 
     scheme = "http"
     if has_tls:
