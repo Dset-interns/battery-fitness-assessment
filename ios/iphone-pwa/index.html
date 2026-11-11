@@ -710,7 +710,7 @@ body.cam .rotate{display:none!important}
 
     // Shown on the home screen and in the Height audit line so it is obvious which code the phone is running
     // (an already-open Safari tab keeps running the old JavaScript until it is reloaded).
-    const BUILD_ID = "2026-11-11 sitreach-hold-fix";
+    const BUILD_ID = "2026-11-11 vjump-false-jump-fix";
     const MP_VERSION = "0.10.14";
     const POSE_MODEL_FULL_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
     const POSE_MODEL_LITE_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
@@ -2766,7 +2766,10 @@ body.cam .rotate{display:none!important}
         function standingReachBefore(takeIdx, floorY) {
           const okFrame = k => armUpA[k] && isFinite(tipRaw[k]) && Math.abs(footSm[k] - floorY) <= liftThrPx * 1.1;
           let found = null;
-          let k = Math.max(0, takeIdx - 240);
+          // The standing reach must come shortly before the jump: within 6 s (it used to be 240 frames, which is
+          // 20 s at 12 fps, so an arm raised while setting up could be paired with any later movement)
+          let k = takeIdx;
+          while (k > 0 && ok[takeIdx].t - ok[k - 1].t <= 6000) k--;
           while (k < takeIdx) {
             if (!okFrame(k)) { k++; continue; }
             let e = k;
@@ -2782,6 +2785,22 @@ body.cam .rotate{display:none!important}
           }
           return found;
         }
+
+        // Checks that tell a real jump from the same picture made by something else (all measured, not assumed):
+        //  - phoneMovedAround: the phone tilted while "airborne", so the whole picture shifted (e.g. adjusting the
+        //    camera), which moves feet, hips, shoulders and fingertip up together exactly like a jump
+        //  - dip: a real jump starts with a knee bend, so the hips drop before take-off; a camera shift or a step does not
+        //  - scale: walking toward or away from the camera changes the body's size in the picture; a jump does not
+        const oriAt = k => ok[k] && ok[k].ori;
+        function phoneMovedAround(i0, i1) {
+          let a = i0; while (a > 0 && ok[i0].t - ok[a - 1].t <= 1000) a--;
+          let b = i1; while (b < n - 1 && ok[b + 1].t - ok[i1].t <= 500) b++;
+          const ps = [], rs = [];
+          for (let k = a; k <= b; k++) { const o = oriAt(k); if (o) { ps.push(o.pitch); rs.push(o.roll); } }
+          if (ps.length < 3) return false;          // no tilt sensor data: cannot tell, do not block
+          return (Math.max(...ps) - Math.min(...ps)) > 1.5 || (Math.max(...rs) - Math.min(...rs)) > 1.5;
+        }
+        let cameraMoved = false, noDip = false, scaleChanged = false;
 
         // Find contiguous airborne intervals [sIdx .. eIdx] bounded by ground contact before AND after
         const candidates = [];
@@ -2862,7 +2881,21 @@ body.cam .rotate{display:none!important}
                   const coMRiseCm = 0.55 * hipRiseCm + 0.45 * shRiseCm;
                   const minBodyPartRiseCm = Math.min(footClearanceCm, hipRiseCm, shRiseCm);
 
-                  if (minBodyPartRiseCm >= 3.5 && coMRiseCm >= 3.8 && footClearanceCm >= 3.8) {
+                  // Countermovement: lowest hip position in the 1.2 s before take-off, relative to standing (image y grows downward)
+                  let dipK = sIdx; while (dipK > 0 && ok[sIdx].t - ok[dipK - 1].t <= 1200) dipK--;
+                  const dipCm = (Math.max(...hipSm.slice(Math.min(dipK, sIdx - 3), sIdx)) - standingHipY) * cmPerPx;
+                  // Body size in the picture before take-off vs after landing (walking toward/away from the camera changes it)
+                  const preSize = median(ok.slice(Math.max(0, sIdx - 25), sIdx).map(f => f.shToFootPx));
+                  const postSize = median(ok.slice(eIdx + 1, Math.min(n, eIdx + 26)).map(f => f.shToFootPx));
+                  const sizeRatio = postSize / Math.max(1, preSize);
+
+                  if (minBodyPartRiseCm >= 3.5 && coMRiseCm >= 3.8 && footClearanceCm >= 3.8 && phoneMovedAround(sIdx, eIdx)) {
+                    cameraMoved = true;
+                  } else if (minBodyPartRiseCm >= 3.5 && coMRiseCm >= 3.8 && footClearanceCm >= 3.8 && Math.abs(sizeRatio - 1) > 0.10) {
+                    scaleChanged = true;
+                  } else if (minBodyPartRiseCm >= 3.5 && coMRiseCm >= 3.8 && footClearanceCm >= 3.8 && dipCm < 4.0) {
+                    noDip = true;
+                  } else if (minBodyPartRiseCm >= 3.5 && coMRiseCm >= 3.8 && footClearanceCm >= 3.8) {
                     // SAI Handbook Test IV: Standing Vertical Jump must be vertical on the spot, without shuffling or approach steps (drift over 30 cm is a foul)
                     if (horizDriftCm > 30.0) {                       // from the spot: no shuffling and no approach steps
                       horizontalRunupFoul = true;
@@ -2905,6 +2938,22 @@ body.cam .rotate{display:none!important}
         }
 
         if (!candidates.length) {
+          // Not the athlete's fault, so these are free retakes (no "FOUL" in the text: they do not use up an attempt)
+          if (cameraMoved) {
+            return rejected(test, t("REJECTED — the phone moved", "अस्वीकृत — फ़ोन हिला"),
+              t("The whole picture moved because the phone was tilted or touched during the recording, which looks like a jump. Keep the phone fixed on a stand and do not touch it after pressing Start.",
+                "रिकॉर्डिंग के दौरान फ़ोन झुका या छुआ गया, इसलिए पूरी तस्वीर हिली जो कूद जैसी दिखती है। फ़ोन को स्टैंड पर स्थिर रखें और Start के बाद उसे न छुएँ।"));
+          }
+          if (scaleChanged) {
+            return rejected(test, t("REJECTED — moved toward or away from the camera", "अस्वीकृत — कैमरे की ओर या दूर गए"),
+              t("Your size in the picture changed between before and after the movement, so you walked toward or away from the camera rather than jumping on the spot. Stand still in place, then jump straight up.",
+                "हरकत से पहले और बाद में तस्वीर में आपका आकार बदला, यानी आप एक जगह कूदने के बजाय कैमरे की ओर या दूर चले। एक जगह स्थिर खड़े हों, फिर सीधा ऊपर कूदें।"));
+          }
+          if (noDip) {
+            return rejected(test, t("REJECTED — no jump take-off seen", "अस्वीकृत — कूदने की शुरुआत नहीं दिखी"),
+              t("A jump starts by bending the knees (the hips go down) just before leaving the ground. That was not seen, so this was not counted as a jump. Bend your knees, then jump straight up.",
+                "कूद ज़मीन छोड़ने से ठीक पहले घुटने मोड़ने (कूल्हे नीचे जाने) से शुरू होती है। यह नहीं दिखा, इसलिए इसे कूद नहीं माना गया। घुटने मोड़ें, फिर सीधा ऊपर कूदें।"));
+          }
           if (horizontalRunupFoul) {
             return rejected(test, t("FOUL — Horizontal run-up / broad jump", "फाउल — दौड़कर या आगे कूदना अमान्य है"),
               t("SAI Rule Foul: Standing Vertical Jump must be performed straight up from a stationary two-foot stance (no horizontal run-up or broad jump).",
@@ -5273,7 +5322,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
               }
               latestLiveEv = ev;
               showEval(ev);
-              if (isRecording) recordedFrames.push({ ...ev, t: tFrame });
+              // The phone's tilt is kept with each frame so a result can be rejected when the phone itself moved
+              if (isRecording) recordedFrames.push({ ...ev, t: tFrame, ori: currentOrientation() });
               // Sit & Reach auto-stop: once a steady 2 s hold with straight knees has been seen, finish when the athlete
               // clearly sits back, or 4 s after the farthest hold so far, instead of recording on to the 30 s limit.
               // Live values are not smoothed, so the steadiness tolerance here is 1 cm looser than in scoring.
