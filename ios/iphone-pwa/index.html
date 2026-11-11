@@ -710,7 +710,7 @@ body.cam .rotate{display:none!important}
 
     // Shown on the home screen and in the Height audit line so it is obvious which code the phone is running
     // (an already-open Safari tab keeps running the old JavaScript until it is reloaded).
-    const BUILD_ID = "2026-11-11 height-tap-fix-2";
+    const BUILD_ID = "2026-11-11 sitreach-hold-fix";
     const MP_VERSION = "0.10.14";
     const POSE_MODEL_FULL_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
     const POSE_MODEL_LITE_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
@@ -2151,8 +2151,12 @@ body.cam .rotate{display:none!important}
       const heelOffsetCm = Math.max(0, ((ft.x - heel.x) * u.x + (ft.y - heel.y) * u.y) * cmPerPx);
       const scoreCm = boxOffset + reachCm + heelOffsetCm;
       // Knees are flat & straight ONLY if angle >= 165°, knee is not lifted above floor line, thigh doesn't point up, and trunk-thigh angle >= 22°
-      const kneeUp = maxKneeLiftRatio > 0.058 || thighUpFoul || trunkDeg < 22;
+      // (A trunk-thigh angle under 22° used to count as "knees up" too, but a deep forward fold also makes that angle
+      // small, so the most flexible athletes were fouled. Bent knees are already caught by the 165° angle.)
+      const kneeUp = maxKneeLiftRatio > 0.058 || thighUpFoul;
       const kneeOk = kneeDeg >= 165 && !kneeUp;
+      const kneeWhyEn = kneeDeg < 165 ? `knees bent (${kneeDeg.toFixed(0)}° < 165°)` : "knee lifted off the floor";
+      const kneeWhyHi = kneeDeg < 165 ? `घुटने मुड़े (${kneeDeg.toFixed(0)}° < 165°)` : "घुटना ज़मीन से उठा";
       const isReaching = handLegRatio >= 0.68 && trunkDeg <= 78 && reachCm >= -18.0;
 
       // SAI Handbook Test III Two-Hand Symmetry Check (hands must be on top of each other or side-by-side, not a one-arm reach):
@@ -2186,12 +2190,12 @@ body.cam .rotate{display:none!important}
         toeY: ft.y,
         tipSource: tip ? "mask" : "landmark",
         liveMetric: !kneeOk
-          ? `${t("FOUL: Knees up/bent", "फाउल: घुटने उठे/मुड़े")} (${kneeDeg.toFixed(0)}°)`
+          ? `${t("FOUL", "फाउल")}: ${t(kneeWhyEn, kneeWhyHi)}`
           : (isReaching
               ? `${scoreCm.toFixed(1)} cm (${t("tape reading", "टेप रीडिंग")})`
               : t("Seated — bend forward & reach toward toes", "बैठे हैं — आगे झुकें और पंजों की ओर हाथ बढ़ाएँ")),
         reason: !kneeOk
-          ? `${t("FOUL: Keep knees flat on floor", "फाउल: घुटने ज़मीन पर सीधे रखें")} (${kneeDeg.toFixed(0)}° < 165°)`
+          ? `${t("Keep both knees straight and flat on the floor", "दोनों घुटने सीधे और ज़मीन पर रखें")} (${t("knee", "घुटना")} ${kneeDeg.toFixed(0)}°${kneeUp ? ", " + t("lifted", "उठा") : ""})`
           : (isReaching
               ? `${scaleMode} · ${t("Knee", "घुटना")} ${kneeDeg.toFixed(0)}° ✓ · ${t("Reach", "पहुँच")} ${scoreCm.toFixed(1)} cm`
               : `${t("Trunk", "धड़")} ${trunkDeg.toFixed(0)}° — ${t("Lean forward and slide hands past knees toward toes", "आगे झुकें और हाथों को घुटनों से आगे पंजों की ओर ले जाएँ")}`)
@@ -2440,6 +2444,28 @@ body.cam .rotate{display:none!important}
     // =========================================================================
     // Attempt Scoring Engine (30-Frame Trimmed Median + Rule Audit)
     // =========================================================================
+    // Sit & Reach: the farthest reach HELD steadily for the handbook's 2 seconds.
+    // t: frame times (ms), v: reach values (cm), use: whether each frame may count (reaching, knees flat).
+    // A hold is an unbroken run of usable frames (no gap over 400 ms) lasting at least holdMs whose 10th-90th
+    // percentile range is within tolCm, so one jittery frame at 10-20 fps does not break it. Returns the hold with the
+    // highest median, or null. Scoring the best hold (not a percentile of every reaching frame) means the result does
+    // not depend on how long the recording ran or how much time was spent moving into position.
+    function sitReachBestHold(t, v, use, holdMs = 1800, tolCm = 3.5) {
+      let best = null;
+      for (let i = 0; i < v.length; i++) {
+        if (!use[i]) continue;
+        let j = i;
+        while (j + 1 < v.length && use[j + 1] && t[j + 1] - t[j] <= 400 && t[j] - t[i] < holdMs) j++;
+        if (t[j] - t[i] < holdMs) continue;
+        const w = v.slice(i, j + 1).sort((a, b) => a - b);
+        const lo = w[Math.floor(0.10 * (w.length - 1))], hi = w[Math.ceil(0.90 * (w.length - 1))];
+        if (hi - lo > tolCm) continue;
+        const med = w[Math.floor(w.length / 2)];
+        if (!best || med > best.value) best = { value: med, i0: i, i1: j, holdMs: t[j] - t[i] };
+      }
+      return best;
+    }
+
     function rejected(test, method, detail) {
       return { valid: false, value: null, unit: test.unit, confidence: "RED", method, audit: [{ label: "Rejected", detail, valid: false }] };
     }
@@ -2558,19 +2584,29 @@ body.cam .rotate{display:none!important}
 
         // Audit knee straightness and flatness across ALL reaching frames and especially the peak reach window:
         // If knees bend (<165°) or lift up off the floor (kneeUp / trunk <22°) during the reach, NULLIFY the attempt!
-        const peakIndices = reachingIndices.filter(i => rAll[i] >= peakReachAll - 5.0);
-        const auditIndices = peakIndices.length >= 3 ? peakIndices : reachingIndices;
+        // Handbook Test III: reach and HOLD for 2 s. Find the farthest steady 2 s hold among the reaching frames
+        // (1.8 s allows for the gap between video frames). Knees are checked during that hold below.
+        const isReachIdx = new Array(ok.length).fill(false);
+        reachingIndices.forEach(i => { isReachIdx[i] = true; });
+        const hold = sitReachBestHold(ok.map(f => f.t), rAll, isReachIdx);
+        if (!hold) {
+          return rejected(test, t("FOUL — Reach not held for 2 s", "फाउल — 2 सेकंड नहीं रोका"),
+            t("SAI rule: reach forward smoothly and hold your farthest reach steady for 2 seconds. No steady 2-second hold was found (bouncing, or moving the whole time).",
+              "SAI नियम: धीरे आगे झुकें और सबसे दूर की पहुँच को 2 सेकंड स्थिर रखें। 2 सेकंड का स्थिर ठहराव नहीं मिला (झटका, या लगातार हिलना)।"));
+        }
+        const peakIndices = [];
+        for (let i = hold.i0; i <= hold.i1; i++) peakIndices.push(i);
+        const auditIndices = peakIndices;
         const minKneeDuringReach = Math.min(...reachingIndices.map(i => kneeSm[i]));
         const minKneeAtPeak = Math.min(...auditIndices.map(i => kneeSm[i]));
-        const minTrunkAtPeak = Math.min(...auditIndices.map(i => trunkSm[i]));
-        const kneeUpCount = auditIndices.filter(i => ok[i].kneeUp || kneeSm[i] < 165 || trunkSm[i] < 22).length;
+        const kneeUpCount = auditIndices.filter(i => ok[i].kneeUp || kneeSm[i] < 165).length;
         const kneeFoulRatio = kneeUpCount / auditIndices.length;
 
-        if (minKneeAtPeak < 165 || minKneeDuringReach < 162 || kneeFoulRatio > 0.15 || minTrunkAtPeak < 22) {
+        if (minKneeAtPeak < 165 || minKneeDuringReach < 162 || kneeFoulRatio > 0.15) {
           const worstKnee = Math.min(minKneeAtPeak, minKneeDuringReach);
-          const why = minTrunkAtPeak < 22
-            ? `knees pulled up (trunk-thigh ${minTrunkAtPeak.toFixed(0)}° < 22°)`
-            : `knees bent/lifted (${worstKnee.toFixed(0)}° < 165°)`;
+          const why = (worstKnee < 165 || minKneeDuringReach < 162)
+            ? `knees bent (${worstKnee.toFixed(0)}° < 165°)`
+            : `knee lifted off the floor during the hold`;
           return rejected(test, `FOUL — ${why}`,
             t(`Attempt nullified: Knees bent or lifted off the floor during reach (${worstKnee.toFixed(0)}°, must stay flat ≥165°).`,
               `फाउल: पहुँचते समय घुटने मुड़ गए या ज़मीन से उठ गए (${worstKnee.toFixed(0)}°, ≥165° आवश्यक)।`));
@@ -2586,33 +2622,13 @@ body.cam .rotate{display:none!important}
 
         const reachingFrames = reachingIndices.map(i => ok[i]);
         const r = reachingIndices.map(i => rAll[i]);
-        // SAI Handbook Test III Hold Check ("hold for about two seconds — no jerky bouncing"):
-        const nearPeakFrames = reachingIndices.filter(i => rAll[i] >= peakReachAll - 4.5).map(i => ok[i]);
-        const nearPeakHoldMs = nearPeakFrames.length >= 2
-          ? (nearPeakFrames[nearPeakFrames.length - 1].t - nearPeakFrames[0].t)
-          : 0;
-        if (nearPeakFrames.length < 3 || nearPeakHoldMs < 1800) {
-          return rejected(test, t("FOUL — Jerky bounce (reach not held)", "फाउल — झटके से छूना (रोका नहीं गया)"),
-            t("SAI Rule Foul: Do not bounce! Reach forward smoothly and hold your maximum reach steady for 2 seconds.",
-              "SAI नियम उल्लंघन: झटका न दें! आगे झुककर अधिकतम पहुँच को 2 सेकंड तक स्थिर रखें।"));
-        }
-
-        // Prefer a held plateau window (≥450 ms with spread ≤2.5 cm), fallback to 85th percentile valid reach
-        // Score the BEST steady plateau (not the last one), falling back to the 85th percentile of the reach
-        let heldReach = pct(r, 0.85);
-        let bestPlateau = -Infinity;
-        for (let i = 0; i < reachingFrames.length; i++) {
-          let j = i;
-          while (j < reachingFrames.length && (reachingFrames[j].t - reachingFrames[i].t) < 1800) j++;
-          if (j >= reachingFrames.length) break;
-          const win = r.slice(i, j + 1);
-          const sp = Math.max(...win) - Math.min(...win);
-          if (sp <= 2.5) bestPlateau = Math.max(bestPlateau, median(win));
-        }
-        if (bestPlateau > -Infinity && bestPlateau >= heldReach - 1.5) heldReach = bestPlateau;
+        // Score = the farthest reach held steadily for 2 s (found above), not a percentile of every reaching frame,
+        // which used to fall well short of the hold when the recording was long.
+        const nearPeakHoldMs = hold.holdMs;
+        const heldReach = hold.value;
 
         const boxOffset = state.boxZeroCm !== undefined ? state.boxZeroCm : 23.0;
-        const heelOff = median(reachingFrames.map(f => f.heelOffsetCm || 0));
+        const heelOff = median(peakIndices.map(i => ok[i].heelOffsetCm || 0));
         const score = Math.max(0.0, boxOffset + heldReach + heelOff);
         const minKnee = Math.min(minKneeAtPeak, minKneeDuringReach);
         const isCalib = !!calib && calib.method !== "distance";
@@ -4281,6 +4297,8 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       const recordedFrames = [];
       let fps = 30;
       let isRecording = false;
+      let finishedOnce = false;   // the attempt is scored once, whichever of timer, Stop button or auto-stop gets there first
+      let srHold = null;          // Sit & Reach: { value (cm), at (ms) } of the farthest 2 s hold seen live in this recording
       let recorder = null;
       const supportsCalib = test.key === "height" || test.key === "sit_and_reach" || test.key === "vertical_jump";
       const isSprint = test.key === "sprint_30m" || test.key === "shuttle_run" || test.key === "endurance_run" || test.key === "medicine_ball_throw", isShuttle = test.key === "shuttle_run", isEndurance = test.key === "endurance_run", isBall = test.key === "medicine_ball_throw";
@@ -5256,6 +5274,27 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
               latestLiveEv = ev;
               showEval(ev);
               if (isRecording) recordedFrames.push({ ...ev, t: tFrame });
+              // Sit & Reach auto-stop: once a steady 2 s hold with straight knees has been seen, finish when the athlete
+              // clearly sits back, or 4 s after the farthest hold so far, instead of recording on to the 30 s limit.
+              // Live values are not smoothed, so the steadiness tolerance here is 1 cm looser than in scoring.
+              if (isRecording && !finishedOnce && test.key === "sit_and_reach") {
+                let k = recordedFrames.length - 1;
+                while (k > 0 && tFrame - recordedFrames[k - 1].t < 2600) k--;
+                const tail = recordedFrames.slice(k);
+                const h = sitReachBestHold(tail.map(f => f.t), tail.map(f => (f.reachCm ?? -99)),
+                  tail.map(f => !!(f.postureOk && f.isReaching && f.kneeOk)), 2000, 4.5);
+                if (h && (!srHold || h.value > srHold.value + 1.0)) srHold = { value: h.value, at: tFrame, outSince: null };
+                if (srHold && captureElapsed >= test.minSec) {
+                  const reachingNow = ev.postureOk && ev.isReaching && (ev.reachCm ?? -99) >= srHold.value - 10;
+                  if (reachingNow) srHold.outSince = null;
+                  else if (srHold.outSince === null) srHold.outSince = tFrame;
+                  const satBack = srHold.outSince !== null && tFrame - srHold.outSince >= 600;
+                  // The time limit only applies while the athlete is STILL holding steadily near that reach; while they are
+                  // moving (e.g. a slow, wobbly approach), only a clear sit-back ends the recording.
+                  const stillHolding = !!h && h.value >= srHold.value - 1.5;
+                  if (satBack || (stillHolding && tFrame - srHold.at > 4000)) setTimeout(finishRecording, 0);
+                }
+              }
             } catch (err) {
               hudLive.textContent = `Analysis error: ${err?.message || err}`;
             } finally {
@@ -5301,6 +5340,10 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
       }
 
       function finishRecording() {
+        // Can be reached from the timer, the Stop button and the Sit & Reach auto-stop: score the attempt only once
+        if (finishedOnce) return;
+        finishedOnce = true;
+        isRecording = false;
         const calibUsed = isSprint ? { trackLines: (state.trackLines || {})[test.key] } : currentCalib();
         const key = cellKey(athlete.id, test.key);
         const prevHistory = state.results[key]?.attemptsHistory || [];
@@ -5384,7 +5427,9 @@ SCR.reports = () => `<div class="scr">${barH(t("Report cards", "रिपोर�
             }
             hudTimer.textContent = isEndurance ? `${Math.floor(captureElapsed / 60)}:${String(captureElapsed % 60).padStart(2, "0")} / ${Math.floor(test.maxSec / 60)}:00` : `${captureElapsed}s / ${test.minSec}–${test.maxSec}s (${validCount} ${t("valid", "मान्य")})`;
             if (captureElapsed >= 2) btnRec.disabled = false;
-            if (captureElapsed >= test.minSec) {
+            if (srHold) {
+              btnRec.textContent = `✅ ${t("2 s hold captured — sit back to finish", "2 सेकंड ठहराव दर्ज — पीछे बैठें, अपने आप रुकेगा")}`;
+            } else if (captureElapsed >= test.minSec) {
               btnRec.textContent = `■ ${t("Stop & Compute Score", "रोकें और स्कोर निकालें")} (${captureElapsed}s)`;
             } else if (captureElapsed >= 2) {
               btnRec.textContent = `■ ${t("Stop and evaluate", "रोकें और जाँचें")} (${t("recommended", "सुझाया")} ${test.minSec}s)`;
