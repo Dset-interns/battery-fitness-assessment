@@ -710,7 +710,7 @@ body.cam .rotate{display:none!important}
 
     // Shown on the home screen and in the Height audit line so it is obvious which code the phone is running
     // (an already-open Safari tab keeps running the old JavaScript until it is reloaded).
-    const BUILD_ID = "2026-11-11 height-tap-fix";
+    const BUILD_ID = "2026-11-11 height-tap-fix-2";
     const MP_VERSION = "0.10.14";
     const POSE_MODEL_FULL_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
     const POSE_MODEL_LITE_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
@@ -1810,8 +1810,11 @@ body.cam .rotate{display:none!important}
         if (sticky.refMismatch) {
           return fail(
             t("Wall mark moved — set it again", "दीवार का निशान खिसक गया — फिर से सेट करें"),
-            t("The note seen now is not where the saved reference says it should be (the phone moved, or this is not the note). Tap '1-Tap Wall Mark' on the note, or retake the reference photo from this phone position.",
-              "अभी दिख रहा नोट सहेजे गए संदर्भ की जगह पर नहीं है (फ़ोन हिला है या यह नोट नहीं है)। नोट पर '1-Tap Wall Mark' दबाएँ, या इसी स्थिति से संदर्भ फ़ोटो दोबारा लें।"),
+            sticky.lockedFromPhoto
+              ? t("A saved reference photo is in use, and it needs a YELLOW sticky note the camera can find live; a white sheet or the room was mistaken for it. Fix: tap 'Clear' on the saved photo, then '1-Tap Wall Mark' and tap the 150 cm line in the live picture (any colour works).",
+                  "सहेजी गई संदर्भ फ़ोटो उपयोग में है, जिसके लिए कैमरे को लाइव में पीला स्टिकी नोट दिखना चाहिए; सफ़ेद शीट या कमरे को गलती से नोट समझा गया। उपाय: सहेजी फ़ोटो पर 'Clear' दबाएँ, फिर '1-Tap Wall Mark' दबाकर लाइव तस्वीर में 150 cm रेखा पर टैप करें (कोई भी रंग चलेगा)।")
+              : t("The note seen now is not where the saved reference says it should be (the phone moved, or this is not the note). Tap '1-Tap Wall Mark' on the note, or retake the reference photo from this phone position.",
+                  "अभी दिख रहा नोट सहेजे गए संदर्भ की जगह पर नहीं है (फ़ोन हिला है या यह नोट नहीं है)। नोट पर '1-Tap Wall Mark' दबाएँ, या इसी स्थिति से संदर्भ फ़ोटो दोबारा लें।"),
             { vertexY }
           );
         }
